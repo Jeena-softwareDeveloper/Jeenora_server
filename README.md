@@ -1,3 +1,1 @@
-# Jeenora Server
-
-Backend for the Jeenora application.
+# Jeenora_server

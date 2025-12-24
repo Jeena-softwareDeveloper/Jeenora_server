@@ -4,20 +4,16 @@ const jobController = require('../../controllers/hire/jobController')
 const automatchService = require('../../controllers/hire/Services/autoMatchService')
 const { authMiddleware, adminMiddleware } = require('../../middlewares/authMiddleware')
 
-router.post('/', authMiddleware, jobController.createJob)
+// Public/Feed
+router.get('/', jobController.getFeed)
+
+// specific routes must be before /:id
 router.get('/employer', authMiddleware, jobController.getEmployerJobs)
+router.get('/application/list', authMiddleware, jobController.getAppliedJobs)
+
+router.post('/', authMiddleware, jobController.createJob)
 router.get('/:id', jobController.getJob)
 router.patch('/:id/close', authMiddleware, jobController.closeJob)
-
-
-
-// Public/Feed
-router.get('/', jobController.getFeed) // #swagger.tags = ['Hire Jobs']
-
-router.post('/', authMiddleware, jobController.createJob) // #swagger.tags = ['Hire Jobs']
-router.get('/employer', authMiddleware, jobController.getEmployerJobs) // #swagger.tags = ['Hire Jobs']
-router.get('/:id', jobController.getJob) // #swagger.tags = ['Hire Jobs']
-router.patch('/:id/close', authMiddleware, jobController.closeJob) // #swagger.tags = ['Hire Jobs']
 
 // User Actions
 router.post('/:id/apply', authMiddleware, jobController.applyJob) // #swagger.tags = ['Hire Jobs']
@@ -49,7 +45,11 @@ router.post('/webhook/reply', async (req, res) => {
     }
 })
 
-// Admin routes - add credits to employer
+// Messages
+const jobMessageController = require('../../controllers/hire/jobMessageController')
+router.post('/messages/send', authMiddleware, jobMessageController.sendMessage)
+router.get('/messages/:applicationId', authMiddleware, jobMessageController.getMessages)
+
 router.post('/admin/credits', authMiddleware, async (req, res) => {
     try {
         const { employerId, credits } = req.body

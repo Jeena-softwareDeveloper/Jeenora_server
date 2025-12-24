@@ -17,4 +17,8 @@ router.post('/profile-image-upload', authMiddleware, authControllers.profile_ima
 router.post('/profile-info-add', authMiddleware, authControllers.profile_info_add)
 router.get('/logout', authMiddleware, authControllers.logout)
 
+router.post('/admin/create-seller', authMiddleware, authControllers.admin_create_seller)
+router.post('/admin/update-seller-permissions', authMiddleware, authControllers.update_seller_permissions)
+router.post('/admin/update-seller-password', authMiddleware, authControllers.update_seller_password)
+
 module.exports = router

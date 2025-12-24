@@ -88,7 +88,10 @@ class HireUserController {
 
   updateProfile = async (req, res) => {
     try {
-      const { name, phone, location, education, experience, skills, salary, noticeperiod } = req.body;
+      const {
+        name, phone, location, education, experience, skills, salary, noticeperiod,
+        headline, totalExperience, currentRole, preferredRole, currentLocation, expectedSalary, noticePeriod
+      } = req.body;
 
       const user = await hireUserModel.findById(req.id);
       if (!user) return responseReturn(res, 404, { error: "User not found" });
@@ -100,8 +103,19 @@ class HireUserController {
       if (location) updateData.location = location;
       if (education) updateData.education = education;
       if (experience !== undefined) updateData.experience = experience;
+      // Legacy salary check
       if (salary !== undefined) updateData.salary = salary;
+      // Legacy noticeperiod check
       if (noticeperiod !== undefined) updateData.noticeperiod = noticeperiod;
+
+      // New fields
+      if (headline !== undefined) updateData.headline = headline;
+      if (totalExperience !== undefined) updateData.totalExperience = totalExperience;
+      if (currentRole !== undefined) updateData.currentRole = currentRole;
+      if (preferredRole !== undefined) updateData.preferredRole = preferredRole;
+      if (currentLocation) updateData.location = currentLocation; // Map currentLocation to location
+      if (expectedSalary !== undefined) updateData.expectedSalary = expectedSalary;
+      if (noticePeriod !== undefined) updateData.noticePeriod = noticePeriod;
 
       // Validate skills if provided
       if (skills !== undefined) {
@@ -222,7 +236,7 @@ class HireUserController {
         }
 
         const uploadResult = await cloudinary.uploader.upload(image.filepath, {
-          folder: "profile-images",
+          folder: "hire/profile-images",
           public_id: `profile_${req.id}_${Date.now()}`,
           transformation: [
             { width: 400, height: 400, crop: "fill", gravity: "face" }
@@ -309,7 +323,7 @@ class HireUserController {
         return responseReturn(res, 400, { error: "File upload failed" });
       }
 
-      const file = files.resume;
+      const file = Array.isArray(files.resume) ? files.resume[0] : files.resume;
       if (!file) {
         return responseReturn(res, 400, { error: "No resume uploaded" });
       }
@@ -333,7 +347,7 @@ class HireUserController {
         }
 
         const uploadResult = await cloudinary.uploader.upload(file.filepath, {
-          folder: "resumes",
+          folder: "hire/resumes",
           resource_type: "raw",
           public_id: `resume_${req.id}_${Date.now()}`
         });
@@ -353,7 +367,7 @@ class HireUserController {
 
       } catch (error) {
         console.error("Upload resume error:", error);
-        return responseReturn(res, 500, { error: "Resume upload failed" });
+        return responseReturn(res, 500, { error: error.message });
       }
     });
   };
@@ -469,6 +483,173 @@ class HireUserController {
       responseReturn(res, 500, { error: error.message });
     }
   }
+  // Admin Methods
+  getAllUsers = async (req, res) => {
+    const { page, parPage, searchValue, userType, status } = req.query;
+    const skipPage = parseInt(parPage) * (parseInt(page) - 1);
+    const limit = parseInt(parPage);
+
+    try {
+      let matchQuery = { $and: [] };
+
+      if (searchValue) {
+        matchQuery.$and.push({
+          $or: [
+            { name: { $regex: searchValue, $options: "i" } },
+            { email: { $regex: searchValue, $options: "i" } }
+          ]
+        });
+      }
+
+      if (userType) {
+        matchQuery.$and.push({ userType: userType });
+      }
+
+      if (status) {
+        if (status === 'Active') {
+          // Backward compatibility: Users without settings.account.isActive are considered Active
+          matchQuery.$and.push({
+            $or: [
+              { 'settings.account.isActive': true },
+              { 'settings.account.isActive': { $exists: false } }
+            ]
+          });
+        } else if (status === 'Inactive') {
+          matchQuery.$and.push({ 'settings.account.isActive': false });
+        }
+      }
+
+      // If no filters added, remove $and to match all documents
+      const finalQuery = matchQuery.$and.length > 0 ? matchQuery : {};
+
+      // Aggregation Pipeline
+      const pipeline = [
+        { $match: finalQuery },
+        { $sort: { createdAt: -1 } },
+        { $skip: skipPage },
+        { $limit: limit },
+        {
+          $lookup: {
+            from: 'hireprofiles', // Mongoose default pluralization usually lowercase
+            localField: '_id',
+            foreignField: 'user',
+            as: 'profile'
+          }
+        },
+        {
+          $addFields: {
+            completionPercentage: { $arrayElemAt: ['$profile.completionPercentage', 0] }
+          }
+        },
+        {
+          $project: {
+            name: 1,
+            email: 1,
+            phone: 1,
+            userType: 1,
+            creditBalance: 1,
+            'settings.account.isActive': 1,
+            createdAt: 1,
+            profileImageUrl: 1,
+            completionPercentage: { $ifNull: ['$completionPercentage', 0] } // Default to 0 if no profile
+          }
+        }
+      ];
+
+      // Log for debugging
+      console.log("Admin Users Pipeline:", JSON.stringify(pipeline, null, 2));
+
+      const users = await hireUserModel.aggregate(pipeline);
+      const totalUser = await hireUserModel.countDocuments(finalQuery);
+
+      console.log("Admin Users Found:", users.length, "Total:", totalUser);
+
+      return responseReturn(res, 200, { users, totalUser });
+
+    } catch (error) {
+      console.log(error);
+      return responseReturn(res, 500, { error: error.message });
+    }
+  };
+
+  createUserByAdmin = async (req, res) => {
+    const { name, email, phone, password, role, userType, creditBalance } = req.body;
+    try {
+      const checkUser = await hireUserModel.findOne({ email });
+      if (checkUser) {
+        return responseReturn(res, 404, { error: "Email already exists" });
+      }
+
+      // Note: Assuming password hashing happens here if not in model pre-save.
+      // Since model doesn't handle it, we should hash it. 
+      // But importing bcrypt here is messy if not already present.
+      // For now, I will store as is, BUT RECOMMENDED to fix hashing.
+      // Wait, let's try to require bcrypt.
+      const bcrypt = require('bcrypt');
+      const hashedPassword = await bcrypt.hash(password, 10);
+
+      const user = await hireUserModel.create({
+        name,
+        email,
+        phone,
+        password: hashedPassword,
+        role,
+        userType,
+        creditBalance: parseInt(creditBalance),
+        agreeTerms: true // Admin created
+      });
+      return responseReturn(res, 201, { message: "User created successfully", user });
+    } catch (error) {
+      console.log(error.message);
+      return responseReturn(res, 500, { error: error.message });
+    }
+  };
+
+  deleteUserByAdmin = async (req, res) => {
+    const { userId } = req.params;
+    try {
+      await hireUserModel.findByIdAndDelete(userId);
+      return responseReturn(res, 200, { message: "User deleted successfully" });
+    } catch (error) {
+      console.log(error);
+      return responseReturn(res, 500, { error: error.message });
+    }
+  };
+
+  updateUserByAdmin = async (req, res) => {
+    const { userId } = req.params;
+    const { name, email, phone, role, userType, creditBalance, status, password } = req.body;
+
+    try {
+      const updateFields = {
+        name,
+        email,
+        phone,
+        role,
+        userType,
+        creditBalance: isNaN(parseInt(creditBalance)) ? 0 : parseInt(creditBalance)
+      };
+
+      if (status) {
+        updateFields['settings.account.isActive'] = status === 'Active';
+      }
+
+      if (password) {
+        const bcrypt = require('bcrypt');
+        const hashedPassword = await bcrypt.hash(password, 10);
+        updateFields.password = hashedPassword;
+      }
+
+      const user = await hireUserModel.findByIdAndUpdate(userId, updateFields, { new: true });
+      return responseReturn(res, 200, { message: "User updated successfully", user });
+    } catch (error) {
+      console.log(error.message);
+      if (error.code === 11000) {
+        return responseReturn(res, 409, { error: 'Email already exists' });
+      }
+      return responseReturn(res, 500, { error: error.message });
+    }
+  };
 }
 
 module.exports = new HireUserController();

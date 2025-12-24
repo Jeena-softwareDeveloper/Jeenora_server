@@ -34,4 +34,10 @@ router.post('/profile/resume/version', authMiddleware, hireUserController.addRes
 // Skills
 router.get('/skills', authMiddleware, hireUserController.getUserSkills); // #swagger.tags = ['Hire Profile']
 
+// Admin User Management
+router.get('/admin/users', authMiddleware, hireUserController.getAllUsers);
+router.post('/admin/users', authMiddleware, hireUserController.createUserByAdmin);
+router.put('/admin/users/:userId', authMiddleware, hireUserController.updateUserByAdmin);
+router.delete('/admin/users/:userId', authMiddleware, hireUserController.deleteUserByAdmin);
+
 module.exports = router;

@@ -5,6 +5,7 @@ const cors = require("cors");
 const cookieParser = require("cookie-parser");
 const http = require("http");
 const socket = require("socket.io");
+const socketHelper = require("./utiles/socket");
 const { dbConnect } = require("./utiles/db");
 const swaggerUi = require("swagger-ui-express");
 const swaggerFile = require("./swagger-output.json");
@@ -24,6 +25,7 @@ const allowedOrigins = [
   "http://localhost:3001",
   "http://localhost:5173",
   "http://localhost:5000",
+  "http://localhost:5173"
 ];
 
 // --- Middlewares globaux ---
@@ -40,7 +42,7 @@ app.use(compression());
 
 app.use('/docs', swaggerUi.serve, swaggerUi.setup(swaggerFile));
 
-// --- SOCKET.IO ---
+// ... SOCKET.IO ...
 const io = socket(server, {
   cors: {
     origin: allowedOrigins,
@@ -48,7 +50,12 @@ const io = socket(server, {
     methods: ["GET", "POST"],
   },
 });
+socketHelper.init(io);
+// ... existing code ...
 
+app.use("/api/admin/jobs", require("./routes/admin/adminJobRoutes")); // Admin Job Management
+app.use("/api/admin/applications", require("./routes/admin/adminApplicationRoutes")); // Admin Application Management
+app.use("/api/admin/resumes", require("./routes/admin/adminResumeRoutes")); // Admin Resume Management
 let allCustomer = [];
 let allSeller = [];
 let admin = {};
@@ -114,6 +121,52 @@ io.on("connection", (soc) => {
     }
   });
 
+  // --- HIRE: Admin <-> User (Candidate) Live Messaging ---
+  soc.on("send_message_admin_to_user", (msg) => {
+    // msg should contain receiverId (userId of the candidate)
+    const user = allCustomer.find((c) => c.customerId === msg.receiverId);
+    if (user) {
+      soc.to(user.socketId).emit("received_admin_message", msg);
+    }
+  });
+
+  soc.on("send_message_user_to_admin", (msg) => {
+    // User sending message to admin/seller
+    // If msg.receiverId is provided (e.g. for a specific Seller), use findSeller
+    // Else if generic admin, use admin.socketId
+
+    if (msg.receiverId) {
+      // Check if receiver is a seller (Employer)
+      const seller = findSeller(msg.receiverId);
+      if (seller) {
+        soc.to(seller.socketId).emit("received_user_message", msg);
+        return;
+      }
+    }
+
+    // Default to main Admin if no specific seller found or ID matches admin
+    if (admin.socketId) {
+      soc.to(admin.socketId).emit("received_user_message", msg);
+    }
+  });
+
+  // --- CHAT UPDATES: Read Receipts & Online Status ---
+  soc.on('join_application_chat', ({ applicationId, userId, role }) => {
+    soc.join(applicationId); // Join a specific room for this application chat
+    // Notify others in room
+    soc.to(applicationId).emit('chat_partner_status', { applicationId, status: 'online', userId, role });
+  });
+
+  soc.on('leave_application_chat', ({ applicationId, userId, role }) => {
+    soc.leave(applicationId);
+    soc.to(applicationId).emit('chat_partner_status', { applicationId, status: 'offline', userId, role });
+  });
+
+  soc.on('message_read_signal', ({ applicationId, readerId }) => {
+    // Relay read status to others in the room
+    soc.to(applicationId).emit('message_read_update', { applicationId, readerId });
+  });
+
   soc.on("add_admin", (adminInfo) => {
     delete adminInfo.email;
     delete adminInfo.password;
@@ -159,18 +212,26 @@ app.use("/api", require("./routes/home/customerAuthRoutes"));
 app.use("/api", require("./routes/chatRoutes"));
 app.use("/api", require("./routes/paymentRoutes"));
 app.use("/api", require("./routes/dashboard/dashboardRoutes"));
-app.use("/api/hire/skills", require("./routes/hire/skillCategoryRoutes")); // #swagger.tags = ['Hire Skills']
-app.use("/api/hire/user", require("./routes/hire/hireUserRoutes")); // #swagger.tags = ['Hire Profile']
-app.use("/api/hire/payment", require("./routes/hire/paymentRoutes")); // #swagger.tags = ['Hire Payment']
-app.use("/api/hire/job", require("./routes/hire/jobRoutes")); // #swagger.tags = ['Hire Jobs']
-app.use("/api/hire/setting", require("./routes/hire/adminSettingRoutes")); // #swagger.tags = ['Hire Admin']
-app.use("/api/hire/notification", require("./routes/hire/notificationRoutes")); // #swagger.tags = ['Hire Notifications']
-app.use("/api/hire/location", require("./routes/hire/locationRoutes")); // #swagger.tags = ['Hire Location']
-app.use("/api/hire/resume", require("./routes/hire/resumeRequestRoutes")); // #swagger.tags = ['Hire Resume']
+app.use("/api/hire/skills", require("./routes/hire/skillCategoryRoutes"));
+app.use("/api/hire/user", require("./routes/hire/hireUserRoutes"));
+app.use("/api/hire/payment", require("./routes/hire/paymentRoutes"));
+app.use("/api/hire/job", require("./routes/hire/jobRoutes"));
+app.use("/api/admin/jobs", require("./routes/admin/adminJobRoutes")); // Admin Job Management
+app.use("/api/admin/applications", require("./routes/admin/adminApplicationRoutes")); // Admin Application Management
+app.use("/api/admin/resumes", require("./routes/admin/adminResumeRoutes")); // Admin Resume Management
+app.use("/api/hire/jobs", require("./routes/hire/jobSearchRoutes")); // Public Job Search
+app.use("/api/hire/applications", require("./routes/hire/applicationRoutes")); // Job Applications
+app.use("/api/hire/setting", require("./routes/hire/adminSettingRoutes"));
+app.use("/api/hire/notifications", require("./routes/hire/notificationRoutes"));
+app.use("/api/hire/location", require("./routes/hire/locationRoutes"));
+app.use("/api/hire/resume-requests", require("./routes/hire/resumeRequestRoutes")); // #swagger.tags = ['Hire Resume Request']
+app.use("/api/hire/resumes", require("./routes/hire/hireResumeRoutes")); // #swagger.tags = ['Hire Resume Management']
+app.use("/api/hire/resume-editor", require("./routes/hire/hireResumeEditorRoutes")); // #swagger.tags = ['Hire Resume Editor']
+app.use("/api/hire/profile", require("./routes/hire/hireProfileRoutes")); // #swagger.tags = ['Hire Profile']
+app.use("/api/hire", require("./routes/hire/resumeEditorRoutes")); // Editor Management
 
-
-app.use("/api/hire/resume", require("./routes/hire/resumeEditorRoutes")); // #swagger.tags = ['Hire Resume Editor']
-app.use("/api/hire/auth", require("./routes/hire/hireAuthRoutes")); // #swagger.tags = ['Hire Auth']
+// app.use("/api/hire/resume-request", require("./routes/hire/resumeEditorRoutes")); // #swagger.tags = ['Hire Resume Editor'] - Might be legacy
+app.use("/api/hire/auth", require("./routes/hire/hireAuthRoutes"));
 app.use("/api/hire/interview", require("./routes/hire/interviewRoutes")); // #swagger.tags = ['Hire Interview']
 app.use("/api/hire/employer", require("./routes/hire/employerRoutes")); // #swagger.tags = ['Hire Employer']
 

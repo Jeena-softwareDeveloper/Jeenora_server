@@ -6,33 +6,72 @@ const User = require("../../models/hire/hireUserModel");
 // User sends a request for editing their resume
 exports.createResumeRequest = async (req, res) => {
   try {
-    const { userId, resumeEditorId, jobName, userResume } = req.body;
+    const { resumeEditorId, jobName, userResume } = req.body;
+    let { userId } = req.body;
 
-    // Check if user and editor exist
-    const user = await User.findById(userId);
-    const editor = await Editor.findById(resumeEditorId);
-
-    if (!user || !editor) {
-      return res.status(404).json({ message: "User or Editor not found" });
+    // Use authenticated user ID if available
+    if (req.id) {
+      userId = req.id;
     }
 
-    // Upload user resume to Cloudinary
-    const result = await cloudinary.uploader.upload(userResume, {
-      folder: "resumes/user"
-    });
+    if (!userId) {
+      return res.status(400).json({ message: "User ID is required" });
+    }
 
-    // Create new resume request
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    let editor = null;
+    if (resumeEditorId) {
+      editor = await Editor.findById(resumeEditorId);
+      if (!editor) {
+        return res.status(404).json({ message: "Editor not found" });
+      }
+    }
+
+    let resumeUrl = userResume;
+    // If not provided in body, fallback to user profile resume
+    if (!resumeUrl && user.resumeUrl) {
+      resumeUrl = user.resumeUrl;
+    } else if (!resumeUrl) {
+      return res.status(400).json({ message: "No resume provided or found in profile" });
+    }
+
+    // If a new file string is provided (base64 or path?), upload it. 
+    // If it is just a URL (starts with http), skip upload.
+    if (resumeUrl && !resumeUrl.startsWith('http')) {
+      const result = await cloudinary.uploader.upload(resumeUrl, {
+        folder: "hire/resumes/user"
+      });
+      resumeUrl = result.secure_url;
+    }
+
     const newRequest = new ResumeRequest({
       userId,
-      resumeEditorId,
-      jobName,
-      userResume: result.secure_url // Cloudinary URL
+      resumeEditorId: resumeEditorId || null, // Allow null
+      jobName: jobName || "General Request",
+      userResume: resumeUrl
     });
 
     await newRequest.save();
-    res.status(201).json({ message: "Resume request created successfully", request: newRequest });
+
+    // Enable the Resume Editor feature for the user
+    user.resumeEditorEnabled = true;
+    if (!user.agreeTerms) {
+      user.agreeTerms = true;
+    }
+    await user.save();
+
+    res.status(201).json({
+      message: "Resume request created successfully",
+      request: newRequest,
+      resumeEditorEnabled: true
+    });
   } catch (error) {
-    res.status(500).json({ message: "Error creating resume request", error });
+    console.error(error);
+    res.status(500).json({ message: "Error creating resume request", error: error.message });
   }
 };
 

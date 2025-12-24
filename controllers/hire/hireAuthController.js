@@ -6,10 +6,14 @@ const hireAuthController = {
     // Register
     register: async (req, res) => {
         try {
-            const { name, email, phone, password } = req.body;
+            const { fullName, email, phoneNumber, password, agreeTerms } = req.body;
 
-            if (!name || !email || !phone || !password) {
-                return res.status(400).json({ success: false, error: "Please provide all fields" });
+            if (!fullName || !email || !phoneNumber || !password) {
+                return res.status(400).json({ success: false, error: "Please provide all required fields" });
+            }
+
+            if (!agreeTerms) {
+                return res.status(400).json({ success: false, error: "You must agree to the terms" });
             }
 
             const existingUser = await HireUser.findOne({ email });
@@ -20,10 +24,14 @@ const hireAuthController = {
             const hashedPassword = await bcrypt.hash(password, 10);
 
             const user = await HireUser.create({
-                name,
+                name: fullName,
                 email,
-                phone,
-                password: hashedPassword
+                phone: phoneNumber,
+                password: hashedPassword,
+                agreeTerms, // Although not saved in standard fields unless we added it, it's validated. But we added it to schema.
+                role: 'JOB_SEEKER',
+                userType: 'FREE',
+                creditBalance: 0
             });
 
             const token = await createToken({ id: user._id, role: user.role });
@@ -36,7 +44,11 @@ const hireAuthController = {
                     id: user._id,
                     name: user.name,
                     email: user.email,
-                    role: user.role
+                    role: user.role,
+                    userType: user.userType,
+                    creditBalance: user.creditBalance,
+                    subscriptionPlan: user.subscription?.plan,
+                    subscriptionExpiry: user.subscription?.expiresAt
                 }
             });
         } catch (error) {
@@ -74,7 +86,11 @@ const hireAuthController = {
                     id: user._id,
                     name: user.name,
                     email: user.email,
-                    role: user.role
+                    role: user.role,
+                    userType: user.userType,
+                    creditBalance: user.creditBalance,
+                    subscriptionPlan: user.subscription?.plan,
+                    subscriptionExpiry: user.subscription?.expiresAt
                 }
             });
         } catch (error) {
@@ -98,7 +114,10 @@ const hireAuthController = {
                     phone: "", // Optional or prompt later
                     password: await bcrypt.hash(email + process.env.SECRET, 10), // Dummy password
                     profileImageUrl: image,
-                    profileCompleted: false
+                    role: 'JOB_SEEKER',
+                    userType: 'FREE',
+                    creditBalance: 0,
+                    agreeTerms: true // Implied
                 });
             }
 
@@ -112,7 +131,11 @@ const hireAuthController = {
                     id: user._id,
                     name: user.name,
                     email: user.email,
-                    role: user.role
+                    role: user.role,
+                    userType: user.userType,
+                    creditBalance: user.creditBalance,
+                    subscriptionPlan: user.subscription?.plan,
+                    subscriptionExpiry: user.subscription?.expiresAt
                 }
             });
         } catch (error) {

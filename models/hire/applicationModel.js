@@ -1,41 +1,131 @@
 const mongoose = require('mongoose');
 
 const applicationSchema = new mongoose.Schema({
+    userId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'HireUser',
+        required: true
+    },
     jobId: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'JobPost',
         required: true
     },
-    applicantId: {
+    employerId: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'HireUser',
         required: true
     },
-    employerId: {
+    resumeId: {
         type: mongoose.Schema.Types.ObjectId,
-        ref: 'HireUser', // Assuming employers are also users for now, or use Admin/Employer model if separate
+        ref: 'Resume',
+        required: false
+    },
+    resumeUrl: String,
+    coverLetter: String,
+
+    // Additional Q&A
+    answers: {
+        noticePeriod: Number,
+        expectedSalary: Number
+    },
+
+    creditsUsed: {
+        type: Number,
         required: true
     },
-    status: {
-        type: String,
-        enum: ['pending', 'reviewed', 'shortlisted', 'rejected', 'hired'],
-        default: 'pending'
-    },
-    appliedAt: {
-        type: Date,
-        default: Date.now
-    },
-    coverLetter: {
-        type: String,
-        default: ''
-    },
-    resumeUrl: {
-        type: String, // Snapshot of resume at time of application
-        required: true
-    }
-});
 
-// Prevent duplicate applications
-applicationSchema.index({ jobId: 1, applicantId: 1 }, { unique: true });
+    // Timeline & Status History
+    currentStatus: {
+        type: String,
+        enum: ['applied', 'viewed', 'shortlisted', 'interview_scheduled', 'interview_completed', 'offer_extended', 'offer_accepted', 'offer_rejected', 'rejected', 'withdrawn'],
+        default: 'applied'
+    },
+    statusHistory: [
+        {
+            status: String,
+            date: { type: Date, default: Date.now },
+            triggeredBy: String, // 'user', 'recruiter', 'system'
+            notes: String,
+            metadata: mongoose.Schema.Types.Mixed
+        }
+    ],
 
-module.exports = mongoose.model('Application', applicationSchema);
+    // Interview Details (Array)
+    interviews: [
+        {
+            // interviewId: String, // internal generation or just subdoc _id
+            type: { type: String, enum: ['phone', 'video', 'onsite', 'technical', 'hr'] },
+            round: Number,
+            scheduledDate: Date,
+            duration: Number, // minutes
+            interviewer: String,
+            interviewerRole: String,
+            meetingLink: String,
+            status: { type: String, enum: ['scheduled', 'completed', 'cancelled', 'rescheduled'], default: 'scheduled' },
+            preparationNotes: String,
+            outcome: { type: String, enum: ['pending', 'passed', 'failed'], default: 'pending' },
+            feedback: String
+        }
+    ],
+
+    // Offer Details
+    offer: {
+        extendedDate: Date,
+        deadline: Date,
+        salary: {
+            base: Number,
+            bonus: Number,
+            stocks: Number,
+            currency: { type: String, default: 'USD' }
+        },
+        benefits: [String],
+        status: { type: String, enum: ['pending', 'accepted', 'rejected', 'negotiating'], default: 'pending' }
+    },
+
+    // Rejection Details
+    rejection: {
+        date: Date,
+        reason: String,
+        feedback: String,
+        reconsiderationPossible: { type: Boolean, default: false }
+    },
+
+    // Communication Log
+    communications: [
+        {
+            type: { type: String, enum: ['email', 'message', 'whatsapp'] },
+            direction: { type: String, enum: ['incoming', 'outgoing'] },
+            subject: String,
+            content: String,
+            sentAt: { type: Date, default: Date.now },
+            status: String // 'delivered', 'read'
+        }
+    ],
+
+    // User Private Notes
+    userNotes: [
+        {
+            note: String,
+            createdAt: { type: Date, default: Date.now },
+            updatedAt: { type: Date, default: Date.now }
+        }
+    ],
+
+    // Analytics
+    analytics: {
+        timeToFirstResponse: String,
+        totalTimeInProcess: String,
+        recruiterEngagement: {
+            views: { type: Number, default: 0 },
+            saves: { type: Number, default: 0 }
+        }
+    },
+
+    archived: { type: Boolean, default: false }
+}, { timestamps: true });
+
+// Ensure a user can only apply once to a job
+applicationSchema.index({ userId: 1, jobId: 1 }, { unique: true });
+
+module.exports = mongoose.models.Application || mongoose.model('Application', applicationSchema);

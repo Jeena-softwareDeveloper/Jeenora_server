@@ -164,15 +164,50 @@ const createWhatsAppClient = () => {
   }
 
 
-  const sessionPath = './whatsapp-sessions';
+  // Determine executable path dynamically
+  let executablePath = process.env.PUPPETEER_EXECUTABLE_PATH;
+
+  if (!executablePath) {
+    if (process.platform === 'win32') {
+      const possiblePaths = [
+        'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+        'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
+        path.join(os.homedir(), 'AppData\\Local\\Google\\Chrome\\Application\\chrome.exe')
+      ];
+
+      for (const p of possiblePaths) {
+        // We need to require fs inside function if not globally avail or use existing import
+        const fs = require('fs');
+        if (fs.existsSync(p)) {
+          console.log(`✅ Found Chrome at: ${p}`);
+          executablePath = p;
+          break;
+        }
+      }
+
+      if (!executablePath) {
+        console.warn('⚠️ Chrome not found in standard paths. Puppeteer will try to use bundled Chromium if available.');
+      }
+    } else if (process.platform === 'linux') {
+      executablePath = '/usr/bin/chromium-browser';
+    } else if (process.platform === 'darwin') {
+      executablePath = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
+    }
+  }
 
   waClient = new Client({
     authStrategy: new LocalAuth({
       clientId: "awareness-campaign-client",
       dataPath: sessionPath
     }),
+    webVersionCache: {
+      type: "remote",
+      remotePath:
+        "https://raw.githubusercontent.com/wppconnect-team/wa-version/main/html/2.2412.54.html",
+    },
     puppeteer: {
-      headless: "true",
+      headless: false, // Visible browser for debugging
+      executablePath: executablePath,
       args: [
         '--no-sandbox',
         '--disable-setuid-sandbox',
@@ -180,8 +215,8 @@ const createWhatsAppClient = () => {
         '--disable-accelerated-2d-canvas',
         '--no-first-run',
         '--no-zygote',
-        '--disable-gpu',
         '--single-process',
+        '--disable-gpu',
         '--no-default-browser-check',
         '--disable-extensions',
         '--disable-default-apps',
@@ -191,15 +226,9 @@ const createWhatsAppClient = () => {
         '--disable-backgrounding-occluded-windows',
         '--disable-renderer-backgrounding',
         '--disable-ipc-flooding-protection',
-        '--no-zygote',
         '--renderer-process-limit=1',
         '--no-pings'
       ],
-
-      executablePath: process.env.PUPPETEER_EXECUTABLE_PATH ||
-        (process.platform === 'linux' ? '/usr/bin/chromium-browser' :
-          process.platform === 'win32' ? undefined :
-            process.platform === 'darwin' ? undefined : undefined),
       ignoreDefaultArgs: ['--disable-extensions'],
       timeout: 0
     },
@@ -374,10 +403,10 @@ const setSocket = (socketServer) => {
   });
 
   if (!initializationInProgress && !isWhatsAppReady) {
-    console.log('🔄 Starting WhatsApp initialization...');
-    setTimeout(() => {
-      initializeWhatsApp();
-    }, 3000);
+    // console.log('🔄 Starting WhatsApp initialization...');
+    // setTimeout(() => {
+    //   initializeWhatsApp();
+    // }, 3000);
   }
 };
 

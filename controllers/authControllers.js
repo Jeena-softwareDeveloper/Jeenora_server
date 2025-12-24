@@ -312,6 +312,58 @@ class authControllers {
             responseReturn(res, 500, { error: error.message })
         }
     }
+
+    admin_create_seller = async (req, res) => {
+        const { email, name, password, permissions } = req.body
+        try {
+            const getUser = await sellerModel.findOne({ email })
+            if (getUser) {
+                responseReturn(res, 404, { error: 'Email Already Exit' })
+            } else {
+                const seller = await sellerModel.create({
+                    name,
+                    email,
+                    password: await bcrypt.hash(password, 10),
+                    method: 'menualy',
+                    shopInfo: {},
+                    status: 'active', // Admin created sellers are active by default
+                    permissions: permissions || []
+                })
+                await sellerCustomerModel.create({
+                    myId: seller.id
+                })
+                responseReturn(res, 201, { message: 'Seller Created Successfully', seller })
+            }
+        } catch (error) {
+            console.log(error)
+            responseReturn(res, 500, { error: 'Internal Server Error' })
+        }
+    }
+
+    update_seller_permissions = async (req, res) => {
+        const { sellerId, permissions } = req.body
+        try {
+            await sellerModel.findByIdAndUpdate(sellerId, {
+                permissions
+            })
+            responseReturn(res, 200, { message: 'Permissions Updated Successfully' })
+        } catch (error) {
+            responseReturn(res, 500, { error: error.message })
+        }
+    }
+
+    update_seller_password = async (req, res) => {
+        const { sellerId, password } = req.body
+        try {
+            const hashedPassword = await bcrypt.hash(password, 10);
+            await sellerModel.findByIdAndUpdate(sellerId, {
+                password: hashedPassword
+            })
+            responseReturn(res, 200, { message: 'Password Updated Successfully' })
+        } catch (error) {
+            responseReturn(res, 500, { error: error.message })
+        }
+    }
 }
 
 module.exports = new authControllers()

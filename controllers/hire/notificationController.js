@@ -5,35 +5,39 @@ const { responseReturn } = require('../../utiles/response');
 
 // User Notification Controller
 class NotificationController {
-  
+
   // Get all notifications with pagination
   getMyNotifications = async (req, res) => {
     try {
       const userId = req.userId;
       const { page = 1, limit = 10, category, unreadOnly } = req.query;
-      
+
       const query = { userId };
-      
+
       // Filter by category
       if (category && category !== 'all') {
         query.category = category;
       }
-      
+
       // Filter unread only
       if (unreadOnly === 'true') {
         query.isRead = false;
       }
-      
+
+      console.log(`[NotificationController] Fetching for user: ${userId}, query:`, query);
+
       const notifications = await Notification.find(query)
         .sort({ createdAt: -1 })
         .limit(limit * 1)
         .skip((page - 1) * limit);
-      
+
+      console.log(`[NotificationController] Found ${notifications.length} notifications`);
+
       const total = await Notification.countDocuments(query);
       const unreadCount = await getUnreadCount(userId);
       const whatsappStatus = getWhatsAppStatus();
-      
-      responseReturn(res, 200, { 
+
+      responseReturn(res, 200, {
         notifications,
         pagination: {
           currentPage: parseInt(page),
@@ -55,17 +59,17 @@ class NotificationController {
     try {
       const userId = req.userId;
       const { notifId } = req.params;
-      
+
       await Notification.updateOne(
-        { _id: notifId, userId }, 
+        { _id: notifId, userId },
         { $set: { isRead: true } }
       );
-      
+
       const unreadCount = await getUnreadCount(userId);
-      
-      responseReturn(res, 200, { 
+
+      responseReturn(res, 200, {
         message: 'Notification marked as read',
-        unreadCount 
+        unreadCount
       });
     } catch (err) {
       console.error('Error in markAsRead:', err);
@@ -77,14 +81,14 @@ class NotificationController {
   markAllAsRead = async (req, res) => {
     try {
       const userId = req.userId;
-      
+
       await Notification.updateMany(
-        { userId, isRead: false }, 
+        { userId, isRead: false },
         { $set: { isRead: true } }
       );
-      
-      responseReturn(res, 200, { 
-        message: 'All notifications marked as read' 
+
+      responseReturn(res, 200, {
+        message: 'All notifications marked as read'
       });
     } catch (err) {
       console.error('Error in markAllAsRead:', err);
@@ -97,14 +101,14 @@ class NotificationController {
     try {
       const userId = req.userId;
       const { notifId } = req.params;
-      
+
       await Notification.deleteOne({ _id: notifId, userId });
-      
+
       const unreadCount = await getUnreadCount(userId);
-      
-      responseReturn(res, 200, { 
+
+      responseReturn(res, 200, {
         message: 'Notification deleted successfully',
-        unreadCount 
+        unreadCount
       });
     } catch (err) {
       console.error('Error in deleteNotification:', err);
@@ -116,7 +120,7 @@ class NotificationController {
   getNotificationStats = async (req, res) => {
     try {
       const userId = req.userId;
-      
+
       const stats = await Notification.aggregate([
         { $match: { userId } },
         {
@@ -129,11 +133,11 @@ class NotificationController {
           }
         }
       ]);
-      
+
       const total = await Notification.countDocuments({ userId });
       const unreadCount = await getUnreadCount(userId);
       const whatsappStatus = getWhatsAppStatus();
-      
+
       responseReturn(res, 200, {
         stats,
         total,
@@ -156,8 +160,8 @@ class AdminNotificationController {
       const { target, title, message, type = 'system', category = 'System', channel = ['dashboard'] } = req.body;
 
       if (!target || !title || !message) {
-        return responseReturn(res, 400, { 
-          error: 'Target, title, and message are required' 
+        return responseReturn(res, 400, {
+          error: 'Target, title, and message are required'
         });
       }
 
@@ -167,14 +171,14 @@ class AdminNotificationController {
       } else if (Array.isArray(target)) {
         users = await HireUser.find({ _id: { $in: target } }).select('_id');
       } else {
-        return responseReturn(res, 400, { 
-          error: 'Target must be "all" or an array of user IDs' 
+        return responseReturn(res, 400, {
+          error: 'Target must be "all" or an array of user IDs'
         });
       }
 
       const userIds = users.map(user => user._id);
       const whatsappStatus = getWhatsAppStatus();
-      
+
       // Create notifications in bulk
       await createBulkNotifications(userIds, {
         title,
@@ -184,7 +188,7 @@ class AdminNotificationController {
         channel
       });
 
-      responseReturn(res, 200, { 
+      responseReturn(res, 200, {
         message: `Notification sent to ${users.length} users`,
         whatsappStatus
       });
@@ -197,41 +201,41 @@ class AdminNotificationController {
   // Admin view all notifications with filters
   listAllNotifications = async (req, res) => {
     try {
-      const { 
-        page = 1, 
-        limit = 20, 
-        userId, 
-        type, 
-        category, 
+      const {
+        page = 1,
+        limit = 20,
+        userId,
+        type,
+        category,
         channel,
-        startDate, 
-        endDate 
+        startDate,
+        endDate
       } = req.query;
-      
+
       const query = {};
-      
+
       // Apply filters
       if (userId) query.userId = userId;
       if (type) query.type = type;
       if (category) query.category = category;
       if (channel) query.channel = channel;
-      
+
       // Date range filter
       if (startDate || endDate) {
         query.createdAt = {};
         if (startDate) query.createdAt.$gte = new Date(startDate);
         if (endDate) query.createdAt.$lte = new Date(endDate);
       }
-      
+
       const notifications = await Notification.find(query)
         .populate('userId', 'name email phone')
         .sort({ createdAt: -1 })
         .limit(limit * 1)
         .skip((page - 1) * limit);
-      
+
       const total = await Notification.countDocuments(query);
       const whatsappStatus = getWhatsAppStatus();
-      
+
       // Get statistics
       const stats = await Notification.aggregate([
         { $match: query },
@@ -242,8 +246,8 @@ class AdminNotificationController {
           }
         }
       ]);
-      
-      responseReturn(res, 200, { 
+
+      responseReturn(res, 200, {
         notifications,
         pagination: {
           currentPage: parseInt(page),
@@ -263,11 +267,11 @@ class AdminNotificationController {
   deleteNotificationAdmin = async (req, res) => {
     try {
       const { notifId } = req.params;
-      
+
       await Notification.findByIdAndDelete(notifId);
-      
-      responseReturn(res, 200, { 
-        message: 'Notification deleted successfully' 
+
+      responseReturn(res, 200, {
+        message: 'Notification deleted successfully'
       });
     } catch (err) {
       console.error('Error in deleteNotificationAdmin:', err);
@@ -280,7 +284,7 @@ class AdminNotificationController {
     try {
       const { getWhatsAppStatus } = require('../path/to/your/whatsappService');
       const whatsappStatus = await getWhatsAppStatus(req, res);
-      
+
       responseReturn(res, 200, {
         whatsappStatus
       });

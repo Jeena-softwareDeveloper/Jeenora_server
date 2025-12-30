@@ -1,4 +1,4 @@
-const Application = require('../../models/hire/ApplicationModel');
+const Application = require('../../models/hire/applicationModel');
 const Notification = require('../hire/Services/notificationService');
 const socketHelper = require('../../utiles/socket');
 const JobMessage = require('../../models/hire/JobMessageModel');

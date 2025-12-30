@@ -22,7 +22,7 @@ class JobMessageController {
             if (role === 'admin') senderRole = 'admin';
             if (role === 'employer') senderRole = 'employer';
 
-            const Application = require('../../models/hire/ApplicationModel');
+            const Application = require('../../models/hire/applicationModel');
             const JobPost = require('../../models/hire/JobPostModel');
 
             // 1. Get Application

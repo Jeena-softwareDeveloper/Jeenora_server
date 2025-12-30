@@ -1,4 +1,4 @@
-const Application = require('../../models/hire/ApplicationModel');
+const Application = require('../../models/hire/applicationModel');
 const Job = require('../../models/hire/JobModel');
 const JobPost = require('../../models/hire/JobPostModel');
 const HireUser = require('../../models/hire/hireUserModel');

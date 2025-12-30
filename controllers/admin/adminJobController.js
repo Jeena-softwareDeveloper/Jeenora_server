@@ -1,5 +1,5 @@
 const Job = require('../../models/hire/JobModel');
-const Application = require('../../models/hire/ApplicationModel');
+const Application = require('../../models/hire/applicationModel');
 const { responseReturn } = require("../../utiles/response");
 const cloudinary = require('../../utiles/cloudinary');
 const formidable = require('formidable');

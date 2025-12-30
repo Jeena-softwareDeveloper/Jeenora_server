@@ -23,10 +23,15 @@ const server = http.createServer(app);
 const allowedOrigins = [
   "http://localhost:3000",
   "http://localhost:3001",
-  "http://localhost:5173",
+  "http://localhost:5174",
   "http://localhost:5000",
   "http://localhost:5173"
 ];
+
+if (process.env.ALLOWED_ORIGINS) {
+  const origins = process.env.ALLOWED_ORIGINS.split(',');
+  allowedOrigins.push(...origins);
+}
 
 // --- Middlewares globaux ---
 app.use(
@@ -56,6 +61,7 @@ socketHelper.init(io);
 app.use("/api/admin/jobs", require("./routes/admin/adminJobRoutes")); // Admin Job Management
 app.use("/api/admin/applications", require("./routes/admin/adminApplicationRoutes")); // Admin Application Management
 app.use("/api/admin/resumes", require("./routes/admin/adminResumeRoutes")); // Admin Resume Management
+app.use("/api/admin/chat-support", require("./routes/admin/chatSupportRoutes")); // Admin Chat Support
 let allCustomer = [];
 let allSeller = [];
 let admin = {};
@@ -67,7 +73,11 @@ const addUser = (customerId, socketId, userInfo) => {
 };
 
 const addSeller = (sellerId, socketId, userInfo) => {
-  if (!allSeller.some((u) => u.sellerId === sellerId)) {
+  const checkSeller = allSeller.find((u) => u.sellerId === sellerId);
+  if (checkSeller) {
+    checkSeller.socketId = socketId;
+    checkSeller.userInfo = userInfo;
+  } else {
     allSeller.push({ sellerId, socketId, userInfo });
   }
 };
@@ -94,6 +104,12 @@ io.on("connection", (soc) => {
     io.emit("activeSeller", allSeller);
   });
 
+  soc.on("add_hireuser", (sellerId, userInfo) => {
+    console.log('Hire User Added:', sellerId, soc.id);
+    addSeller(sellerId, soc.id, userInfo);
+    io.emit("activeSeller", allSeller);
+  });
+
   soc.on("send_seller_message", (msg) => {
     const customer = findCustomer(msg.receverId);
     if (customer) {
@@ -109,15 +125,37 @@ io.on("connection", (soc) => {
   });
 
   soc.on("send_message_admin_to_seller", (msg) => {
+    console.log('Admin to Seller:', msg);
     const seller = findSeller(msg.receverId);
+    console.log('Found Seller:', seller ? 'Yes' : 'No', msg.receverId);
     if (seller) {
       soc.to(seller.socketId).emit("receved_admin_message", msg);
     }
   });
 
   soc.on("send_message_seller_to_admin", (msg) => {
+    console.log('Seller to Admin:', msg);
     if (admin.socketId) {
       soc.to(admin.socketId).emit("receved_seller_message", msg);
+    }
+  });
+
+  soc.on("send_message_hire_to_admin", (msg) => {
+    console.log('Hire to Admin:', msg);
+    if (admin.socketId) {
+      soc.to(admin.socketId).emit("receved_seller_message", msg);
+    } else {
+      console.log('Admin not connected for Hire message');
+    }
+  });
+
+  soc.on("send_message_admin_to_hire", (msg) => {
+    console.log('Admin to Hire:', msg);
+    const seller = findSeller(msg.receverId);
+    if (seller) {
+      soc.to(seller.socketId).emit("receved_admin_message", msg);
+    } else {
+      console.log('Hire User not found:', msg.receverId);
     }
   });
 
@@ -171,6 +209,7 @@ io.on("connection", (soc) => {
     delete adminInfo.email;
     delete adminInfo.password;
     admin = { ...adminInfo, socketId: soc.id };
+    console.log("Admin connected:", admin.socketId);
     io.emit("activeSeller", allSeller);
   });
 
@@ -216,9 +255,10 @@ app.use("/api/hire/skills", require("./routes/hire/skillCategoryRoutes"));
 app.use("/api/hire/user", require("./routes/hire/hireUserRoutes"));
 app.use("/api/hire/payment", require("./routes/hire/paymentRoutes"));
 app.use("/api/hire/job", require("./routes/hire/jobRoutes"));
-app.use("/api/admin/jobs", require("./routes/admin/adminJobRoutes")); // Admin Job Management
-app.use("/api/admin/applications", require("./routes/admin/adminApplicationRoutes")); // Admin Application Management
-app.use("/api/admin/resumes", require("./routes/admin/adminResumeRoutes")); // Admin Resume Management
+// app.use("/api/admin/jobs", require("./routes/admin/adminJobRoutes")); // Duplicate
+// app.use("/api/admin/applications", require("./routes/admin/adminApplicationRoutes")); // Duplicate
+// app.use("/api/admin/resumes", require("./routes/admin/adminResumeRoutes")); // Duplicate
+// app.use("/api/admin/chat-support", require("./routes/admin/chatSupportRoutes")); // Moved up
 app.use("/api/hire/jobs", require("./routes/hire/jobSearchRoutes")); // Public Job Search
 app.use("/api/hire/applications", require("./routes/hire/applicationRoutes")); // Job Applications
 app.use("/api/hire/setting", require("./routes/hire/adminSettingRoutes"));
@@ -232,6 +272,8 @@ app.use("/api/hire", require("./routes/hire/resumeEditorRoutes")); // Editor Man
 
 // app.use("/api/hire/resume-request", require("./routes/hire/resumeEditorRoutes")); // #swagger.tags = ['Hire Resume Editor'] - Might be legacy
 app.use("/api/hire/auth", require("./routes/hire/hireAuthRoutes"));
+app.use("/api/hire/otp", require("./routes/hire/otpRoutes")); // OTP verification for signup/login
+app.use("/api/hire/password", require("./routes/hire/passwordResetRoutes")); // Password reset
 app.use("/api/hire/interview", require("./routes/hire/interviewRoutes")); // #swagger.tags = ['Hire Interview']
 app.use("/api/hire/employer", require("./routes/hire/employerRoutes")); // #swagger.tags = ['Hire Employer']
 

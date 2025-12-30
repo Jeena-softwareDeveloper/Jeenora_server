@@ -16,6 +16,11 @@ const resumeEditRequestSchema = new mongoose.Schema({
         ref: 'Resume',
         required: [true, 'Current resume is required']
     },
+    editorId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'ResumeEditor',
+        required: [true, 'Editor ID is required']
+    },
     targetRole: {
         type: String,
         required: [true, 'Target role is required']

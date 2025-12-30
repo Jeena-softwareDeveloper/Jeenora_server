@@ -8,6 +8,7 @@ router.get('/my', authMiddleware, applicationController.getUserApplications); //
 router.get('/stats', authMiddleware, applicationController.getApplicationStats); // GET /api/hire/applications/stats
 router.put('/:id/notes', authMiddleware, applicationController.updateNote); // PUT /api/hire/applications/:id/notes
 router.post('/:id/withdraw', authMiddleware, applicationController.withdrawApplication); // POST /api/hire/applications/:id/withdraw
+router.post('/:id/enable-chat', authMiddleware, applicationController.enableChat); // POST /api/hire/applications/:id/enable-chat
 
 const jobMessageController = require('../../controllers/hire/jobMessageController');
 

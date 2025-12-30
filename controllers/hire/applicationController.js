@@ -2,6 +2,7 @@ const Application = require('../../models/hire/ApplicationModel');
 const Job = require('../../models/hire/JobModel');
 const JobPost = require('../../models/hire/JobPostModel');
 const HireUser = require('../../models/hire/hireUserModel');
+const CreditSetting = require('../../models/hire/creditSettingModel');
 const { responseReturn } = require("../../utiles/response");
 
 class ApplicationController {
@@ -32,8 +33,12 @@ class ApplicationController {
                 return responseReturn(res, 404, { error: "User not found" });
             }
 
-            // Determine credits required (JobPost is flat, Job is nested)
-            const required = (job.application && job.application.creditsRequired) || 1;
+            // Determine credits required
+            const settings = await CreditSetting.getSettings();
+            const globalCost = settings.jobApplyCost || 5;
+            const required = (job.application && job.application.creditsRequired) !== undefined
+                ? job.application.creditsRequired
+                : globalCost;
 
             if (user.creditBalance < required) {
                 return responseReturn(res, 403, {
@@ -219,7 +224,8 @@ class ApplicationController {
 
             const stats = {
                 total: applications.length,
-                active: 0,
+                viewed: 0,
+                shortlisted: 0,
                 interview: 0,
                 offer: 0,
                 rejected: 0,
@@ -229,7 +235,8 @@ class ApplicationController {
             const activeStatuses = ['applied', 'viewed', 'shortlisted', 'interview_scheduled', 'interview_completed', 'offer_extended'];
 
             applications.forEach(app => {
-                if (activeStatuses.includes(app.currentStatus)) stats.active++;
+                if (app.currentStatus === 'viewed') stats.viewed++;
+                if (app.currentStatus === 'shortlisted') stats.shortlisted++;
                 if (['interview_scheduled', 'interview_completed'].includes(app.currentStatus)) stats.interview++;
                 if (['offer_extended', 'offer_accepted'].includes(app.currentStatus)) stats.offer++;
                 if (app.currentStatus === 'rejected') stats.rejected++;
@@ -280,6 +287,49 @@ class ApplicationController {
             await app.save();
             responseReturn(res, 200, { message: 'Application withdrawn successfully', status: 'withdrawn' });
         } catch (error) {
+            responseReturn(res, 500, { error: error.message });
+        }
+    }
+
+    enableChat = async (req, res) => {
+        try {
+            const { id: applicationId } = req.params;
+            const { id: userId } = req;
+
+            const application = await Application.findById(applicationId);
+            if (!application) return responseReturn(res, 404, { error: 'Application not found' });
+
+            if (application.chatEnabled) {
+                return responseReturn(res, 400, { error: 'Chat is already enabled for this application' });
+            }
+
+            const user = await HireUser.findById(userId);
+            if (!user) return responseReturn(res, 404, { error: 'User not found' });
+
+            const settings = await CreditSetting.getSettings();
+            const cost = settings.chatEnableCost || 10;
+
+            if (user.creditBalance < cost) {
+                return responseReturn(res, 403, {
+                    error: 'Insufficient credits',
+                    required: cost,
+                    available: user.creditBalance
+                });
+            }
+
+            // Deduct credits and enable chat
+            user.creditBalance -= cost;
+            application.chatEnabled = true;
+
+            await user.save();
+            await application.save();
+
+            responseReturn(res, 200, {
+                message: 'Chat enabled successfully',
+                remainingCredits: user.creditBalance
+            });
+        } catch (error) {
+            console.error('Enable chat error:', error);
             responseReturn(res, 500, { error: error.message });
         }
     }

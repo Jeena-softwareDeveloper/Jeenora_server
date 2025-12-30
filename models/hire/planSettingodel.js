@@ -34,13 +34,14 @@ const planSettingsSchema = new mongoose.Schema({
             features: [{ type: String }],
             maxApplications: { type: Number, default: 0 }
         }
-    }
+    },
+    plansComingSoon: { type: Boolean, default: true }
 }, {
     timestamps: true
 })
 
 // Ensure only one document exists
-planSettingsSchema.statics.getSettings = async function() {
+planSettingsSchema.statics.getSettings = async function () {
     let settings = await this.findOne()
     if (!settings) {
         settings = await this.create({})

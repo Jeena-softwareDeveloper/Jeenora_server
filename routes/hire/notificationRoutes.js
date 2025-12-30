@@ -8,6 +8,7 @@ router.get('/', authMiddleware, userController.getMyNotifications);
 router.get('/stats', authMiddleware, userController.getNotificationStats);
 router.patch('/:notifId/read', authMiddleware, userController.markAsRead);
 router.patch('/mark-all-read', authMiddleware, userController.markAllAsRead);
+router.delete('/clear-all', authMiddleware, userController.deleteAllNotifications);
 router.delete('/:notifId', authMiddleware, userController.deleteNotification);
 
 // ADMIN ROUTES

@@ -9,7 +9,7 @@ class NotificationController {
   // Get all notifications with pagination
   getMyNotifications = async (req, res) => {
     try {
-      const userId = req.userId;
+      const userId = req.id;
       const { page = 1, limit = 10, category, unreadOnly } = req.query;
 
       const query = { userId };
@@ -57,20 +57,19 @@ class NotificationController {
   // Mark one notification as read
   markAsRead = async (req, res) => {
     try {
-      const userId = req.userId;
+      const userId = req.id;
       const { notifId } = req.params;
 
-      await Notification.updateOne(
-        { _id: notifId, userId },
-        { $set: { isRead: true } }
-      );
+      const notification = await Notification.findOne({ _id: notifId, userId });
 
-      const unreadCount = await getUnreadCount(userId);
+      if (!notification) {
+        return responseReturn(res, 404, { error: 'Notification not found' });
+      }
 
-      responseReturn(res, 200, {
-        message: 'Notification marked as read',
-        unreadCount
-      });
+      notification.isRead = true;
+      await notification.save();
+
+      responseReturn(res, 200, { message: 'Marked as read' });
     } catch (err) {
       console.error('Error in markAsRead:', err);
       responseReturn(res, 500, { error: err.message });
@@ -80,16 +79,12 @@ class NotificationController {
   // Mark all as read
   markAllAsRead = async (req, res) => {
     try {
-      const userId = req.userId;
-
+      const userId = req.id;
       await Notification.updateMany(
         { userId, isRead: false },
         { $set: { isRead: true } }
       );
-
-      responseReturn(res, 200, {
-        message: 'All notifications marked as read'
-      });
+      responseReturn(res, 200, { message: 'All notifications marked as read' });
     } catch (err) {
       console.error('Error in markAllAsRead:', err);
       responseReturn(res, 500, { error: err.message });
@@ -99,19 +94,30 @@ class NotificationController {
   // Delete a notification
   deleteNotification = async (req, res) => {
     try {
-      const userId = req.userId;
+      const userId = req.id;
       const { notifId } = req.params;
 
-      await Notification.deleteOne({ _id: notifId, userId });
+      const notification = await Notification.findOneAndDelete({ _id: notifId, userId });
 
-      const unreadCount = await getUnreadCount(userId);
+      if (!notification) {
+        return responseReturn(res, 404, { error: 'Notification not found' });
+      }
 
-      responseReturn(res, 200, {
-        message: 'Notification deleted successfully',
-        unreadCount
-      });
+      responseReturn(res, 200, { message: 'Notification deleted' });
     } catch (err) {
       console.error('Error in deleteNotification:', err);
+      responseReturn(res, 500, { error: err.message });
+    }
+  };
+
+  // Delete all notifications
+  deleteAllNotifications = async (req, res) => {
+    try {
+      const userId = req.id;
+      await Notification.deleteMany({ userId });
+      responseReturn(res, 200, { message: 'All notifications cleared' });
+    } catch (err) {
+      console.error('Error in deleteAllNotifications:', err);
       responseReturn(res, 500, { error: err.message });
     }
   };
@@ -119,20 +125,6 @@ class NotificationController {
   // Get notification statistics
   getNotificationStats = async (req, res) => {
     try {
-      const userId = req.userId;
-
-      const stats = await Notification.aggregate([
-        { $match: { userId } },
-        {
-          $group: {
-            _id: '$category',
-            count: { $sum: 1 },
-            unread: {
-              $sum: { $cond: [{ $eq: ['$isRead', false] }, 1, 0] }
-            }
-          }
-        }
-      ]);
 
       const total = await Notification.countDocuments({ userId });
       const unreadCount = await getUnreadCount(userId);

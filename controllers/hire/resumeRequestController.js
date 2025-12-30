@@ -23,6 +23,14 @@ exports.createResumeRequest = async (req, res) => {
       return res.status(404).json({ message: "User not found" });
     }
 
+    // Check credits
+    const creditSettings = await require("../../models/hire/creditSettingModel").getSettings();
+    const cost = creditSettings.resumeEditCost || 50;
+
+    if (user.creditBalance < cost) {
+      return res.status(400).json({ message: `Insufficient credits. This service costs ${cost} credits.` });
+    }
+
     let editor = null;
     if (resumeEditorId) {
       editor = await Editor.findById(resumeEditorId);
@@ -52,10 +60,15 @@ exports.createResumeRequest = async (req, res) => {
       userId,
       resumeEditorId: resumeEditorId || null, // Allow null
       jobName: jobName || "General Request",
-      userResume: resumeUrl
+      userResume: resumeUrl,
+      cost // Store cost for records? Scheme might not have it but good practice.
     });
 
     await newRequest.save();
+
+    // Deduct credits
+    user.creditBalance = (user.creditBalance || 0) - cost;
+    // Store credit history equivalent? (Skipped for now as schema unkown)
 
     // Enable the Resume Editor feature for the user
     user.resumeEditorEnabled = true;
@@ -65,9 +78,10 @@ exports.createResumeRequest = async (req, res) => {
     await user.save();
 
     res.status(201).json({
-      message: "Resume request created successfully",
+      message: `Resume request created successfully. ${cost} credits deducted.`,
       request: newRequest,
-      resumeEditorEnabled: true
+      resumeEditorEnabled: true,
+      newBalance: user.creditBalance
     });
   } catch (error) {
     console.error(error);

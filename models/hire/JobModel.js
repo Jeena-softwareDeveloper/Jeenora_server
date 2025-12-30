@@ -10,6 +10,7 @@ const jobSchema = new mongoose.Schema({
         name: { type: String, required: true },
         logo: { type: String, default: '' }, // Optional logo
         about: String,
+        industry: String,
         size: String,
         website: String
     },

@@ -1,12 +1,18 @@
 const express = require('express');
 const router = express.Router();
 const adminController = require('../../controllers/hire/adminController');
+const creditSettingController = require('../../controllers/hire/creditSettingController');
 const { authMiddleware } = require('../../middlewares/authMiddleware')
 
 // Admin Settings Routes
 router.route('/')
   .get(adminController.getAdminSettings)
   .put(adminController.updateAdminSettings);
+
+// Credit Settings Routes
+router.route('/credits')
+  .get(creditSettingController.getSettings)
+  .put(creditSettingController.updateSettings);
 
 // Plan Settings Routes
 router.route('/plans')

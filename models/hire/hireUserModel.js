@@ -22,7 +22,7 @@ const hireUserSchema = new mongoose.Schema({
   },
   role: {
     type: String,
-    enum: ['JOB_SEEKER', 'job_seeker', 'hire', 'hireUser'],
+    enum: ['JOB_SEEKER', 'job_seeker', 'hire', 'hireUser', 'admin'],
     default: 'JOB_SEEKER'
   },
   agreeTerms: {

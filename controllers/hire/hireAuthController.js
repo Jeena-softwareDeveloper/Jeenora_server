@@ -1,6 +1,7 @@
 const bcrypt = require('bcrypt');
 const { createToken } = require('../../utiles/tokenCreate');
 const HireUser = require('../../models/hire/hireUserModel');
+const CreditSetting = require('../../models/hire/creditSettingModel');
 
 const hireAuthController = {
     // Register
@@ -21,6 +22,9 @@ const hireAuthController = {
                 return res.status(400).json({ success: false, error: "Email already exists" });
             }
 
+            const creditSettings = await CreditSetting.getSettings();
+            const initialCredits = creditSettings?.initialFreeCredits || 0;
+
             const hashedPassword = await bcrypt.hash(password, 10);
 
             const user = await HireUser.create({
@@ -31,7 +35,7 @@ const hireAuthController = {
                 agreeTerms, // Although not saved in standard fields unless we added it, it's validated. But we added it to schema.
                 role: 'JOB_SEEKER',
                 userType: 'FREE',
-                creditBalance: 0
+                creditBalance: initialCredits
             });
 
             const token = await createToken({ id: user._id, role: user.role });
@@ -108,6 +112,9 @@ const hireAuthController = {
             let user = await HireUser.findOne({ email });
 
             if (!user) {
+                const creditSettings = await CreditSetting.getSettings();
+                const initialCredits = creditSettings?.initialFreeCredits || 0;
+
                 user = await HireUser.create({
                     name,
                     email,
@@ -116,7 +123,7 @@ const hireAuthController = {
                     profileImageUrl: image,
                     role: 'JOB_SEEKER',
                     userType: 'FREE',
-                    creditBalance: 0,
+                    creditBalance: initialCredits,
                     agreeTerms: true // Implied
                 });
             }

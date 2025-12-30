@@ -1,6 +1,8 @@
 const JobMessage = require('../../models/hire/JobMessageModel');
 const Notification = require('./Services/notificationService');
 const { responseReturn } = require("../../utiles/response");
+const HireUser = require('../../models/hire/hireUserModel');
+const CreditSetting = require('../../models/hire/creditSettingModel');
 
 class JobMessageController {
 
@@ -14,26 +16,41 @@ class JobMessageController {
                 return responseReturn(res, 400, { error: 'Application ID and message are required' });
             }
 
-            // In a real app, verify user has access to this application (security check)
-            // skipping extensive checks for speed, assuming id/role usually sufficient or handled by middleware
-
             // Determine Sender Details
             let senderId = id;
             let senderRole = 'user';
             if (role === 'admin') senderRole = 'admin';
             if (role === 'employer') senderRole = 'employer';
 
-            // Find Application to get details (jobId, userId, etc)
-            // const application = await require('../../models/hire/ApplicationModel').findById(applicationId);
-            // using dynamic require or passed model to avoid circular dependency if any, or just direct require
             const Application = require('../../models/hire/ApplicationModel');
             const JobPost = require('../../models/hire/JobPostModel');
 
-            // 1. Get Application (keep jobId as ID)
+            // 1. Get Application
             const application = await Application.findById(applicationId);
 
             if (!application) {
                 return responseReturn(res, 404, { error: 'Application not found' });
+            }
+
+            // CREDIT LOGIC: Only deduct for CANDIDATES (hireuser role)
+            if (senderRole === 'user') {
+                const user = await HireUser.findById(id);
+                if (!user) return responseReturn(res, 404, { error: 'User not found' });
+
+                const settings = await CreditSetting.getSettings();
+                const cost = settings.messageSendCost || 0;
+
+                if (cost > 0) {
+                    if (user.creditBalance < cost) {
+                        return responseReturn(res, 403, {
+                            error: 'Insufficient credits to send message',
+                            required: cost,
+                            available: user.creditBalance
+                        });
+                    }
+                    user.creditBalance -= cost;
+                    await user.save();
+                }
             }
 
             // 2. Get Job Details manually (for notifications)
@@ -60,10 +77,15 @@ class JobMessageController {
                 if (senderId.toString() !== application.userId.toString()) {
                     console.log('[JobMessage] Notify Candidate');
                     notifRecipientId = application.userId;
+                    let msgContent = `You have a new message from ${jobDetails?.company?.name || 'recruiter'}`;
+                    if (senderRole === 'admin') {
+                        msgContent = 'New message from Application';
+                    }
+
                     await Notification.createNotification({
                         userId: application.userId,
                         title: `New Message`,
-                        message: `You have a new message from ${jobDetails?.company?.name || 'recruiter'}`,
+                        message: msgContent,
                         type: 'job',
                         category: 'Job',
                         link: `/hire/tracking/${application._id}`,
@@ -92,7 +114,21 @@ class JobMessageController {
                     const socketHelper = require('../../utiles/socket');
                     const recipientIdStr = notifRecipientId.toString();
                     console.log(`[JobMessage] Emitting socket event: new_notification for ${recipientIdStr}`);
-                    socketHelper.getIo().emit('new_notification', { recipientId: recipientIdStr });
+
+                    // Determine message for socket payload
+                    let socketMsg = 'You have a new notification';
+                    if (senderId.toString() !== application.userId.toString()) {
+                        // Was sent to Candidate
+                        socketMsg = (senderRole === 'admin') ? 'New message from Application' : `You have a new message from ${jobDetails?.company?.name || 'recruiter'}`;
+                    } else {
+                        // Was sent to Employer
+                        socketMsg = `Candidate has sent a message regarding application for ${jobDetails?.title || 'Job'}`;
+                    }
+
+                    socketHelper.getIo().emit('new_notification', {
+                        recipientId: recipientIdStr,
+                        message: socketMsg
+                    });
                 } else {
                     console.log('[JobMessage] No recipient identified for notification');
                 }

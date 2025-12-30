@@ -122,6 +122,7 @@ const applicationSchema = new mongoose.Schema({
         }
     },
 
+    chatEnabled: { type: Boolean, default: false },
     archived: { type: Boolean, default: false }
 }, { timestamps: true });
 

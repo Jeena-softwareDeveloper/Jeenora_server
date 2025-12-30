@@ -551,6 +551,7 @@ class HireUserController {
             'settings.account.isActive': 1,
             createdAt: 1,
             profileImageUrl: 1,
+            resumeEditorEnabled: 1,
             completionPercentage: { $ifNull: ['$completionPercentage', 0] } // Default to 0 if no profile
           }
         }
@@ -618,7 +619,7 @@ class HireUserController {
 
   updateUserByAdmin = async (req, res) => {
     const { userId } = req.params;
-    const { name, email, phone, role, userType, creditBalance, status, password } = req.body;
+    const { name, email, phone, role, userType, creditBalance, status, password, resumeEditorEnabled } = req.body;
 
     try {
       const updateFields = {
@@ -629,6 +630,10 @@ class HireUserController {
         userType,
         creditBalance: isNaN(parseInt(creditBalance)) ? 0 : parseInt(creditBalance)
       };
+
+      if (resumeEditorEnabled !== undefined) {
+        updateFields.resumeEditorEnabled = resumeEditorEnabled;
+      }
 
       if (status) {
         updateFields['settings.account.isActive'] = status === 'Active';

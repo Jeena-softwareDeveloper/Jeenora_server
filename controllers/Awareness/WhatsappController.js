@@ -35,6 +35,7 @@ let initializationInProgress = false;
 let isManualLogout = false;
 let initializationTimeout = null;
 let io = null;
+const sessionPath = './whatsapp-sessions';
 
 
 const formatPhoneForWhatsApp = (phone) => {

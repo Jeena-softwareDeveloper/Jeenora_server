@@ -1,23 +1,31 @@
-const { responseReturn } = require("../../utiles/response");
 const ResumeEditRequest = require("../../models/hire/resumeEditRequestModel");
 const HireUser = require("../../models/hire/hireUserModel");
 const Resume = require("../../models/hire/resumeModel");
+const ResumeEditor = require("../../models/hire/resumeEditor");
+const { responseReturn } = require("../../utiles/response");
 
 class HireResumeEditorController {
 
     // Create a new edit request
     createEditRequest = async (req, res) => {
         try {
-            const { currentResumeId, targetRole, requirements, jobId } = req.body;
+            const { currentResumeId, targetRole, requirements, jobId, editorId } = req.body;
 
-            if (!currentResumeId || !targetRole) {
-                return responseReturn(res, 400, { error: "Resume and Target Role are required" });
+            if (!currentResumeId || !targetRole || !editorId) {
+                return responseReturn(res, 400, { error: "Resume, Target Role, and Editor are required" });
             }
 
-            // Check credits logic (simplified placeholder)
+            const editor = await ResumeEditor.findById(editorId);
+            if (!editor) {
+                return responseReturn(res, 404, { error: "Editor not found" });
+            }
+
+            const costInCredits = editor.price;
+
+            // Check credits logic
             const user = await HireUser.findById(req.id);
-            if (user.creditBalance < 1) { // Assuming 1 credit per request for now
-                return responseReturn(res, 400, { error: "Insufficient credits" });
+            if (user.creditBalance < costInCredits) {
+                return responseReturn(res, 400, { error: `Insufficient credits. This service costs ${costInCredits} credits.` });
             }
 
             const request = await ResumeEditRequest.create({
@@ -26,16 +34,17 @@ class HireResumeEditorController {
                 targetRole,
                 requirements,
                 jobId,
-                creditsUsed: 1, // deduct 1
-                paymentStatus: 'PAID', // Assuming credits deducted immediately
+                editorId,
+                creditsUsed: costInCredits,
+                paymentStatus: 'PAID',
                 editorStatus: 'ASSIGNED'
             });
 
             // Deduct credit
-            user.creditBalance -= 1;
+            user.creditBalance -= costInCredits;
             await user.save();
 
-            return responseReturn(res, 201, { message: "Resume edit request submitted", request });
+            return responseReturn(res, 201, { message: "Resume edit request submitted successfully", request, remainingCredits: user.creditBalance });
 
         } catch (error) {
             return responseReturn(res, 500, { error: error.message });

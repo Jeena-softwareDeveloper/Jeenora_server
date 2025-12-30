@@ -47,7 +47,7 @@ class ProfileController {
     getProfile = async (req, res) => {
         const userId = req.id;
         try {
-            let profile = await HireProfile.findOne({ user: userId }).populate('user', 'name email phone profileImageUrl');
+            let profile = await HireProfile.findOne({ user: userId }).populate('user', 'name email phone profileImageUrl resumeEditorEnabled');
 
             if (!profile) {
                 const user = await HireUser.findById(userId);
@@ -119,11 +119,11 @@ class ProfileController {
     getProfileByAdmin = async (req, res) => {
         const { userId } = req.params;
         try {
-            let profile = await HireProfile.findOne({ user: userId }).populate('user', 'name email phone profileImageUrl');
+            let profile = await HireProfile.findOne({ user: userId }).populate('user', 'name email phone profileImageUrl resumeEditorEnabled');
             if (!profile) {
                 // Create empty if not exists so admin can edit it
                 profile = await HireProfile.create({ user: userId });
-                profile = await HireProfile.findOne({ user: userId }).populate('user', 'name email phone profileImageUrl');
+                profile = await HireProfile.findOne({ user: userId }).populate('user', 'name email phone profileImageUrl resumeEditorEnabled');
             }
             return responseReturn(res, 200, { profile });
         } catch (error) {

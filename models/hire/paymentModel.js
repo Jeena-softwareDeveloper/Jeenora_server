@@ -9,15 +9,24 @@ const paymentSchema = new mongoose.Schema({
     plan: {
         type: String,
         required: true,
-        enum: ['Free', 'Basic', 'Pro', 'Elite']
+        enum: ['Free', 'Basic', 'Pro', 'Elite', 'Credits']
+    },
+    credits: {
+        type: Number,
+        default: 0
     },
     amount: {
         type: Number,
         required: true
     },
+    transactionId: {
+        type: String,
+        required: true,
+        unique: true
+    },
     razorpayOrderId: {
         type: String,
-        required: true
+        default: null
     },
     razorpayPaymentId: {
         type: String,

@@ -27,7 +27,9 @@ const allowedOrigins = [
   "http://localhost:5000",
   "http://localhost:5173",
   "https://hire.jeenora.com",
-  "https://dashboard.jeenora.com"
+  "https://dashboard.jeenora.com",
+  "https://jeenora.com",
+  "https://www.jeenora.com"
 ];
 
 if (process.env.ALLOWED_ORIGINS) {

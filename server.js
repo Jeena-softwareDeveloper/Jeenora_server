@@ -276,6 +276,8 @@ app.use("/api/hire/otp", require("./routes/hire/otpRoutes")); // OTP verificatio
 app.use("/api/hire/password", require("./routes/hire/passwordResetRoutes")); // Password reset
 app.use("/api/hire/interview", require("./routes/hire/interviewRoutes")); // #swagger.tags = ['Hire Interview']
 app.use("/api/hire/employer", require("./routes/hire/employerRoutes")); // #swagger.tags = ['Hire Employer']
+app.use("/api/hire/static", require("./routes/hire/staticContentRoutes"));
+
 
 
 WhatsappController.setSocket(io);

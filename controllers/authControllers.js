@@ -227,60 +227,148 @@ class authControllers {
 
     profile_image_upload = async (req, res) => {
         const { id, role } = req
-        const form = formidable({ multiples: true })
-        form.parse(req, async (err, _, files) => {
-            cloudinary.config({
-                cloud_name: process.env.cloud_name,
-                api_key: process.env.api_key,
-                api_secret: process.env.api_secret,
-                secure: true
-            })
-            const { image } = files
 
-            try {
-                const result = await cloudinary.uploader.upload(image.filepath, { folder: 'profile' })
-                if (result) {
-                    if (role === 'seller') {
-                        await sellerModel.findByIdAndUpdate(id, {
-                            image: result.url
-                        })
-                        const userInfo = await sellerModel.findById(id)
-                        responseReturn(res, 201, { message: 'Profile Image Upload Successfully', userInfo })
-                    } else if (role === 'hireUser') {
-                        await hireUserModel.findByIdAndUpdate(id, {
-                            image: result.url
-                        })
-                        const userInfo = await hireUserModel.findById(id)
-                        responseReturn(res, 201, { message: 'Profile Image Upload Successfully', userInfo })
-                    } else {
-                        responseReturn(res, 400, { error: 'Invalid user role for image upload' })
-                    }
-                } else {
-                    responseReturn(res, 404, { error: 'Image Upload Failed' })
-                }
-            } catch (error) {
-                responseReturn(res, 500, { error: error.message })
+        try {
+            // Safer formidable usage for v2/v3
+            let form;
+            if (typeof formidable === 'function') {
+                form = formidable({ multiples: true });
+            } else if (formidable.IncomingForm) {
+                form = new formidable.IncomingForm({ multiples: true });
+            } else {
+                form = new formidable({ multiples: true });
             }
-        })
+
+            form.parse(req, async (err, fields, files) => {
+                if (err) {
+                    console.error('Form parse error:', err)
+                    return responseReturn(res, 500, { error: 'Image parsing failed: ' + err.message })
+                }
+
+                cloudinary.config({
+                    cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+                    api_key: process.env.CLOUDINARY_API_KEY,
+                    api_secret: process.env.CLOUDINARY_API_SECRET,
+                    secure: true
+                })
+
+                if (!process.env.CLOUDINARY_CLOUD_NAME || !process.env.CLOUDINARY_API_KEY || !process.env.CLOUDINARY_API_SECRET) {
+                    console.error('Cloudinary config missing in env variables');
+                    return responseReturn(res, 500, { error: 'Server configuration error (Cloudinary)' });
+                }
+
+                // Debug logs
+                console.log('Files received:', Object.keys(files));
+
+                // Get image file - handle different formidable structures
+                let imageFile = files.image;
+                if (Array.isArray(imageFile)) {
+                    imageFile = imageFile[0];
+                }
+
+                if (!imageFile) {
+                    console.error('No image file found in files object')
+                    return responseReturn(res, 400, { error: 'No image selected' })
+                }
+
+                if (!imageFile.filepath && !imageFile.path) {
+                    console.error('Invalid file object (no path):', imageFile)
+                    return responseReturn(res, 400, { error: 'Invalid file upload' })
+                }
+
+                const filePath = imageFile.filepath || imageFile.path;
+
+                try {
+                    console.log('Uploading image to Cloudinary from:', filePath)
+                    const result = await cloudinary.uploader.upload(filePath, { folder: 'profile' })
+
+                    if (result) {
+                        console.log('Image uploaded successfully:', result.url)
+
+                        if (role === 'seller') {
+                            await sellerModel.findByIdAndUpdate(id, {
+                                image: result.url
+                            })
+                            const userInfo = await sellerModel.findById(id)
+                            responseReturn(res, 201, { message: 'Profile Image Upload Successfully', userInfo })
+                        } else if (role === 'admin') {
+                            await adminModel.findByIdAndUpdate(id, {
+                                image: result.url
+                            })
+                            const userInfo = await adminModel.findById(id)
+                            responseReturn(res, 201, { message: 'Profile Image Upload Successfully', userInfo })
+                        } else if (role === 'hire' || role === 'hireUser') {
+                            await hireUserModel.findByIdAndUpdate(id, {
+                                image: result.url
+                            })
+                            const userInfo = await hireUserModel.findById(id)
+                            responseReturn(res, 201, { message: 'Profile Image Upload Successfully', userInfo })
+                        } else {
+                            console.error('Invalid role:', role)
+                            responseReturn(res, 400, { error: 'Invalid user role for image upload' })
+                        }
+                    } else {
+                        responseReturn(res, 404, { error: 'Image Upload Failed' })
+                    }
+                } catch (error) {
+                    console.error('Cloudinary upload error:', error)
+                    responseReturn(res, 500, { error: 'Cloudinary error: ' + error.message })
+                }
+            })
+        } catch (error) {
+            console.error('Controller error:', error);
+            responseReturn(res, 500, { error: error.message });
+        }
     }
 
     profile_info_add = async (req, res) => {
-        const { division, district, shopName, sub_district } = req.body;
-        const { id } = req;
+        const { name, phone, address, shopName, division, district, sub_district } = req.body;
+        const { id, role } = req;
 
         try {
-            await sellerModel.findByIdAndUpdate(id, {
-                shopInfo: {
-                    shopName,
-                    division,
-                    district,
-                    sub_district
-                }
-            })
-            const userInfo = await sellerModel.findById(id)
-            responseReturn(res, 201, { message: 'Profile info Add Successfully', userInfo })
+            let userInfo;
+
+            if (role === 'seller') {
+                // Update seller info
+                const seller = await sellerModel.findById(id);
+                const updatedShopInfo = {
+                    ...seller.shopInfo,
+                    shopName: shopName || seller.shopInfo?.shopName,
+                    division: division || seller.shopInfo?.division,
+                    district: district || seller.shopInfo?.district,
+                    sub_district: sub_district || seller.shopInfo?.sub_district,
+                    address: address || seller.shopInfo?.address,
+                    phone: phone || seller.shopInfo?.phone
+                };
+
+                await sellerModel.findByIdAndUpdate(id, {
+                    name: name || seller.name,
+                    shopInfo: updatedShopInfo
+                });
+                userInfo = await sellerModel.findById(id);
+            } else if (role === 'admin') {
+                // Update admin info
+                await adminModel.findByIdAndUpdate(id, {
+                    name: name,
+                    // Admin might have different fields, adjust as needed
+                });
+                userInfo = await adminModel.findById(id);
+            } else if (role === 'hire') {
+                // Update hire user info
+                await hireUserModel.findByIdAndUpdate(id, {
+                    name: name,
+                    phone: phone,
+                    address: address
+                });
+                userInfo = await hireUserModel.findById(id);
+            } else {
+                return responseReturn(res, 400, { error: 'Invalid user role' });
+            }
+
+            responseReturn(res, 201, { message: 'Profile updated successfully', userInfo });
         } catch (error) {
-            responseReturn(res, 500, { error: error.message })
+            console.error('Profile update error:', error);
+            responseReturn(res, 500, { error: error.message });
         }
     }
 

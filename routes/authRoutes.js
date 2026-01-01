@@ -1,4 +1,5 @@
 const authControllers = require('../controllers/authControllers')
+const adminSettingsController = require('../controllers/adminSettingsController')
 const { authMiddleware } = require('../middlewares/authMiddleware')
 const router = require('express').Router()
 
@@ -20,5 +21,11 @@ router.get('/logout', authMiddleware, authControllers.logout)
 router.post('/admin/create-seller', authMiddleware, authControllers.admin_create_seller)
 router.post('/admin/update-seller-permissions', authMiddleware, authControllers.update_seller_permissions)
 router.post('/admin/update-seller-password', authMiddleware, authControllers.update_seller_password)
+
+// Admin Settings Routes
+router.get('/admin/settings', authMiddleware, adminSettingsController.getAllSettings)
+router.get('/admin/settings/:key', authMiddleware, adminSettingsController.getSetting)
+router.post('/admin/settings', authMiddleware, adminSettingsController.updateSetting)
+router.post('/admin/settings/menu-display-mode', authMiddleware, adminSettingsController.updateMenuDisplayMode)
 
 module.exports = router

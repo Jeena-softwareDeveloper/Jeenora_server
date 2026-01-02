@@ -27,6 +27,7 @@ class CoreController {
     this.calculateCohortAnalysis = this.calculateCohortAnalysis.bind(this);
     this.calculatePathAnalysis = this.calculatePathAnalysis.bind(this);
     this.axios = require('axios');
+    this.UAParser = require('ua-parser-js');
   }
 
   // Enhanced session start with all features integrated
@@ -1927,6 +1928,10 @@ class CoreController {
 
       const now = new Date();
 
+      // Parse User Agent
+      const parser = new this.UAParser(userData.user_agent); // Assuming user_agent is passed in userData
+      const uaResult = parser.getResult();
+
       if (!user) {
         // Create enhanced user profile
         user = new AnalyticsUser({
@@ -1950,10 +1955,19 @@ class CoreController {
           longitude: userData.longitude || userData.geo?.longitude,
           timezone: userData.timezone || userData.geo?.timezone,
 
-          // Technical data
-          device_type: userData.device_type,
-          operating_system: userData.operating_system,
-          browser: userData.browser,
+          // Enhanced geographic data
+          ip_address: userData.ip_address,
+          country: userData.country || userData.geo?.country,
+          region: userData.region || userData.geo?.region,
+          city: userData.city || userData.geo?.city,
+          latitude: userData.latitude || userData.geo?.latitude,
+          longitude: userData.longitude || userData.geo?.longitude,
+          timezone: userData.timezone || userData.geo?.timezone,
+
+          // Technical data (Parsed from User-Agent)
+          device_type: uaResult.device.type || 'desktop',
+          operating_system: `${uaResult.os.name || 'Unknown'} ${uaResult.os.version || ''}`.trim(),
+          browser: `${uaResult.browser.name || 'Unknown'} ${uaResult.browser.version || ''}`.trim(),
           screen_resolution: userData.screen_resolution,
 
           // Acquisition data

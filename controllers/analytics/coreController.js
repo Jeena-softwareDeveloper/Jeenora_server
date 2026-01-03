@@ -1964,9 +1964,16 @@ class CoreController {
           longitude: userData.longitude || userData.geo?.longitude,
           timezone: userData.timezone || userData.geo?.timezone,
 
-          // Technical data (Parsed from User-Agent)
+          // Technical data (Parsed from User-Agent with Client Hints Override)
           device_type: uaResult.device.type || 'desktop',
-          operating_system: `${uaResult.os.name || 'Unknown'} ${uaResult.os.version || ''}`.trim(),
+          operating_system: (() => {
+            // Try to get high-fidelity OS version from Client Hints
+            if (userData.device?.userAgentData?.platform === "Android" && userData.device?.userAgentData?.platformVersion) {
+              const major = parseInt(userData.device.userAgentData.platformVersion.split('.')[0]);
+              if (!isNaN(major)) return `Android ${major}`;
+            }
+            return `${uaResult.os.name || 'Unknown'} ${uaResult.os.version || ''}`.trim();
+          })(),
           browser: `${uaResult.browser.name || 'Unknown'} ${uaResult.browser.version || ''}`.trim(),
           screen_resolution: userData.screen_resolution,
 
@@ -1995,6 +2002,19 @@ class CoreController {
         if (user.total_sessions > 1 && user.visitor_type === 'new') {
           user.visitor_type = 'returning';
         }
+
+        // Always update technical data (in case of OS upgrade or better detection)
+        user.device_type = uaResult.device.type || 'desktop';
+        user.operating_system = (() => {
+          // Try to get high-fidelity OS version from Client Hints
+          if (userData.device?.userAgentData?.platform === "Android" && userData.device?.userAgentData?.platformVersion) {
+            const major = parseInt(userData.device.userAgentData.platformVersion.split('.')[0]);
+            if (!isNaN(major)) return `Android ${major}`;
+          }
+          return `${uaResult.os.name || 'Unknown'} ${uaResult.os.version || ''}`.trim();
+        })();
+        user.browser = `${uaResult.browser.name || 'Unknown'} ${uaResult.browser.version || ''}`.trim();
+        user.screen_resolution = userData.screen_resolution;
 
         // Update geographic data if not set
         if (!user.country && userData.geo?.country) {

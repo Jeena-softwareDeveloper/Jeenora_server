@@ -25,8 +25,15 @@ const sendOTPEmail = async (email, otp, purpose, resetToken = null) => {
 
     // Case 1: Send Reset Link (AFTER OTP Verification)
     if (purpose === 'reset-link' && resetToken) {
-        // Use FRONTEND_URL from env, or fall back to local only if not in production
-        const frontendBaseUrl = process.env.FRONTEND_URL || (process.env.NODE_ENV === 'production' ? 'https://hire.jeenora.com' : 'http://localhost:5173');
+        // Use FRONTEND_URL from env only
+        const frontendBaseUrl = process.env.FRONTEND_URL;
+
+        if (!frontendBaseUrl) {
+            console.error('CRITICAL: FRONTEND_URL is not defined in environment variables.');
+        }
+
+        console.log(`[EmailService] Generating reset link with base URL: ${frontendBaseUrl}`);
+
         const resetLink = `${frontendBaseUrl}/hire/reset-password?token=${resetToken}&email=${encodeURIComponent(email)}`;
 
         const mailOptions = {

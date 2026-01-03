@@ -89,6 +89,14 @@ class ProfileController {
                 // If specific fields are sent:
                 // We use spread to merge.
                 profile.personalDetails = { ...profile.personalDetails?.toObject(), ...personalDetails };
+
+                // Sync Name/Phone to User Model
+                if (personalDetails.fullName || personalDetails.phone) {
+                    const updateFields = {};
+                    if (personalDetails.fullName) updateFields.name = personalDetails.fullName;
+                    if (personalDetails.phone) updateFields.phone = personalDetails.phone;
+                    await HireUser.findByIdAndUpdate(userId, updateFields);
+                }
             }
             if (professionalSummary) {
                 profile.professionalSummary = { ...profile.professionalSummary?.toObject(), ...professionalSummary };
@@ -144,6 +152,14 @@ class ProfileController {
 
             if (personalDetails) {
                 profile.personalDetails = { ...profile.personalDetails?.toObject(), ...personalDetails };
+
+                // Sync Name/Phone to User Model
+                if (personalDetails.fullName || personalDetails.phone) {
+                    const updateFields = {};
+                    if (personalDetails.fullName) updateFields.name = personalDetails.fullName;
+                    if (personalDetails.phone) updateFields.phone = personalDetails.phone;
+                    await HireUser.findByIdAndUpdate(userId, updateFields);
+                }
             }
             if (professionalSummary) {
                 profile.professionalSummary = { ...profile.professionalSummary?.toObject(), ...professionalSummary };

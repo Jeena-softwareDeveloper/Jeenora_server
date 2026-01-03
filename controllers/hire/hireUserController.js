@@ -3,6 +3,7 @@ const cloudinary = require("cloudinary").v2;
 
 const { responseReturn } = require("../../utiles/response");
 const hireUserModel = require("../../models/hire/hireUserModel");
+const HireProfile = require("../../models/hire/ProfileModel"); // Import Profile Model
 const Skill = require("../../models/hire/skillModel");
 
 // Configure Cloudinary once
@@ -72,12 +73,25 @@ class HireUserController {
 
   getProfile = async (req, res) => {
     try {
-      const user = await hireUserModel
+      let user = await hireUserModel
         .findById(req.id)
         .select("-password")
         .populate("skills", "name description");
 
       if (!user) return responseReturn(res, 404, { error: "User not found" });
+
+      // Check if Profile exists and use that name if available
+      try {
+        const profile = await HireProfile.findOne({ user: req.id });
+        if (profile && profile.personalDetails && profile.personalDetails.fullName) {
+          // Create a plain object to modify if it is a mongoose doc
+          user = user.toObject();
+          user.name = profile.personalDetails.fullName;
+          if (profile.personalDetails.phone) user.phone = profile.personalDetails.phone;
+        }
+      } catch (err) {
+        console.log("Error fetching linked profile for name sync:", err.message);
+      }
 
       return responseReturn(res, 200, { user });
     } catch (error) {

@@ -221,21 +221,22 @@ class HireUserController {
         return responseReturn(res, 400, { error: "Image upload failed" });
       }
 
-      const image = files.image;
+      const image = Array.isArray(files.image) ? files.image[0] : files.image;
       if (!image) {
         return responseReturn(res, 400, { error: "Profile image is required" });
       }
 
       // Validate file type
       const allowedExt = ["jpg", "jpeg", "png", "webp"];
-      const ext = image.originalFilename.split(".").pop().toLowerCase();
+      const originalName = image.originalFilename || "";
+      const ext = originalName.split(".").pop().toLowerCase();
       if (!allowedExt.includes(ext)) {
         return responseReturn(res, 400, { error: "Only JPG, JPEG, PNG, WEBP allowed" });
       }
 
       // Validate file size
-      if (image.size > 3 * 1024 * 1024) {
-        return responseReturn(res, 400, { error: "Image must be less than 3MB" });
+      if (image.size > 5 * 1024 * 1024) {
+        return responseReturn(res, 400, { error: "Image must be less than 5MB" });
       }
 
       try {
@@ -261,14 +262,25 @@ class HireUserController {
         user.profileImagePublicId = uploadResult.public_id;
         await user.save();
 
-        const populatedUser = await hireUserModel
-          .findById(req.id)
-          .select("-password")
-          .populate("skills", "name description");
+        // Also sync with HireProfile if it exists
+        let profile = await HireProfile.findOne({ user: req.id });
+        if (profile) {
+          if (!profile.personalDetails) profile.personalDetails = {};
+          profile.personalDetails.profilePicture = uploadResult.secure_url;
+          await profile.save();
+        }
+
+        // Fetch the profile to return (matches frontend useUploadProfileImage expectation)
+        if (!profile) {
+          profile = await HireProfile.findOne({ user: req.id }).populate('user', '-password');
+        } else {
+          profile = await HireProfile.findById(profile._id).populate('user', '-password');
+        }
 
         return responseReturn(res, 200, {
           message: "Profile image uploaded successfully",
-          user: populatedUser,
+          profile: profile,
+          user: user
         });
 
       } catch (error) {

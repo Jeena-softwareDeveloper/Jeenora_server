@@ -4,108 +4,108 @@ const { responseReturn } = require("../../utiles/response");
 class LocationController {
 
   // CREATE STATE + DISTRICTS
-addLocation = async (req, res) => {
-  try {
-    let { state, districts } = req.body;
+  addLocation = async (req, res) => {
+    try {
+      let { state, districts } = req.body;
 
-    if (!state || !districts) {
-      return responseReturn(res, 400, { error: "State and districts required" });
+      if (!state || !districts) {
+        return responseReturn(res, 400, { error: "State and districts required" });
+      }
+
+      if (typeof districts === "string") {
+        districts = [districts];
+      }
+
+      const formattedDistricts = districts.map(d => ({ name: d, users: [] }));
+
+      const exists = await Location.findOne({ state });
+      if (exists) return responseReturn(res, 400, { error: "State already exists" });
+
+      const location = await Location.create({
+        state,
+        districts: formattedDistricts
+      });
+
+      responseReturn(res, 201, {
+        message: "Location created",
+        location
+      });
+    } catch (err) {
+      responseReturn(res, 500, { error: err.message });
     }
-
-    if (typeof districts === "string") {
-      districts = [districts];
-    }
-
-    const formattedDistricts = districts.map(d => ({ name: d, users: [] }));
-
-    const exists = await Location.findOne({ state });
-    if (exists) return responseReturn(res, 400, { error: "State already exists" });
-
-    const location = await Location.create({
-      state,
-      districts: formattedDistricts
-    });
-
-    responseReturn(res, 201, {
-      message: "Location created",
-      location
-    });
-  } catch (err) {
-    responseReturn(res, 500, { error: err.message });
-  }
-};
+  };
 
 
   // GET ALL STATES
-getAllLocations = async (req, res) => {
-  try {
-    const locations = await Location.find().select("state");
-    responseReturn(res, 200, { locations });
-  } catch (err) {
-    responseReturn(res, 500, { error: err.message });
-  }
-};
+  getAllLocations = async (req, res) => {
+    try {
+      const locations = await Location.find();
+      responseReturn(res, 200, { locations });
+    } catch (err) {
+      responseReturn(res, 500, { error: err.message });
+    }
+  };
 
   // GET DISTRICTS BY STATE
-getDistrictsByState = async (req, res) => {
-  try {
-    const { state } = req.params;
+  getDistrictsByState = async (req, res) => {
+    try {
+      const { state } = req.params;
 
-    const location = await Location.findOne({ state }).select("districts");
+      const location = await Location.findOne({ state }).select("districts");
 
-    if (!location) return responseReturn(res, 404, { error: "State not found" });
+      if (!location) return responseReturn(res, 404, { error: "State not found" });
 
-    responseReturn(res, 200, {
-      state,
-      districts: location.districts  // includes _id
-    });
-  } catch (err) {
-    responseReturn(res, 500, { error: err.message });
-  }
-};
+      responseReturn(res, 200, {
+        state,
+        districts: location.districts  // includes _id
+      });
+    } catch (err) {
+      responseReturn(res, 500, { error: err.message });
+    }
+  };
 
-addUserToDistrict = async (req, res) => {
-  try {
-    const { districtId } = req.params;
-    const { userId } = req.body;
+  addUserToDistrict = async (req, res) => {
+    try {
+      const { districtId } = req.params;
+      const { userId } = req.body;
 
-    const location = await Location.findOne({ "districts._id": districtId });
+      const location = await Location.findOne({ "districts._id": districtId });
 
-    if (!location) return responseReturn(res, 404, { error: "District not found" });
+      if (!location) return responseReturn(res, 404, { error: "District not found" });
 
-    // Add user to district
-    await Location.updateOne(
-      { "districts._id": districtId },
-      { $addToSet: { "districts.$.users": userId } }
-    );
+      // Add user to district
+      await Location.updateOne(
+        { "districts._id": districtId },
+        { $addToSet: { "districts.$.users": userId } }
+      );
 
-    responseReturn(res, 200, { message: "User added to district" });
+      responseReturn(res, 200, { message: "User added to district" });
 
-  } catch (err) {
-    responseReturn(res, 500, { error: err.message });
-  }
-};
+    } catch (err) {
+      responseReturn(res, 500, { error: err.message });
+    }
+  };
 
-getUsersByDistrict = async (req, res) => {
-  try {
-    const { districtId } = req.params;
+  getUsersByDistrict = async (req, res) => {
+    try {
+      const { districtId } = req.params;
 
-    const location = await Location.findOne({ "districts._id": districtId })
-      .populate("districts.users", "name phone experience profileImageUrl email");
+      const location = await Location.findOne({ "districts._id": districtId })
+        .populate("districts.users", "name phone experience profileImageUrl email");
 
-    if (!location) return responseReturn(res, 404, { error: "District not found" });
+      if (!location) return responseReturn(res, 404, { error: "District not found" });
 
-    const district = location.districts.id(districtId);
+      const district = location.districts.id(districtId);
 
-    responseReturn(res, 200, { 
-      district: district.name,
-      users: district.users
-    });
+      responseReturn(res, 200, {
+        district: district.name,
+        users: district.users
+      });
 
-  } catch (err) {
-    responseReturn(res, 500, { error: err.message });
-  }
-};
+    } catch (err) {
+      responseReturn(res, 500, { error: err.message });
+    }
+  };
 
   // UPDATE STATE OR DISTRICTS
   updateLocation = async (req, res) => {
@@ -135,9 +135,9 @@ getUsersByDistrict = async (req, res) => {
         return responseReturn(res, 404, { error: "State not found" });
       }
 
-      responseReturn(res, 200, { 
+      responseReturn(res, 200, {
         message: "Location updated",
-        updated 
+        updated
       });
 
     } catch (err) {

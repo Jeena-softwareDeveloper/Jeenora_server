@@ -25,7 +25,9 @@ const sendOTPEmail = async (email, otp, purpose, resetToken = null) => {
 
     // Case 1: Send Reset Link (AFTER OTP Verification)
     if (purpose === 'reset-link' && resetToken) {
-        const resetLink = `${process.env.FRONTEND_URL || 'http://localhost:5173'}/hire/reset-password?token=${resetToken}&email=${encodeURIComponent(email)}`;
+        // Use FRONTEND_URL from env, or fall back to local only if not in production
+        const frontendBaseUrl = process.env.FRONTEND_URL || (process.env.NODE_ENV === 'production' ? 'https://hire.jeenora.com' : 'http://localhost:5173');
+        const resetLink = `${frontendBaseUrl}/hire/reset-password?token=${resetToken}&email=${encodeURIComponent(email)}`;
 
         const mailOptions = {
             from: `"Jeenora Hire" <${process.env.EMAIL_USER}>`,

@@ -23,9 +23,9 @@ exports.sendResetLink = async (req, res) => {
             return res.status(400).json({ error: 'Please verify OTP first' });
         }
 
-        // Check if verified recently (within 10 mins)
-        const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000);
-        if (verifiedOtp.updatedAt < tenMinutesAgo) {
+        // Check if verified recently (within 2 mins)
+        const twoMinutesAgo = new Date(Date.now() - 2 * 60 * 1000);
+        if (verifiedOtp.updatedAt < twoMinutesAgo) {
             return res.status(400).json({ error: 'Session expired. Please verify OTP again.' });
         }
 
@@ -39,7 +39,7 @@ exports.sendResetLink = async (req, res) => {
             otp: 'LINK', // Placeholder
             purpose: 'reset-link',
             resetToken,
-            expiresAt: new Date(Date.now() + 10 * 60 * 1000) // 10 minutes
+            expiresAt: new Date(Date.now() + 2 * 60 * 1000) // 2 minutes
         });
 
         // Delete the verified OTP to prevent reuse

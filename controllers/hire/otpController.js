@@ -32,7 +32,7 @@ const handleOTPSending = async (email, purpose, res) => {
             email,
             otp,
             purpose,
-            expiresAt: new Date(Date.now() + 10 * 60 * 1000), // 10 minutes
+            expiresAt: new Date(Date.now() + 2 * 60 * 1000), // 2 minutes
             lastSentAt: Date.now(),
             resendCount: 0
         });
@@ -48,7 +48,7 @@ const handleOTPSending = async (email, purpose, res) => {
     res.status(200).json({
         message: isNew ? 'OTP sent successfully' : 'OTP resent successfully',
         email,
-        expiresIn: '10 minutes',
+        expiresIn: '2 minutes',
         resendCount: otpRecord.resendCount
     });
 };

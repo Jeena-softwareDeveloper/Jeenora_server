@@ -67,7 +67,7 @@ const sendOTPEmail = async (email, otp, purpose, resetToken = null) => {
 
                             <div class="info">
                                 <p style="margin: 0; color: #1e40af; font-size: 14px;">
-                                    <strong>⏰ Time Sensitive:</strong> This link will expire in 10 minutes.
+                                    <strong>⏰ Time Sensitive:</strong> This link will expire in 2 minutes.
                                 </p>
                             </div>
 
@@ -133,12 +133,12 @@ const sendOTPEmail = async (email, otp, purpose, resetToken = null) => {
                         <div class="otp-box">
                             <p style="margin: 0; color: #065f46; font-weight: 600; font-size: 14px;">YOUR OTP CODE</p>
                             <div class="otp-code">${otp}</div>
-                            <p style="margin: 0; color: #6b7280; font-size: 13px; margin-top: 10px;">Valid for 10 minutes</p>
+                            <p style="margin: 0; color: #6b7280; font-size: 13px; margin-top: 10px;">Valid for 2 minutes</p>
                         </div>
 
                         <div class="info">
                             <p style="margin: 0; color: #1e40af; font-size: 14px;">
-                                <strong>⏰ Time Sensitive:</strong> This OTP will expire in 10 minutes for security reasons.
+                                <strong>⏰ Time Sensitive:</strong> This OTP will expire in 2 minutes for security reasons.
                             </p>
                         </div>
 

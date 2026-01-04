@@ -6,8 +6,8 @@ class AccountController {
     // Add Account
     add_account = async (req, res) => {
         try {
-            const { twitter, facebook, instagram, phoneNumber, email, linkedin, youtube, role,name,area } = req.body;
-            const account = await Accounts.create({ twitter, facebook, instagram, phoneNumber, email, linkedin, youtube, role ,name,area});
+            const { twitter, facebook, instagram, phoneNumber, email, linkedin, youtube, whatsapp, role, name, area } = req.body;
+            const account = await Accounts.create({ twitter, facebook, instagram, phoneNumber, email, linkedin, youtube, whatsapp, role, name, area });
             return responseReturn(res, 201, { account, message: 'Account info added successfully' });
         } catch (error) {
             return responseReturn(res, 500, { error: error.message });
@@ -38,7 +38,7 @@ class AccountController {
     // Update account
     update_account = async (req, res) => {
         try {
-            const { twitter, facebook, instagram, phoneNumber, email, linkedin, youtube, role,name,area } = req.body;
+            const { twitter, facebook, instagram, phoneNumber, email, linkedin, youtube, whatsapp, role, name, area } = req.body;
             const account = await Accounts.findById(req.params.id);
             if (!account) return responseReturn(res, 404, { error: 'Account info not found' });
 
@@ -49,10 +49,11 @@ class AccountController {
             if (email) account.email = email;
             if (linkedin) account.linkedin = linkedin;
             if (youtube) account.youtube = youtube;
+            if (whatsapp) account.whatsapp = whatsapp;
             if (role) account.role = role;
             if (name) account.name = name;
-          if (role) account.area = area;
- 
+            if (area) account.area = area;
+
             await account.save();
             return responseReturn(res, 200, { account, message: 'Account info updated successfully' });
         } catch (error) {

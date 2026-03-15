@@ -17,10 +17,10 @@ const wearAuditLogModel = require('../../models/wear/wearAuditLogModel')
 const Razorpay = require('razorpay');
 const crypto = require('crypto');
 
-const razorpay = new Razorpay({
+const razorpay = process.env.RAZORPAY_KEY_ID ? new Razorpay({
     key_id: process.env.RAZORPAY_KEY_ID,
     key_secret: process.env.RAZORPAY_KEY_SECRET
-});
+}) : null;
 
 class orderController {
     // Transition helper is now imported as isValidTransition
@@ -530,6 +530,10 @@ class orderController {
                 currency: "INR",
                 receipt: `receipt_order_${order._id}`,
             };
+
+            if (!razorpay) {
+                return responseReturn(res, 500, { message: 'Razorpay is not configured on the server' });
+            }
 
             const razorOrder = await razorpay.orders.create(options);
             responseReturn(res, 200, { razorOrder });

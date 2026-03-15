@@ -179,6 +179,7 @@ app.use("/api/awareness", require("./routes/Awareness/communityRoutes"));
 app.use("/api/awareness", require("./routes/Awareness/aiDoctorRoutes"));
 app.use("/api/awareness", require("./routes/Awareness/statsRoutes"));
 app.use("/api/awareness", require("./routes/Awareness/tickerRoutes"));
+app.use("/api/awareness", require("./routes/Awareness/homeContentRoutes"));
 app.use("/api/analytics", require("./routes/analytics/index"));
 app.use("/api", require("./routes/wear/sellerRoutes"));
 app.use("/api", require("./routes/wear/productRoutes"));

@@ -53,7 +53,7 @@ const pageSchema = new mongoose.Schema({
   }
 });
 
-pageSchema.index({ page_url: 1 });
+// pageSchema.index({ page_url: 1 }); // Already indexed in schema field definition
 pageSchema.index({ 'referrer_sources.source': 1 });
 pageSchema.index({ last_viewed_at: -1 });
 

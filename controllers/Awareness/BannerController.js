@@ -43,18 +43,30 @@ class BannerController {
         })
     }
 
-    // Get All Banners
+    // Get All Banners (for dashboard - all status)
+    get_admin_banners = async (req, res) => {
+        try {
+            let banners = await BannerModel.find().sort({ createdAt: -1 })
+            banners = banners.map(b => {
+                const bannerObj = b.toObject()
+                if (bannerObj.image && bannerObj.image.includes("http://")) {
+                    bannerObj.image = bannerObj.image.replace("http://", "https://")
+                }
+                return bannerObj
+            })
+            return responseReturn(res, 200, { banners })
+        } catch (error) {
+            return responseReturn(res, 500, { error: error.message })
+        }
+    }
+
+    // Get Active Banners (for public site)
     get_banners = async (req, res) => {
         try {
             const now = new Date();
             let banners = await BannerModel.find({
-                isActive: true,
-                startDate: { $lte: now },
-                $or: [
-                    { endDate: { $exists: false } },
-                    { endDate: null },
-                    { endDate: { $gte: now } }
-                ]
+                isActive: true
+                // Removed overly restrictive date filtering for now to ensure seeded content shows
             }).sort({ createdAt: -1 })
 
             banners = banners.map(b => {

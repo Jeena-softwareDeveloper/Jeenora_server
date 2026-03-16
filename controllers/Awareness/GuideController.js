@@ -96,7 +96,17 @@ class GuideController {
         });
     }
 
-    // Get all guides
+    // Get all guides (for admin - all status)
+    get_admin_guides = async (req, res) => {
+        try {
+            const guides = await Guide.find().populate('category').sort({ createdAt: -1 });
+            return responseReturn(res, 200, { guides });
+        } catch (error) {
+            return responseReturn(res, 500, { error: error.message });
+        }
+    }
+
+    // Get active guides (for public)
     get_guides = async (req, res) => {
         try {
             const { search, district, crop, category } = req.query;

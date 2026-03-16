@@ -136,14 +136,16 @@ app.use("/api", require("./routes/apiRoutes"));
 app.use("/api/awareness", require("./routes/Awareness/bannerRoutes"));
 app.use("/api/awareness", require("./routes/Awareness/pointRoutes"));
 app.use("/api/awareness", require("./routes/Awareness/imageRoutes"));
+app.use("/api/awareness", require("./routes/Awareness/socialCampaignRoutes"));
+app.use("/api/awareness", require("./routes/Awareness/emailCampaignRoutes"));
 app.use("/api/awareness", require("./routes/Awareness/successStoryRoutes"));
-app.use("/api/awareness", require("./routes/Awareness/campaignRoutes"));
 app.use("/api/awareness", require("./routes/Awareness/guideRoutes"));
 app.use("/api/awareness", require("./routes/Awareness/videoRoutes"));
 app.use("/api/awareness", require("./routes/Awareness/accountsRoutes"));
 app.use("/api/awareness", require("./routes/Awareness/communityRoutes"));
 app.use("/api/awareness", require("./routes/Awareness/aiDoctorRoutes"));
 app.use("/api/awareness", require("./routes/Awareness/statsRoutes"));
+app.use("/api/awareness", require("./routes/Awareness/pesticideRoutes"));
 app.use("/api/awareness", require("./routes/Awareness/tickerRoutes"));
 app.use("/api/awareness", require("./routes/Awareness/homeContentRoutes"));
 

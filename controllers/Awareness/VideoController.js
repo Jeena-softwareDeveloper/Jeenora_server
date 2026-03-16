@@ -48,7 +48,24 @@ class VideoController {
     });
   }
 
-  // -------------------- Get All Videos -------------------- //
+  // -------------------- Get Admin Videos -------------------- //
+  get_admin_videos = async (req, res) => {
+    try {
+      let videos = await OrganicVideo.find().sort({ createdAt: -1 });
+      videos = videos.map(v => {
+        const videoObj = v.toObject();
+        if (videoObj.video && videoObj.video.includes("http://")) {
+          videoObj.video = videoObj.video.replace("http://", "https://");
+        }
+        return videoObj;
+      });
+      return responseReturn(res, 200, { videos });
+    } catch (error) {
+      return responseReturn(res, 500, { error: error.message });
+    }
+  }
+
+  // -------------------- Get Public Videos -------------------- //
   get_videos = async (req, res) => {
     try {
       const { search } = req.query;

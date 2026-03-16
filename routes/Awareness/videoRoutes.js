@@ -1,15 +1,16 @@
 const VideoController = require('../../controllers/Awareness/VideoController')
 const router = require('express').Router()
-const { authMiddleware } = require('../../middlewares/authMiddleware')
+const { authMiddleware, adminMiddleware } = require('../../middlewares/authMiddleware')
 
-// ---------------- Video CRUD ----------------
-router.post('/video-add', authMiddleware, VideoController.add_video)
+// Public
 router.get('/videos', VideoController.get_videos)
 router.get('/video/:id', VideoController.get_video)
-router.put('/video/update/:id', authMiddleware, VideoController.update_video)
-router.delete('/video/delete/:id', authMiddleware, VideoController.delete_video)
 
-// ---------------- Toggle Active/Inactive ----------------
-router.patch('/video/toggle-status/:id', authMiddleware, VideoController.toggle_status)
+// Admin
+router.get('/admin/videos', authMiddleware, adminMiddleware, VideoController.get_admin_videos)
+router.post('/admin/video/add', authMiddleware, adminMiddleware, VideoController.add_video)
+router.put('/admin/video/update/:id', authMiddleware, adminMiddleware, VideoController.update_video)
+router.delete('/admin/video/delete/:id', authMiddleware, adminMiddleware, VideoController.delete_video)
+router.patch('/admin/video/toggle-status/:id', authMiddleware, adminMiddleware, VideoController.toggle_status)
 
 module.exports = router

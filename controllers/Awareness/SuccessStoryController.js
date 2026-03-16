@@ -45,7 +45,17 @@ class SuccessStoryController {
         });
     }
 
-    // Get all stories
+    // Get stories for admin (all status)
+    get_admin_stories = async (req, res) => {
+        try {
+            const stories = await SuccessStoryModel.find().sort({ createdAt: -1 });
+            return responseReturn(res, 200, { stories });
+        } catch (error) {
+            return responseReturn(res, 500, { error: error.message });
+        }
+    }
+
+    // Get all active stories (for public)
     get_stories = async (req, res) => {
         try {
             const { search } = req.query;

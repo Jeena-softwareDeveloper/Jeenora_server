@@ -171,6 +171,13 @@ router.post('/hire-login', authLimiter, authControllers.hire_login);
 router.get('/get-user', authMiddleware, authControllers.getUser);
 router.get('/logout', authMiddleware, authControllers.logout);
 
+// Admin Seller Management Routes
+router.post('/admin/create-seller', authMiddleware, adminMiddleware, authControllers.admin_create_seller);
+router.post('/admin/update-seller-permissions', authMiddleware, adminMiddleware, authControllers.update_seller_permissions);
+router.post('/admin/update-seller-password', authMiddleware, adminMiddleware, authControllers.update_seller_password);
+router.post('/profile-image-upload', authMiddleware, authControllers.profile_image_upload);
+router.post('/profile-info-add', authMiddleware, authControllers.profile_info_add);
+
 // Admin Settings & Dashboard Data
 router.get('/admin/get-dashboard-data', authMiddleware, dashboardController.get_admin_dashboard_data);
 router.get('/seller/get-dashboard-data', authMiddleware, dashboardController.get_seller_dashboard_data);

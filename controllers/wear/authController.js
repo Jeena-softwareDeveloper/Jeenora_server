@@ -17,7 +17,7 @@ const REFRESH_TOKEN_EXPIRY_DAYS = 30; // 30 days
 
 // Helper: Generate Access Token
 const generateAccessToken = (id, role = 'wear_buyer', deviceId) => {
-    return jwt.sign({ id, role, deviceId }, process.env.SECRET || 'fourat', {
+    return jwt.sign({ id, role, deviceId }, process.env.SECRET, {
         expiresIn: ACCESS_TOKEN_EXPIRY
     });
 };

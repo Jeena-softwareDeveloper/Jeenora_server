@@ -95,7 +95,7 @@ exports.googleLogin = async (req, res) => {
                 email: customer.email,
                 deviceId: deviceId
             },
-            process.env.SECRET || 'fourat',
+            process.env.SECRET,
             { expiresIn: '7d' }
         );
 

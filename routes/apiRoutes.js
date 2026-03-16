@@ -27,6 +27,42 @@ const wearLogController = require('../controllers/wear/wearLogController');
 const productOfferController = require('../controllers/wear/productOfferController');
 const catalogOffersController = require('../controllers/wear/catalogOffersController');
 
+// ============================================================
+// 📁 NEW MODULAR SYSTEM (Integrating from server.js)
+// ============================================================
+router.use('/admin/jobs', require('./admin/adminJobRoutes'));
+router.use('/admin/applications', require('./admin/adminApplicationRoutes'));
+router.use('/admin/resumes', require('./admin/adminResumeRoutes'));
+router.use('/admin/chat-support', require('./admin/chatSupportRoutes'));
+
+router.use('/hire/skills', require('./hire/skillCategoryRoutes'));
+router.use('/hire/user', require('./hire/hireUserRoutes'));
+router.use('/hire/payment', require('./hire/paymentRoutes'));
+router.use('/hire/job', require('./hire/jobRoutes'));
+router.use('/hire/jobs', require('./hire/jobSearchRoutes'));
+router.use('/hire/applications', require('./hire/applicationRoutes'));
+router.use('/hire/setting', require('./hire/adminSettingRoutes'));
+router.use('/hire/notifications', require('./hire/notificationRoutes'));
+router.use('/hire/location', require('./hire/locationRoutes'));
+router.use('/hire/resume-requests', require('./hire/resumeRequestRoutes'));
+router.use('/hire/resumes', require('./hire/hireResumeRoutes'));
+router.use('/hire/resume-editor', require('./hire/hireResumeEditorRoutes'));
+router.use('/hire/profile', require('./hire/hireProfileRoutes'));
+router.use('/hire/auth', require('./hire/hireAuthRoutes'));
+router.use('/hire/otp', require('./hire/otpRoutes'));
+router.use('/hire/password', require('./hire/passwordResetRoutes'));
+router.use('/hire/interview', require('./hire/interviewRoutes'));
+router.use('/hire/employer', require('./hire/employerRoutes'));
+router.use('/hire/static', require('./hire/staticContentRoutes'));
+router.use('/hire', require('./hire/resumeEditorRoutes'));
+
+router.use('/analytics', require('./analytics/index'));
+router.use('/auth', require('./Awareness/farmerAuthRoutes'));
+
+// ============================================================
+// 🎯 ORIGINAL CORE WEAR APIS (100% RESTORED)
+// ============================================================
+
 // --- WEAR SECTION (PRIORITY) ---
 router.get('/wear/category/get', wearCategoryController.get_categories);
 router.get('/wear/offer/campaign/active', authOptional, wearOfferController.get_active_campaigns);
@@ -59,6 +95,7 @@ router.get('/wear/auth/profile', authMiddleware, wearAuthController.get_profile)
 router.put('/wear/auth/update-profile', authMiddleware, wearAuthController.update_profile);
 router.post('/wear/auth/profile-image-upload', authMiddleware, wearAuthController.profile_image_upload);
 router.post('/wear/log/log', authOptional, require('../controllers/wear/wearLogController').logActivity);
+
 const wearSupplierController = require('../controllers/wear/supplierController');
 
 // --- WEAR SUPPLIER ---
@@ -111,13 +148,12 @@ router.get('/wear/cart/get', authMiddleware, wearCartController.getCart);
 router.post('/wear/cart/update-quantity', authMiddleware, wearCartController.updateQuantity);
 router.delete('/wear/cart/remove/:cartId', authMiddleware, wearCartController.removeFromCart);
 router.delete('/wear/cart/clear', authMiddleware, wearCartController.clearCart);
+
 // --- WEAR WISHLIST ---
 const wearWishlistController = require('../controllers/wear/wearWishlistController');
 router.post('/wear/wishlist/add', authMiddleware, wearWishlistController.add_to_wishlist);
 router.get('/wear/wishlist/get', authMiddleware, wearWishlistController.get_wishlist);
 router.delete('/wear/wishlist/remove/:productId', authMiddleware, wearWishlistController.remove_from_wishlist);
-
-
 
 // Admin Routes (for Dashboard)
 router.get('/admin/wear/locations', authMiddleware, addressController.get_all_addresses_admin);
@@ -126,7 +162,7 @@ router.put('/wear/supplier/update-status/:supplierId', authMiddleware, wearSuppl
 router.put('/wear/supplier/update/:supplierId', authMiddleware, wearSupplierController.update_supplier);
 router.delete('/wear/supplier/delete/:supplierId', authMiddleware, wearSupplierController.delete_supplier);
 
-// Legacy/Compatibility Auth Routes (Moved for unification)
+// Legacy/Compatibility Auth Routes
 router.post('/admin-login', authLimiter, authControllers.admin_login);
 router.post('/seller-register', authLimiter, authControllers.seller_register);
 router.post('/seller-login', authLimiter, authControllers.seller_login);
@@ -173,10 +209,8 @@ router.get('/search/history', authOptional, homeLayoutController.get_search_hist
 router.get('/search/trending', homeLayoutController.get_trending_data);
 
 // 3. Product Listings & Search
-router.get('/products', homeControllers.query_products); // Reusing existing
-router.get('/products/:slug', homeControllers.product_details); // Reusing existing (by slug)
-// router.get('/products/:id', productController.product_get); // Alternatively by ID
-router.get('/products/related/:slug', homeControllers.product_details); // Same as details for now but can be specific
+router.get('/products', homeControllers.query_products);
+router.get('/products/:slug', homeControllers.product_details);
 router.post('/products/validate-recent', homeControllers.validate_recent_products);
 router.post('/user/recent-view', homeControllers.add_to_recent);
 router.get('/user/recent-view/:userId', homeControllers.get_recent_products);
@@ -184,7 +218,7 @@ router.get('/user/recent-view/:userId', homeControllers.get_recent_products);
 // 4. Cart & Shopping Management
 router.get('/cart/:userId', cardController.get_card_products);
 router.post('/cart/add', cardController.add_to_card);
-router.put('/cart/update-item/:card_id', cardController.quantity_inc); // Or a specific update-item method
+router.put('/cart/update-item/:card_id', cardController.quantity_inc);
 router.delete('/cart/remove/:card_id', cardController.delete_card_products);
 router.post('/cart/move-to-wishlist', cardController.add_wishlist);
 
@@ -199,10 +233,10 @@ router.get('/coupons', checkoutController.get_coupons);
 
 // 6. Payment & Order Processing
 router.post('/home/order/place-order', authMiddleware, orderController.place_order);
-router.post('/orders/initiate', authMiddleware, orderController.create_payment); // initiate (Razorpay/Stripe)
+router.post('/orders/initiate', authMiddleware, orderController.create_payment);
 router.post('/orders/razorpay-create-order', authMiddleware, orderController.create_razorpay_order);
 router.post('/orders/razorpay-verify', authMiddleware, orderController.verify_razorpay_payment);
-router.get('/orders/verify-payment/:orderId', authMiddleware, orderController.order_confirm); // verify/confirm
+router.get('/orders/verify-payment/:orderId', authMiddleware, orderController.order_confirm);
 router.get('/orders/history/:customerId/:status', orderController.get_orders);
 router.get('/orders/details/:orderId', orderController.get_order_details);
 
@@ -230,6 +264,7 @@ router.get('/supplier/enrolment', authMiddleware, supplierController.get_enrolme
 // 9. Social & Interaction
 router.post('/products/:id/review', authMiddleware, homeControllers.submit_review);
 router.post('/wishlist/toggle', authMiddleware, cardController.wishlist_toggle);
+
 // --- 11. ADMIN CONTROL TOWER (Permission Based) ---
 router.get('/admin/stats/financial', authMiddleware, adminMiddleware, adminWearController.get_financial_stats);
 router.post('/admin/vendor/commission', authMiddleware, adminMiddleware, adminWearController.update_vendor_commission);
@@ -248,17 +283,17 @@ router.post('/admin/product/bulk-category', authMiddleware, adminMiddleware, adm
 router.get('/admin/analytics/advanced', authMiddleware, adminMiddleware, adminWearController.get_advanced_analytics);
 router.get('/admin/risk/report', authMiddleware, adminMiddleware, adminWearController.get_risk_report);
 router.get('/admin/risk/suspicious-logins', authMiddleware, adminMiddleware, adminWearController.get_suspicious_logins);
-router.post('/admin/risk/disable-cod/:userId', authMiddleware, adminMiddleware, adminWearController.disable_cod_for_user);   // WearRisk — disable COD
+router.post('/admin/risk/disable-cod/:userId', authMiddleware, adminMiddleware, adminWearController.disable_cod_for_user);
 router.get('/admin/logs/audit', authMiddleware, adminMiddleware, adminWearController.get_audit_logs);
 router.post('/admin/config/home-layout', authMiddleware, adminMiddleware, adminWearController.update_home_layout_config);
 
-// Force-logout (original + aliases used by WearRisk)
+// Force-logout
 router.post('/admin/user/force-logout/:userId', authMiddleware, adminMiddleware, adminWearController.force_logout_user);
-router.post('/admin/security/force-logout/:userId', authMiddleware, adminMiddleware, adminWearController.force_logout_user);  // alias
-router.post('/admin/security/global-force-logout', authMiddleware, adminMiddleware, adminWearController.global_force_logout); // WearRisk — nuke all sessions
+router.post('/admin/security/force-logout/:userId', authMiddleware, adminMiddleware, adminWearController.force_logout_user);
+router.post('/admin/security/global-force-logout', authMiddleware, adminMiddleware, adminWearController.global_force_logout);
 
-// WearOrders — list endpoint with wear-specific filters
+// WearOrders
 router.get('/admin/orders/wear', authMiddleware, adminMiddleware, adminWearController.get_all_orders_admin);
-router.get('/admin/orders', authMiddleware, adminMiddleware, adminWearController.get_all_orders_admin); // legacy alias
+router.get('/admin/orders', authMiddleware, adminMiddleware, adminWearController.get_all_orders_admin);
 
 module.exports = router;

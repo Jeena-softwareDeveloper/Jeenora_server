@@ -68,7 +68,7 @@ exports.firebasePhoneLogin = async (req, res) => {
         // Generate Tokens (Session Based)
         const accessToken = jwt.sign(
             { id: customer._id, role: customer.role, deviceId },
-            process.env.SECRET || 'fourat',
+            process.env.SECRET,
             { expiresIn: '7d' }
         );
 

@@ -22,7 +22,7 @@ module.exports.authMiddleware = async (req, res, next) => {
             return res.status(401).json({ error: 'Session has been invalidated. Please login again.' });
         }
 
-        const deCodeToken = await jwt.verify(token, process.env.SECRET || 'fourat');
+        const deCodeToken = await jwt.verify(token, process.env.SECRET);
         req.role = deCodeToken.role;
         req.id = deCodeToken.id;
         req.user = deCodeToken;
@@ -65,7 +65,7 @@ module.exports.authOptional = async (req, res, next) => {
         if (token) {
             const blacklisted = await TokenBlacklist.findOne({ token });
             if (!blacklisted) {
-                const deCodeToken = await jwt.verify(token, process.env.SECRET || 'fourat');
+                const deCodeToken = await jwt.verify(token, process.env.SECRET);
                 req.role = deCodeToken.role;
                 req.id = deCodeToken.id;
                 req.user = deCodeToken;

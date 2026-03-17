@@ -3,9 +3,6 @@ const jwt = require('jsonwebtoken');
 const TokenBlacklist = require('../models/security/tokenBlacklistModel');
 const LoginAttempt = require('../models/security/loginAttemptModel');
 
-// -----------------------------------------------
-// Core Auth Middleware
-// -----------------------------------------------
 module.exports.authMiddleware = async (req, res, next) => {
     try {
         let token = req.headers.authorization?.replace('Bearer ', '') ||

@@ -30,17 +30,18 @@ if (process.env.NODE_ENV === 'development') {
   allowedOrigins.push(
     "http://localhost:3000",
     "http://localhost:3001",
-    "http://127.0.0.1:3000",
-    "http://127.0.0.1:3001",
+    "http://localhost:3002",
     "http://localhost:5173",
     "http://localhost:5174",
-    "http://localhost:8081"
+    "http://127.0.0.1:5173"
   );
 }
 
-if (process.env.ALLOWED_ORIGINS) {
-  allowedOrigins.push(...process.env.ALLOWED_ORIGINS.split(','));
-}
+// Ensure unique origins and clean up
+allowedOrigins = [...new Set(allowedOrigins.map(o => o.trim().replace(/\/$/, "")))];
+
+console.log('Allowed Origins:', allowedOrigins);
+
 
 // Trust proxy (Necessary for rate-limiting behind Nginx/Proxy)
 app.set('trust proxy', 1);
@@ -139,6 +140,9 @@ app.use("/api/awareness", require("./routes/Awareness/imageRoutes"));
 app.use("/api/awareness", require("./routes/Awareness/socialCampaignRoutes"));
 app.use("/api/awareness", require("./routes/Awareness/emailCampaignRoutes"));
 app.use("/api/awareness", require("./routes/Awareness/successStoryRoutes"));
+// Proxy/Alias for misspelled frontend request
+app.use("/api/awareness/successstorys", require("./routes/Awareness/successStoryRoutes"));
+
 app.use("/api/awareness", require("./routes/Awareness/guideRoutes"));
 app.use("/api/awareness", require("./routes/Awareness/videoRoutes"));
 app.use("/api/awareness", require("./routes/Awareness/accountsRoutes"));

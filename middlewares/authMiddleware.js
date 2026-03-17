@@ -50,6 +50,17 @@ module.exports.adminMiddleware = async (req, res, next) => {
     }
 };
 
+module.exports.sellerAdminMiddleware = async (req, res, next) => {
+    try {
+        if (req.role !== 'admin' && req.role !== 'seller') {
+            return res.status(403).json({ error: 'Access denied. Unauthorized role.' });
+        }
+        next();
+    } catch (error) {
+        return res.status(500).json({ error: error.message });
+    }
+};
+
 // -----------------------------------------------
 // Optional Auth (for public + authenticated routes)
 // -----------------------------------------------

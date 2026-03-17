@@ -6,7 +6,10 @@ const homeContentSchema = new mongoose.Schema({
     subtitle: { type: String },
     description: { type: String },
     cards: [{
-        title: { type: String },
+        title: { type: String }, // For impact cards
+        name: { type: String },  // For branches cards
+        tag: { type: String },
+        desc: { type: String },
         body: { type: String },
         points: [String],
         tags: [String],

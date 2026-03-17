@@ -1,7 +1,7 @@
 const express = require('express');
 const subscriberController = require('../../controllers/Awareness/SubscribeController');
 const campaignController = require('../../controllers/Awareness/CampaignController');
-const { authMiddleware } = require('../../middlewares/authMiddleware');
+const { authMiddleware, sellerAdminMiddleware } = require('../../middlewares/authMiddleware');
 
 const router = express.Router();
 
@@ -11,35 +11,35 @@ const router = express.Router();
 router.post('/subscriber/category', subscriberController.addCategory);
 router.get('/subscriber/category', subscriberController.getCategories);
 router.get('/subscriber/category/:id', subscriberController.getCategoryById);
-router.put('/subscriber/category/:id', authMiddleware, subscriberController.updateCategory);
-router.delete('/subscriber/category/:id', authMiddleware, subscriberController.deleteCategory);
+router.put('/subscriber/category/:id', authMiddleware, sellerAdminMiddleware, subscriberController.updateCategory);
+router.delete('/subscriber/category/:id', authMiddleware, sellerAdminMiddleware, subscriberController.deleteCategory);
 
 // Subscriber Routes
 router.post('/subscriber', subscriberController.addSubscriber);
-router.get('/subscribers', authMiddleware, subscriberController.getSubscribers);
-router.get('/subscriber/:id', authMiddleware, subscriberController.getSubscriberById);
-router.put('/subscriber/:id', authMiddleware, subscriberController.updateSubscriber);
-router.delete('/subscriber/:id', authMiddleware, subscriberController.deleteSubscriber);
+router.get('/subscribers', authMiddleware, sellerAdminMiddleware, subscriberController.getSubscribers);
+router.get('/subscriber/:id', authMiddleware, sellerAdminMiddleware, subscriberController.getSubscriberById);
+router.put('/subscriber/:id', authMiddleware, sellerAdminMiddleware, subscriberController.updateSubscriber);
+router.delete('/subscriber/:id', authMiddleware, sellerAdminMiddleware, subscriberController.deleteSubscriber);
 router.get('/category/:categoryId/subscribers', subscriberController.getSubscribersByCategory);
 
 // ==================== CAMPAIGN MANAGEMENT ==================== //
 
 // Campaign CRUD
-router.post('/campaigns', authMiddleware, campaignController.createCampaign);
-router.get('/campaigns', campaignController.getCampaigns);
-router.get('/campaigns/:id', campaignController.getCampaignById);
-router.put('/campaigns/:id', authMiddleware, campaignController.updateCampaign);
-router.delete('/campaigns/:id', authMiddleware, campaignController.deleteCampaign);
+router.post('/campaigns', authMiddleware, sellerAdminMiddleware, campaignController.createCampaign);
+router.get('/campaigns', authMiddleware, sellerAdminMiddleware, campaignController.getCampaigns);
+router.get('/campaigns/:id', authMiddleware, sellerAdminMiddleware, campaignController.getCampaignById);
+router.put('/campaigns/:id', authMiddleware, sellerAdminMiddleware, campaignController.updateCampaign);
+router.delete('/campaigns/:id', authMiddleware, sellerAdminMiddleware, campaignController.deleteCampaign);
 
 // Campaign Actions & Status
-router.post('/campaigns/:id/start', authMiddleware, campaignController.startCampaign);
-router.post('/campaigns/:id/stop', authMiddleware, campaignController.stopCampaign);
-router.post('/campaigns/:id/pause', authMiddleware, campaignController.pauseCampaign);
-router.post('/campaigns/:id/resume', authMiddleware, campaignController.resumeCampaign);
-router.post('/campaigns/:id/resend', authMiddleware, campaignController.resendCampaign);
-router.post('/campaigns/:id/duplicate', authMiddleware, campaignController.duplicateCampaign);
-router.get('/campaigns/:id/status', campaignController.getCampaignStatus);
-router.get('/campaigns-stats', campaignController.getCampaignStats);
+router.post('/campaigns/:id/start', authMiddleware, sellerAdminMiddleware, campaignController.startCampaign);
+router.post('/campaigns/:id/stop', authMiddleware, sellerAdminMiddleware, campaignController.stopCampaign);
+router.post('/campaigns/:id/pause', authMiddleware, sellerAdminMiddleware, campaignController.pauseCampaign);
+router.post('/campaigns/:id/resume', authMiddleware, sellerAdminMiddleware, campaignController.resumeCampaign);
+router.post('/campaigns/:id/resend', authMiddleware, sellerAdminMiddleware, campaignController.resendCampaign);
+router.post('/campaigns/:id/duplicate', authMiddleware, sellerAdminMiddleware, campaignController.duplicateCampaign);
+router.get('/campaigns/:id/status', authMiddleware, sellerAdminMiddleware, campaignController.getCampaignStatus);
+router.get('/campaigns-stats', authMiddleware, sellerAdminMiddleware, campaignController.getCampaignStats);
 
 // ==================== EMAIL INTEGRATION ==================== //
 

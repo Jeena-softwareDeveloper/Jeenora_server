@@ -2,6 +2,8 @@ const Farmer = require('../../models/Awareness/farmerModel');
 const bcrypt = require('bcrypt');
 const { createToken } = require('../../utiles/tokenCreate');
 const { responseReturn } = require('../../utiles/response');
+const formidable = require('formidable');
+const cloudinary = require('cloudinary').v2;
 
 class FarmerAuthController {
     
@@ -118,6 +120,54 @@ class FarmerAuthController {
             console.error('Update Profile Error:', error);
             return responseReturn(res, 500, { error: 'Internal Server Error' });
         }
+    }
+
+    // Update Profile Image
+    profile_image_upload = async (req, res) => {
+        const { id } = req;
+        const form = formidable({ multiples: true });
+
+        form.parse(req, async (err, fields, files) => {
+            if (err) {
+                return responseReturn(res, 500, { error: err.message });
+            }
+
+            const { image } = files;
+            const imageFile = Array.isArray(image) ? image[0] : image;
+
+            cloudinary.config({
+                cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+                api_key: process.env.CLOUDINARY_API_KEY,
+                api_secret: process.env.CLOUDINARY_API_SECRET,
+                secure: true
+            });
+
+            try {
+                if (!imageFile) {
+                    return responseReturn(res, 400, { error: 'No image provided' });
+                }
+
+                const result = await cloudinary.uploader.upload(imageFile.filepath, { folder: 'farmer_profiles' });
+
+                if (result) {
+                    const farmer = await Farmer.findByIdAndUpdate(id, {
+                        image: result.url
+                    }, { new: true });
+
+                    responseReturn(res, 200, {
+                        success: true,
+                        message: 'Profile image updated successfully',
+                        image: result.url,
+                        user: farmer
+                    });
+                } else {
+                    responseReturn(res, 500, { error: 'Image upload failed' });
+                }
+            } catch (error) {
+                console.error('Image Upload Error:', error);
+                responseReturn(res, 500, { error: error.message });
+            }
+        });
     }
 }
 

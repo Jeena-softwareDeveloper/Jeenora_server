@@ -82,12 +82,40 @@ class FarmerAuthController {
     // Update Farmer Profile
     update_profile = async (req, res) => {
         try {
-            const updatedFarmer = await Farmer.findByIdAndUpdate(req.id, req.body, { new: true });
+            const farmer = await Farmer.findById(req.id);
+            if (!farmer) {
+                return responseReturn(res, 404, { error: 'Farmer not found' });
+            }
+
+            const updates = req.body;
+            
+            // Calculate profile completion percentage
+            const fieldsToCheck = ['name', 'email', 'district', 'crops', 'language'];
+            let filled = 0;
+            fieldsToCheck.forEach(f => {
+                const val = updates[f] !== undefined ? updates[f] : farmer[f];
+                if (val && (Array.isArray(val) ? val.length > 0 : val !== '')) {
+                    filled++;
+                }
+            });
+            updates.profileCompletion = (filled / fieldsToCheck.length) * 100;
+
+            // Update Impact Score (Overall Stability) based on activity and points
+            const postsCount = updates.postsCount !== undefined ? updates.postsCount : farmer.postsCount;
+            const points = updates.points !== undefined ? updates.points : farmer.points;
+            
+            const activityScore = Math.min((postsCount || 0) * 5, 10); // max 10
+            const pointsScore = Math.min((points || 0) / 250, 5); // max 5
+            updates.impactCore = Math.min(84 + activityScore + pointsScore, 99.9);
+
+            const updatedFarmer = await Farmer.findByIdAndUpdate(req.id, updates, { new: true });
+            
             return responseReturn(res, 200, { 
                 user: updatedFarmer,
                 message: 'Profile updated successfully' 
             });
         } catch (error) {
+            console.error('Update Profile Error:', error);
             return responseReturn(res, 500, { error: 'Internal Server Error' });
         }
     }

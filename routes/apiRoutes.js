@@ -58,6 +58,7 @@ router.use('/hire', require('./hire/resumeEditorRoutes'));
 
 router.use('/analytics', require('./analytics/index'));
 router.use('/auth', require('./Awareness/farmerAuthRoutes'));
+router.use('/market', require('./Awareness/marketRoutes'));
 
 // ============================================================
 // 🎯 ORIGINAL CORE WEAR APIS (100% RESTORED)

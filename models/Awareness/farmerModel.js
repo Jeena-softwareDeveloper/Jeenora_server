@@ -59,6 +59,10 @@ const farmerSchema = new mongoose.Schema({
     type: String,
     default: 'English'
   },
+  image: {
+    type: String,
+    default: ''
+  },
 
   savedGuides: [{
     type: mongoose.Schema.Types.ObjectId,

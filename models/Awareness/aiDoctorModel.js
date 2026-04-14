@@ -7,6 +7,7 @@ const aiDoctorSchema = new mongoose.Schema({
     severity: { type: String, enum: ['Low', 'Moderate', 'High'], default: 'Moderate' },
     symptoms: { type: String },
     naturalCure: { type: String },
+    detailedTreatment: { type: [String], default: [] },
     image: { type: String },
     crop: { type: String, default: 'General' },
     isResolved: { type: Boolean, default: false }

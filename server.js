@@ -35,7 +35,8 @@ if (process.env.NODE_ENV === 'development') {
     "http://localhost:5174",
     "http://127.0.0.1:5173",
     "http://10.242.59.136:5173",
-    "http://10.242.59.136:5174"
+    "http://10.242.59.136:5174",
+    "exp://192.23.1.35:8081"
   );
 }
 
@@ -140,6 +141,7 @@ app.use("/api/awareness", require("./routes/Awareness/bannerRoutes"));
 app.use("/api/awareness", require("./routes/Awareness/pointRoutes"));
 app.use("/api/awareness", require("./routes/Awareness/imageRoutes"));
 app.use("/api/awareness", require("./routes/Awareness/socialCampaignRoutes"));
+app.use("/api/awareness/rewards", require("./routes/Awareness/rewardRoutes"));
 app.use("/api/awareness", require("./routes/Awareness/emailCampaignRoutes"));
 app.use("/api/awareness", require("./routes/Awareness/successStoryRoutes"));
 // Proxy/Alias for misspelled frontend request

@@ -38,12 +38,12 @@ exports.send_otp = async (req, res) => {
         // --- SILENT LOGIN ONLY ---
         // Check if this device is already trusted in either 'Customer' or 'WearBuyer'
         if (deviceId) {
-            let user = await Customer.findOne({ phone: cleanPhone });
+            let user = await Customer.findOne({ phone: cleanPhone }).select('name phone role image devices');
             let isTrusted = user?.devices?.some(d => d.deviceId === deviceId && d.status === 'trusted');
 
             // Fallback to WearBuyer
             if (!isTrusted) {
-                const buyer = await WearBuyer.findOne({ phone: cleanPhone });
+                const buyer = await WearBuyer.findOne({ phone: cleanPhone }).select('name phone role image devices');
                 if (buyer?.devices?.some(d => d.deviceId === deviceId && d.status === 'trusted')) {
                     user = buyer;
                     isTrusted = true;
@@ -78,19 +78,40 @@ exports.send_otp = async (req, res) => {
                     message: 'Logged in successfully via trusted device',
                     accessToken,
                     refreshToken,
-                    userInfo: user,
+                    userInfo: {
+                        _id: user._id,
+                        name: user.name,
+                        phone: user.phone,
+                        role: user.role,
+                        image: user.image
+                    },
                     isSilent: true
                 });
             }
         }
 
         // --- NOT A SILENT LOGIN ---
-        // Tell the frontend that we need to proceed with Firebase SMS Auth
-        // Removing custom OTP logic as per user request (Only Firebase/Google)
+        // Generate a 4-digit OTP for testing/local use
+        const otpCode = Math.floor(1000 + Math.random() * 9000).toString();
+        
+        // Save OTP to database
+        await WearOtp.findOneAndUpdate(
+            { phone: cleanPhone },
+            { 
+                otp: otpCode, 
+                createdAt: new Date() 
+            },
+            { upsert: true, new: true }
+        );
+
+        // Simulation: In production, you'd call an SMS service here
+        console.log(`[SMS AUTH] OTP for ${cleanPhone}: ${otpCode}`);
+
         return responseReturn(res, 200, {
-            success: false,
-            message: 'OTP verification required via Firebase',
-            proceedWithFirebase: true
+            success: true,
+            message: 'OTP sent successfully (Check console for code in dev)',
+            otp: otpCode, // Returning OTP for testing convenience
+            proceedWithFirebase: false
         });
 
     } catch (error) {
@@ -117,10 +138,11 @@ exports.verify_otp = async (req, res) => {
             return responseReturn(res, 400, { error: 'Invalid or expired OTP' });
         }
 
-        // 2. Find or Create User
-        let user = await WearBuyer.findOne({ phone: cleanPhone });
+        // 2. Find or Create User (Strict Selection)
+        const userSelection = 'name phone role image devices';
+        let user = await WearBuyer.findOne({ phone: cleanPhone }).select(userSelection);
         if (!user) {
-            user = await Customer.findOne({ phone: cleanPhone });
+            user = await Customer.findOne({ phone: cleanPhone }).select(userSelection);
         }
 
         let isNewUser = false;
@@ -181,7 +203,13 @@ exports.verify_otp = async (req, res) => {
             success: true,
             accessToken,
             refreshToken,
-            userInfo: user,
+            userInfo: {
+                _id: user._id,
+                name: user.name,
+                phone: user.phone,
+                role: user.role,
+                image: user.image
+            },
             isNewUser
         });
 
@@ -269,7 +297,16 @@ exports.get_profile = async (req, res) => {
         responseReturn(res, 200, {
             success: true,
             userInfo: {
-                ...user
+                _id: user._id,
+                name: user.name,
+                phone: user.phone,
+                email: user.email,
+                image: user.image,
+                role: user.role,
+                gender: user.gender,
+                dob: user.dob,
+                city: user.city,
+                state: user.state
             }
         });
     } catch (error) {
@@ -329,7 +366,14 @@ exports.update_profile = async (req, res) => {
             responseReturn(res, 200, {
                 success: true,
                 message: 'Profile updated successfully',
-                userInfo: user
+                userInfo: {
+                    _id: user._id,
+                    name: user.name,
+                    phone: user.phone,
+                    email: user.email,
+                    image: user.image,
+                    role: user.role
+                }
             });
         } catch (error) {
             console.error('Update Profile Error:', error);
@@ -381,7 +425,11 @@ exports.profile_image_upload = async (req, res) => {
                     success: true,
                     message: 'Profile image updated successfully',
                     image: result.url,
-                    userInfo: user
+                    userInfo: {
+                        _id: user._id,
+                        name: user.name,
+                        image: user.image
+                    }
                 });
             } else {
                 responseReturn(res, 500, { error: 'Image upload failed' });

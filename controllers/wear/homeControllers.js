@@ -112,13 +112,50 @@ class homeControllers {
         const parPage = 12;
         const { category, searchValue, price, rating, sort } = req.query;
         try {
+            let categoryRegexes = [];
+            let categoryNames = [];
+
+            if (category) {
+                const WearCategory = require('../../models/wear/wearCategoryModel');
+                const catDoc = await WearCategory.findOne({ 
+                    $or: [{ name: { $regex: new RegExp(`^${category}$`, 'i') } }, { slug: category.toLowerCase() }] 
+                });
+
+                if (catDoc) {
+                    const childCategories = await WearCategory.find({ parentId: catDoc._id });
+                    categoryNames = [catDoc.name, ...childCategories.map(c => c.name)];
+                    categoryRegexes = categoryNames.map(n => new RegExp(`^${n}$`, 'i'));
+                } else {
+                    categoryRegexes = [new RegExp(`^${category}$`, 'i')];
+                    categoryNames = [category];
+                }
+            }
+
             // 1. Search Legacy Products
             const legacyProducts = await productModel.find({}).sort({ createdAt: -1 }).lean();
-            const legacyResult = new queryProducts(legacyProducts, req.query).categoryQuery().ratingQuery().searchQuery().priceQuery().sortByPrice().getProducts();
+            
+            // Custom filtering for legacy since categoryQuery in utility is basic
+            let filteredLegacy = legacyProducts;
+            if (category && categoryNames.length > 0) {
+                filteredLegacy = legacyProducts.filter(p => 
+                    categoryNames.some(cn => p.category && p.category.toLowerCase() === cn.toLowerCase())
+                );
+            }
+
+            const legacyResult = new queryProducts(filteredLegacy, req.query).ratingQuery().searchQuery().priceQuery().sortByPrice().getProducts();
 
             // 2. Search Wear Products (New Catalog Style)
             let wearMatch = { status: 'active' };
-            if (category) wearMatch.category = category;
+            if (category) {
+                if (categoryRegexes.length > 0) {
+                    wearMatch.$or = [
+                        { category: { $in: categoryRegexes } },
+                        { subCategory: { $in: categoryRegexes } }
+                    ];
+                } else {
+                    wearMatch.category = { $regex: new RegExp(`^${category}$`, 'i') };
+                }
+            }
             if (searchValue) {
                 wearMatch.$or = [
                     { productName: { $regex: searchValue, $options: 'i' } },
@@ -157,22 +194,53 @@ class homeControllers {
     }
 
     // END METHOD
+    get_top_rated_products = async (req, res) => {
+        try {
+            // Find top rated products from legacy
+            const legacyTopRated = await productModel.find({}).sort({ rating: -1 }).limit(10).lean();
+
+            // Find top rated products from Wear
+            const wearTopRatedRaw = await wearProductModel.find({ status: 'active' }).limit(10).lean();
+            const wearTopRated = wearTopRatedRaw.map(p => ({
+                ...p,
+                name: p.productName,
+                price: p.variants?.[0]?.listingPrice || 0,
+                discount: 0,
+                rating: 5, // default for wear
+                type: 'wear'
+            }));
+
+            const combined = [...legacyTopRated, ...wearTopRated].sort((a, b) => b.rating - a.rating).slice(0, 10);
+
+            responseReturn(res, 200, {
+                products: combined
+            });
+        } catch (error) {
+            console.log('[API] Get Top Rated Error:', error.message);
+            responseReturn(res, 500, { error: error.message });
+        }
+    }
 
     product_details = async (req, res) => {
         const { slug } = req.params
         try {
-            let product = await productModel.findOne({ slug }).populate({ path: 'offers', match: { status: 'active' } }).populate('sellerId')
+            const sellerSelection = 'name shopInfo image status';
+            let product = await productModel.findOne({ slug }).populate({ path: 'offers', match: { status: 'active' } }).populate('sellerId', sellerSelection);
 
             if (!product && ObjectId.isValid(slug)) {
-                product = await productModel.findById(slug).populate({ path: 'offers', match: { status: 'active' } }).populate('sellerId')
+                product = await productModel.findById(slug).populate({ path: 'offers', match: { status: 'active' } }).populate('sellerId', sellerSelection);
             }
 
             // If still not found, check the new WearProduct model (Meesho-style)
             let isWearProduct = false;
             if (!product) {
-                product = await wearProductModel.findOne({ slug }).populate({ path: 'offers', match: { status: 'active' } }).populate('sellerId');
+                product = await wearProductModel.findOne({ slug })
+                    .populate({ path: 'offers', match: { status: 'active' } })
+                    .populate('sellerId', sellerSelection);
                 if (!product && ObjectId.isValid(slug)) {
-                    product = await wearProductModel.findById(slug).populate({ path: 'offers', match: { status: 'active' } }).populate('sellerId');
+                    product = await wearProductModel.findById(slug)
+                        .populate({ path: 'offers', match: { status: 'active' } })
+                        .populate('sellerId', sellerSelection);
                 }
                 if (product) isWearProduct = true;
             }
@@ -231,13 +299,30 @@ class homeControllers {
                 monthOrderCount: countMap[p._id.toString()] || 0
             }));
 
+            const scrubbedProduct = {
+                _id: product._id,
+                name: product.name || product.productName,
+                slug: product.slug,
+                images: product.images,
+                category: product.category,
+                subCategory: product.subCategory,
+                price: product.price || product.variants?.[0]?.listingPrice,
+                originalPrice: product.originalPrice || product.variants?.[0]?.mrp,
+                discount: product.discount || 0,
+                rating: product.rating || 5,
+                description: product.description,
+                brand: product.brand,
+                shopName: product.sellerId?.shopInfo?.shopName || product.shopName,
+                sellerId: product.sellerId?._id,
+                variants: product.variants || [],
+                offers: product.offers || [],
+                similarProducts: enrichedSimilarProducts,
+                monthOrderCount: countMap[product._id.toString()] || 0
+            };
+
             responseReturn(res, 200, {
-                product: {
-                    ...product.toObject(),
-                    similarProducts: enrichedSimilarProducts,
-                    monthOrderCount: countMap[product._id.toString()] || 0
-                },
-                relatedProducts,
+                product: scrubbedProduct,
+                relatedProducts, // product list usually already limited in find
                 moreProducts,
                 similarProducts: enrichedSimilarProducts
             })

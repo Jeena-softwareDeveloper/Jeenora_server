@@ -32,13 +32,16 @@ const wearBuyerSchema = new mongoose.Schema({
         type: String,
         default: 'wear_buyer'
     },
-    devices: [{
-        deviceId: String,
-        ip: { type: String },
-        userAgent: { type: String },
-        status: { type: String, default: 'trusted' }, // trusted, untrusted
-        lastLogin: { type: Date, default: Date.now }
-    }],
+    devices: {
+        type: [{
+            deviceId: String,
+            ip: { type: String },
+            userAgent: { type: String },
+            status: { type: String, default: 'trusted' }, // trusted, untrusted
+            lastLogin: { type: Date, default: Date.now }
+        }],
+        select: false
+    },
     referralCode: {
         type: String,
         unique: true,
@@ -46,7 +49,8 @@ const wearBuyerSchema = new mongoose.Schema({
     },
     referredBy: {
         type: mongoose.Schema.Types.ObjectId,
-        ref: 'WearBuyer'
+        ref: 'WearBuyer',
+        select: false
     },
     codDisabled: {
         type: Boolean,

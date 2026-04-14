@@ -11,7 +11,7 @@ class WearCategoryController {
             if (err) {
                 responseReturn(res, 404, { error: 'Something went wrong' });
             } else {
-                let { name, description, attributes, additionalDetails } = fields;
+                let { name, description, attributes, additionalDetails, priority } = fields;
                 let { image } = files;
 
                 if (!name || (Array.isArray(name) && !name[0])) {
@@ -97,6 +97,11 @@ class WearCategoryController {
                     const result = await cloudinary.uploader.upload(image.filepath, uploadOptions);
 
                     if (result && result.secure_url) {
+                        const existingPriority = await wearCategoryModel.findOne({ priority: parseInt(priority), parentId: parentId });
+                        if (existingPriority) {
+                            return responseReturn(res, 400, { error: `Priority ${priority} is already assigned to category: ${existingPriority.name}` });
+                        }
+
                         const category = await wearCategoryModel.create({
                             name,
                             description,
@@ -106,7 +111,8 @@ class WearCategoryController {
                             parentId: parentId,
                             level: level,
                             attributes: parsedAttributes,
-                            additionalDetails: parsedAdditionalDetails
+                            additionalDetails: parsedAdditionalDetails,
+                            priority: parseInt(priority) || 0
                         });
                         responseReturn(res, 201, { category, message: 'Wear Category Added Successfully' });
                     } else {
@@ -142,13 +148,13 @@ class WearCategoryController {
 
             if (parPage && page) {
                 const categories = await wearCategoryModel.find(query)
+                    .sort({ priority: 1, createdAt: -1 })
                     .skip(skipPage)
-                    .limit(parseInt(parPage))
-                    .sort({ createdAt: -1 });
+                    .limit(parseInt(parPage));
                 const totalCategories = await wearCategoryModel.countDocuments(query);
                 responseReturn(res, 200, { categories, totalCategories });
             } else {
-                const categories = await wearCategoryModel.find(query).sort({ createdAt: -1 });
+                const categories = await wearCategoryModel.find(query).sort({ priority: 1, createdAt: -1 });
                 const totalCategories = await wearCategoryModel.countDocuments(query);
                 responseReturn(res, 200, { categories, totalCategories });
             }
@@ -165,7 +171,7 @@ class WearCategoryController {
                 responseReturn(res, 404, { error: 'Something went wrong' });
             } else {
                 const { id } = req.params;
-                let { name, description, status, attributes, additionalDetails } = fields;
+                let { name, description, status, attributes, additionalDetails, priority } = fields;
                 let { image } = files;
 
                 // Handle formidable v3+ arrays
@@ -248,6 +254,21 @@ class WearCategoryController {
                     updateData.level = level;
                     if (parsedAttributes) updateData.attributes = parsedAttributes;
                     if (parsedAdditionalDetails) updateData.additionalDetails = parsedAdditionalDetails;
+                    if (priority !== undefined && priority !== null) {
+                        const pVal = Array.isArray(priority) ? priority[0] : priority;
+                        if (pVal !== "" && pVal !== "null") {
+                            const parsedPriority = parseInt(pVal);
+                            const existingPriority = await wearCategoryModel.findOne({ 
+                                priority: parsedPriority, 
+                                parentId: parentId,
+                                _id: { $ne: id } 
+                            });
+                            if (existingPriority) {
+                                return responseReturn(res, 400, { error: `Priority ${parsedPriority} is already assigned to category: ${existingPriority.name}` });
+                            }
+                            updateData.priority = parsedPriority;
+                        }
+                    }
 
                     if (image) {
                         cloudinary.config({

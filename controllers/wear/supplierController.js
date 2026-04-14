@@ -30,7 +30,12 @@ class supplierController {
                 status: 'pending'
             });
 
-            responseReturn(res, 201, { success: true, message: 'Application submitted successfully', data: supplier });
+            // Return only success and basic info, not the whole object with bank details
+            responseReturn(res, 201, { 
+                success: true, 
+                message: 'Application submitted successfully', 
+                data: { status: supplier.status, shopName: businessDetails.shopName } 
+            });
         } catch (error) {
             console.error('Apply Supplier Error:', error);
             responseReturn(res, 500, { error: error.message });
@@ -63,6 +68,35 @@ class supplierController {
             }
         } catch (err) {
             return responseReturn(res, 400, { error: 'Invalid IFSC Code' });
+        }
+    }
+
+    // 1.1.1 Mobile App - Verify Pincode (Postal API)
+    verify_pincode = async (req, res) => {
+        const { pincode } = req.body;
+        if (!pincode || pincode.length !== 6) return responseReturn(res, 400, { error: 'Valid 6-digit pincode is required' });
+
+        try {
+            const axios = require('axios');
+            const response = await axios.get(`https://api.postalpincode.in/pincode/${pincode}`);
+            const data = response.data;
+
+            if (data[0].Status === "Success") {
+                const info = data[0].PostOffice[0];
+                return responseReturn(res, 200, {
+                    success: true,
+                    data: {
+                        district: info.District,
+                        city: info.Block || info.Division,
+                        state: info.State,
+                        pincode: pincode
+                    }
+                });
+            } else {
+                return responseReturn(res, 404, { error: 'Invalid Pincode' });
+            }
+        } catch (error) {
+            return responseReturn(res, 500, { error: 'Pincode service error' });
         }
     }
 
@@ -117,7 +151,15 @@ class supplierController {
             if (!supplier) {
                 return responseReturn(res, 404, { error: 'No application found' });
             }
-            responseReturn(res, 200, { success: true, data: supplier });
+            
+            // Explicit response building (Strict Whitelist - No ID or bank details)
+            const scrubbedData = {
+                status: supplier.status || 'pending',
+                hasShownCongrats: supplier.hasShownCongrats || false,
+                shopName: supplier.businessDetails?.shopName || ''
+            };
+
+            responseReturn(res, 200, { success: true, data: scrubbedData });
         } catch (error) {
             console.error('get_my_status error:', error);
             responseReturn(res, 500, { error: error.message });

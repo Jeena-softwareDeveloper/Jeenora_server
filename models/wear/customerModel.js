@@ -46,42 +46,51 @@ const customerSchema = new Schema({
         ageGroup: { type: String }
     },
     wallet: {
-        balance: { type: Number, default: 0 },
-        cashback: { type: Number, default: 0 },
-        referralBonus: { type: Number, default: 0 },
-        transactions: [{
-            type: { type: String, enum: ['credit', 'debit'] },
-            amount: { type: Number },
-            status: { type: String, enum: ['pending', 'success', 'failed'], default: 'success' },
-            reason: { type: String },
-            source: { type: String }, // e.g. 'order', 'referral', 'cashback', 'admin'
-            date: { type: Date, default: Date.now }
-        }]
+        balance: { type: Number, default: 0, select: false },
+        cashback: { type: Number, default: 0, select: false },
+        referralBonus: { type: Number, default: 0, select: false },
+        transactions: { 
+            type: [{
+                type: { type: String, enum: ['credit', 'debit'] },
+                amount: { type: Number },
+                status: { type: String, enum: ['pending', 'success', 'failed'], default: 'success' },
+                reason: { type: String },
+                source: { type: String },
+                date: { type: Date, default: Date.now }
+            }],
+            select: false
+        }
     },
-    devices: [{
-        deviceId: String,
-        ip: { type: String },
-        userAgent: { type: String },
-        status: { type: String, default: 'trusted' },
-        lastLogin: { type: Date, default: Date.now }
-    }],
-    recentViewed: [{
-        type: Schema.ObjectId,
-        ref: 'products'
-    }],
+    devices: {
+        type: [{
+            deviceId: String,
+            ip: { type: String },
+            userAgent: { type: String },
+            status: { type: String, default: 'trusted' },
+            lastLogin: { type: Date, default: Date.now }
+        }],
+        select: false
+    },
+    recentViewed: {
+        type: [{
+            type: Schema.ObjectId,
+            ref: 'products'
+        }],
+        select: false
+    },
     notificationSettings: {
-        orderUpdates: { type: Boolean, default: true },
-        promotions: { type: Boolean, default: true },
-        newArrivals: { type: Boolean, default: true },
-        priceDrops: { type: Boolean, default: true },
-        emailNotifications: { type: Boolean, default: true },
-        smsNotifications: { type: Boolean, default: true },
-        pushNotifications: { type: Boolean, default: true }
+        orderUpdates: { type: Boolean, default: true, select: false },
+        promotions: { type: Boolean, default: true, select: false },
+        newArrivals: { type: Boolean, default: true, select: false },
+        priceDrops: { type: Boolean, default: true, select: false },
+        emailNotifications: { type: Boolean, default: true, select: false },
+        smsNotifications: { type: Boolean, default: true, select: false },
+        pushNotifications: { type: Boolean, default: true, select: false }
     },
     privacySettings: {
-        profileVisibility: { type: String, enum: ['public', 'private'], default: 'public' },
-        showOnlineStatus: { type: Boolean, default: true },
-        dataSharing: { type: Boolean, default: false }
+        profileVisibility: { type: String, enum: ['public', 'private'], default: 'public', select: false },
+        showOnlineStatus: { type: Boolean, default: true, select: false },
+        dataSharing: { type: Boolean, default: false, select: false }
     },
     referralCode: {
         type: String,
@@ -90,7 +99,8 @@ const customerSchema = new Schema({
     },
     referredBy: {
         type: Schema.ObjectId,
-        ref: 'customer'
+        ref: 'customer',
+        select: false
     }
 }, { timestamps: true })
 

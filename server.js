@@ -33,7 +33,9 @@ if (process.env.NODE_ENV === 'development') {
     "http://localhost:3002",
     "http://localhost:5173",
     "http://localhost:5174",
-    "http://127.0.0.1:5173"
+    "http://127.0.0.1:5173",
+    "http://10.242.59.136:5173",
+    "http://10.242.59.136:5174"
   );
 }
 

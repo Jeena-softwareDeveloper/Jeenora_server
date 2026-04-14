@@ -64,7 +64,10 @@ router.use('/auth', require('./Awareness/farmerAuthRoutes'));
 // ============================================================
 
 // --- WEAR SECTION (PRIORITY) ---
+router.post('/wear/category/add', authMiddleware, wearCategoryController.add_category);
 router.get('/wear/category/get', wearCategoryController.get_categories);
+router.post('/wear/category/update/:id', authMiddleware, wearCategoryController.update_category);
+router.delete('/wear/category/delete/:id', authMiddleware, wearCategoryController.delete_category);
 router.get('/wear/offer/campaign/active', authOptional, wearOfferController.get_active_campaigns);
 router.get('/wear/offer/campaign/all', authMiddleware, wearOfferController.get_all_campaigns);
 router.post('/wear/offer/campaign/add', authMiddleware, wearOfferController.add_campaign);
@@ -111,6 +114,7 @@ router.get('/wear/supplier/order-details/:orderId', authMiddleware, wearSupplier
 router.get('/wear/supplier/enrolment', authMiddleware, wearSupplierController.get_my_status);
 router.post('/wear/supplier/verify-ifsc', authMiddleware, wearSupplierController.verify_ifsc);
 router.post('/wear/supplier/verify-bank', authMiddleware, wearSupplierController.verify_bank);
+router.post('/wear/supplier/verify-pincode', authMiddleware, wearSupplierController.verify_pincode);
 router.post('/wear/supplier/mark-congrats', authMiddleware, wearSupplierController.mark_congrats_shown);
 
 // Catalog Routes
@@ -217,6 +221,7 @@ router.get('/search/trending', homeLayoutController.get_trending_data);
 
 // 3. Product Listings & Search
 router.get('/products', homeControllers.query_products);
+router.get('/products/top-rated', homeControllers.get_top_rated_products);
 router.get('/products/:slug', homeControllers.product_details);
 router.post('/products/validate-recent', homeControllers.validate_recent_products);
 router.post('/user/recent-view', homeControllers.add_to_recent);
@@ -246,6 +251,7 @@ router.post('/orders/razorpay-verify', authMiddleware, orderController.verify_ra
 router.get('/orders/verify-payment/:orderId', authMiddleware, orderController.order_confirm);
 router.get('/orders/history/:customerId/:status', orderController.get_orders);
 router.get('/orders/details/:orderId', orderController.get_order_details);
+router.post('/orders/cancel/:orderId', authMiddleware, orderController.customer_order_cancel);
 
 // 7. Profile & Account Settings
 router.get('/user/profile', authMiddleware, profileController.get_profile);

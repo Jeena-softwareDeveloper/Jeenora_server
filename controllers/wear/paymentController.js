@@ -127,13 +127,20 @@ class paymentController {
                 availableAmount = (totalAmount - (pendingAmount + withdrowAmount))
             }
 
+            const mapRequest = (reqs) => reqs.map(r => ({
+                amount: r.amount,
+                status: r.status,
+                createdAt: r.createdAt,
+                _id: r._id
+            }));
+
             responseReturn(res, 200, {
                 totalAmount,
                 pendingAmount,
                 withdrowAmount,
                 availableAmount,
-                pendingWithdrows,
-                successWithdrows
+                pendingWithdrows: mapRequest(pendingWithdrows),
+                successWithdrows: mapRequest(successWithdrows)
             })
 
         } catch (error) {

@@ -11,7 +11,7 @@ class categoryController {
             if (err) {
                 responseReturn(res, 404, { error: 'something went wrong' })
             } else {
-                let { name } = fields
+                let { name, priority } = fields
                 let { image } = files
                 name = name.trim()
                 const slug = name.split(' ').join('-')
@@ -37,7 +37,8 @@ class categoryController {
                         const category = await categoryModel.create({
                             name,
                             slug,
-                            image: result.secure_url
+                            image: result.secure_url,
+                            priority: parseInt(priority) || 0
                         })
                         responseReturn(res, 201, { category, message: 'Category Added Successfully' })
                     } else {
@@ -70,7 +71,7 @@ class categoryController {
             if (searchValue && page && parPage) {
                 const categorys = await categoryModel.find({
                     $text: { $search: searchValue }
-                }).skip(skipPage).limit(parPage).sort({ createdAt: -1 })
+                }).skip(skipPage).limit(parPage).sort({ priority: 1, createdAt: -1 })
                 const totalCategory = await categoryModel.find({
                     $text: { $search: searchValue }
                 }).countDocuments()
@@ -78,7 +79,7 @@ class categoryController {
             }
             else if (searchValue === '' && page && parPage) {
 
-                const categorys = await categoryModel.find({}).skip(skipPage).limit(parPage).sort({ createdAt: -1 })
+                const categorys = await categoryModel.find({}).skip(skipPage).limit(parPage).sort({ priority: 1, createdAt: -1 })
                 const totalCategory = await categoryModel.find({}).countDocuments()
                 responseReturn(res, 200, { categorys, totalCategory })
 
@@ -89,7 +90,7 @@ class categoryController {
 
             else {
 
-                const categorys = await categoryModel.find({}).sort({ createdAt: -1 })
+                const categorys = await categoryModel.find({}).sort({ priority: 1, createdAt: -1 })
                 const totalCategory = await categoryModel.find({}).countDocuments()
                 responseReturn(res, 200, { categorys, totalCategory })
 
@@ -108,7 +109,7 @@ class categoryController {
             if (err) {
                 responseReturn(res, 404, { error: 'something went wrong' })
             } else {
-                let { name } = fields
+                let { name, priority } = fields
                 let { image } = files
                 const { id } = req.params;
                 name = name.trim()
@@ -127,6 +128,7 @@ class categoryController {
                     const updateData = {
                         name,
                         slug,
+                        priority: parseInt(priority) || 0
                     }
                     if (result) {
                         updateData.image = result.url;

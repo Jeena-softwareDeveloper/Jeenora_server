@@ -7,37 +7,45 @@ class profileController {
     get_profile = async (req, res) => {
         const { id } = req;
         try {
-            let user = await customerModel.findById(id);
+            // DB level selection
+            let user = await customerModel.findById(id).select('name email phone image referralCode');
             let userModel = customerModel;
-
-            // If not found, try WearBuyer model
+    
             if (!user) {
-                user = await WearBuyer.findById(id);
+                user = await WearBuyer.findById(id).select('name email phone image referralCode');
                 userModel = WearBuyer;
             }
-
+    
             if (!user) return responseReturn(res, 404, { error: 'User not found' });
-
-            // Generate Referral Code if not exists
+    
+            // Generate Referral Code ONLY if missing
             if (!user.referralCode) {
                 const namePart = (user.name || 'JEEN').substring(0, 4).toUpperCase();
                 const randomPart = Math.floor(1000 + Math.random() * 9000);
                 user.referralCode = `${namePart}${randomPart}`;
                 await user.save();
             }
-
-            // Check if user is a Supplier
+    
+            // Check if user is a Supplier (Strict fetch)
             const Supplier = require('../../models/wear/supplierModel');
-            const supplierInfo = await Supplier.findOne({ user: user._id }).lean();
-
-            // Add mock membership level and supplier info
-            const profile = {
-                ...user.toObject(),
+            const supplierInfo = await Supplier.findOne({ user: user._id }).select('status businessDetails.shopName').lean();
+    
+            // Explicitly build response object (Whitelist only)
+            const userInfo = {
+                _id: user._id,
+                name: user.name,
+                email: user.email,
+                phone: user.phone,
+                image: user.image,
+                referralCode: user.referralCode,
                 membershipLevel: 'Silver Member',
-                supplierInfo: supplierInfo || null
+                supplierInfo: supplierInfo ? {
+                    status: supplierInfo.status,
+                    shopName: supplierInfo.businessDetails?.shopName
+                } : null
             };
-
-            responseReturn(res, 200, { userInfo: profile });
+    
+            responseReturn(res, 200, { userInfo });
         } catch (error) {
             responseReturn(res, 500, { error: error.message });
         }

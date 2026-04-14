@@ -448,14 +448,34 @@ class wearCatalogController {
         const { category, subCategory, search, campaignId, sort, filters, minPrice, maxPrice } = req.query;
         try {
             let matchQuery = { status: 'active' };
+            let categoryRegexes = [];
+
+            if (category) {
+                const WearCategory = require('../../models/wear/wearCategoryModel');
+                const catDoc = await WearCategory.findOne({ 
+                    $or: [{ name: { $regex: new RegExp(`^${category}$`, 'i') } }, { slug: category.toLowerCase() }] 
+                });
+
+                if (catDoc) {
+                    const childCategories = await WearCategory.find({ parentId: catDoc._id });
+                    const categoryNames = [catDoc.name, ...childCategories.map(c => c.name)];
+                    categoryRegexes = categoryNames.map(n => new RegExp(`^${n}$`, 'i'));
+                    
+                    matchQuery.$or = [
+                        { category: { $in: categoryRegexes } },
+                        { subCategory: { $in: categoryRegexes } }
+                    ];
+                } else {
+                    const categoryRegex = { $regex: new RegExp(`^${category}$`, 'i') };
+                    categoryRegexes = [categoryRegex];
+                    matchQuery.$or = [
+                        { category: categoryRegex },
+                        { subCategory: categoryRegex }
+                    ];
+                }
+            }
 
             if (campaignId) matchQuery.campaignId = campaignId;
-            if (category) {
-                matchQuery.$or = [
-                    { category: category },
-                    { subCategory: category }
-                ];
-            }
             if (subCategory) matchQuery.subCategory = subCategory;
 
             // Price Filters
@@ -563,7 +583,13 @@ class wearCatalogController {
             // 2. Fetch Legacy Products (If no complex filters are present that legacy doesn't support)
             const legacyProductModel = require('../../models/wear/productModel');
             let legacyMatch = { status: 'active' };
-            if (category) legacyMatch.category = category;
+            if (category) {
+                if (categoryRegexes.length > 0) {
+                    legacyMatch.category = { $in: categoryRegexes };
+                } else {
+                    legacyMatch.category = { $regex: new RegExp(`^${category}$`, 'i') };
+                }
+            }
             if (search) {
                 legacyMatch.$or = [
                     { name: { $regex: search, $options: 'i' } },

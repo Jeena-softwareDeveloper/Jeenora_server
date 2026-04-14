@@ -50,14 +50,25 @@ class wearReviewController {
         try {
             const skip = (parseInt(page) - 1) * parseInt(limit);
 
-            const reviews = await WearReview.find({
+            const reviewsRaw = await WearReview.find({
                 catalogId,
                 status: 'active'
             })
-                .populate('userId', 'name image') // Populate name and image from user
+                .populate('userId', 'name image')
                 .sort({ createdAt: -1 })
                 .skip(skip)
-                .limit(parseInt(limit));
+                .limit(parseInt(limit)).lean();
+
+            const scrubbedReviews = reviewsRaw.map(r => ({
+                _id: r._id,
+                userName: r.userName,
+                userProfile: r.userId ? { name: r.userId.name, image: r.userId.image } : null,
+                rating: r.rating,
+                reviewText: r.reviewText,
+                images: r.images,
+                helpful: r.helpful,
+                createdAt: r.createdAt
+            }));
 
             const totalReviews = await WearReview.countDocuments({
                 catalogId,
@@ -89,7 +100,7 @@ class wearReviewController {
 
             responseReturn(res, 200, {
                 success: true,
-                reviews,
+                reviews: scrubbedReviews,
                 pagination: {
                     currentPage: parseInt(page),
                     totalPages: Math.ceil(totalReviews / parseInt(limit)),

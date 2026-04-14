@@ -12,6 +12,10 @@ const categorySchema = new Schema({
     slug: {
         type: String,
         required : true
+    },
+    priority: {
+        type: Number,
+        default: 0
     } 
      
 }, {timestamps: true})

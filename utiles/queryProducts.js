@@ -6,7 +6,7 @@ class queryProducts {
         this.query = query
     }
     categoryQuery = () => {
-        this.products = this.query.category ? this.products.filter(c => c.category === this.query.category) : this.products
+        this.products = this.query.category ? this.products.filter(c => c.category.toLowerCase() === this.query.category.toLowerCase()) : this.products
         return this
     }
     ratingQuery = () => {

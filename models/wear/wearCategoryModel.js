@@ -47,7 +47,11 @@ const wearCategorySchema = new mongoose.Schema({
         isFilter: { type: Boolean, default: false },
         isList: { type: Boolean, default: false },
         options: [String]
-    }]
+    }],
+    priority: {
+        type: Number,
+        default: 0
+    }
 }, { timestamps: true });
 
 wearCategorySchema.index({ name: 'text' });

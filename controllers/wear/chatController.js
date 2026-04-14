@@ -191,36 +191,14 @@ class ChatController {
     }
     // End Method 
 
-    get_customers_seller_message = async (req, res) => {
-        const { customerId } = req.params
-        const { id } = req
-        try {
-            const messages = await sellerCustomerMessage.find({
-                $or: [
-                    {
-                        $and: [{
-                            receverId: { $eq: customerId }
-                        }, {
-                            senderId: {
-                                $eq: id
-                            }
-                        }]
-                    },
-                    {
-                        $and: [{
-                            receverId: { $eq: id }
-                        }, {
-                            senderId: {
-                                $eq: customerId
-                            }
-                        }]
-                    }
-                ]
-            })
-            const currentCustomer = await customerModel.findById(customerId)
+            const currentCustomer = await customerModel.findById(customerId).select('name image phone');
             responseReturn(res, 200, {
                 messages,
-                currentCustomer
+                currentCustomer: currentCustomer ? {
+                    _id: currentCustomer._id,
+                    name: currentCustomer.name,
+                    image: currentCustomer.image
+                } : null
             })
 
         } catch (error) {
@@ -282,9 +260,15 @@ class ChatController {
 
     get_sellers = async (req, res) => {
         try {
-            const sellers = await sellerModel.find({})
+            const sellers = await sellerModel.find({}).select('shopInfo image status');
+            const scrubbedSellers = sellers.map(s => ({
+                _id: s._id,
+                shopName: s.shopInfo?.shopName,
+                image: s.image,
+                status: s.status
+            }));
             responseReturn(res, 200, {
-                sellers
+                sellers: scrubbedSellers
             })
         } catch (error) {
             console.log(error)
@@ -336,7 +320,12 @@ class ChatController {
             })
             let currentSeller = {}
             if (receverId) {
-                currentSeller = await sellerModel.findById(receverId)
+                const seller = await sellerModel.findById(receverId).select('shopInfo image');
+                currentSeller = seller ? {
+                    _id: seller._id,
+                    shopName: seller.shopInfo?.shopName,
+                    image: seller.image
+                } : {};
             }
             responseReturn(res, 200, {
                 messages,

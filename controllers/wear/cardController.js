@@ -112,14 +112,18 @@ class cardController {
                     price = finalPrice;
                     discount = (variant && variant.mrp) ? Math.round(((variant.mrp - finalPrice) / variant.mrp) * 100) : 0;
 
-                    // Attach normalized fields to productInfo so frontend can use them easily
+                    // Attach normalized fields to productInfo (Strictly Whitelisted)
                     productInfo = {
-                        ...p, // Spread full doc
-                        price: finalPrice, // Effective price
-                        originalPrice: variant ? variant.mrp : p.price,
+                        _id: p._id,
+                        name: p.productName,
+                        images: p.images,
+                        price: finalPrice,
+                        originalPrice: variant ? (variant.mrp || variant.listingPrice) : (p.price || 0),
                         discount: discount,
-                        name: p.productName, // Normalize name
-                        images: p.images
+                        brand: p.brand,
+                        category: p.category,
+                        shopName: p.shopName || "Jeenora Verified",
+                        variants: p.variants || []
                     };
                 }
 
@@ -128,7 +132,7 @@ class cardController {
                 const cartItemObj = {
                     _id: item._id,
                     quantity: item.quantity,
-                    size: item.size, // Pass size back
+                    size: item.size, 
                     productInfo: productInfo
                 };
 

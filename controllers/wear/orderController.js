@@ -206,12 +206,25 @@ class orderController {
 
     // End Method
 
+    // Centralized Scrubber for Customer Orders (Client-Facing)
+    scrubCustomerOrder = (o) => ({
+        _id: o._id,
+        products: o.products,
+        price: o.price,
+        payment_status: o.payment_status,
+        delivery_status: o.delivery_status,
+        date: o.date,
+        shippingInfo: o.shippingInfo || 'Standard Delivery'
+        // totalCommission is EXCLUDED
+    });
+
     get_customer_dashboard_data = async (req, res) => {
         const { userId } = req.params
         try {
-            const recentOrders = await customerOrder.find({
+            const recentOrdersRaw = await customerOrder.find({
                 customerId: new ObjectId(userId)
-            }).limit(5)
+            }).sort({ createdAt: -1 }).limit(5).lean();
+
             const pendingOrder = await customerOrder.find({
                 customerId: new ObjectId(userId), delivery_status: 'pending'
             }).countDocuments()
@@ -221,8 +234,9 @@ class orderController {
             const cancelledOrder = await customerOrder.find({
                 customerId: new ObjectId(userId), delivery_status: 'cancelled'
             }).countDocuments()
+
             responseReturn(res, 200, {
-                recentOrders,
+                recentOrders: recentOrdersRaw.map(this.scrubCustomerOrder),
                 pendingOrder,
                 totalOrder,
                 cancelledOrder
@@ -230,6 +244,7 @@ class orderController {
 
         } catch (error) {
             console.log(error.message)
+            responseReturn(res, 500, { error: 'Internal Server Error' })
         }
     }
     // End Method
@@ -238,21 +253,21 @@ class orderController {
         const { customerId, status } = req.params
 
         try {
-            let orders = []
+            let ordersRaw = []
             if (status !== 'all') {
-                orders = await customerOrder.find({
+                ordersRaw = await customerOrder.find({
                     customerId: new ObjectId(customerId),
                     delivery_status: status
-                })
+                }).sort({ createdAt: -1 }).lean();
             }
             else {
-                orders = await customerOrder.find({
+                ordersRaw = await customerOrder.find({
                     customerId: new ObjectId(customerId)
-                })
+                }).sort({ createdAt: -1 }).lean();
             }
-            responseReturn(res, 200, { orders })
+            responseReturn(res, 200, { orders: ordersRaw.map(this.scrubCustomerOrder) })
         } catch (error) {
-
+            responseReturn(res, 500, { error: 'Internal Server Error' })
         }
     }
     // End Method 
@@ -273,8 +288,27 @@ class orderController {
                     }
                 }
             ]);
+            // Scrub suborders to remove internal platform fee info for customers
+            if (order[0] && order[0].suborders) {
+                order[0].suborders = order[0].suborders.map(so => ({
+                    _id: so._id,
+                    sellerId: so.sellerId,
+                    products: so.products,
+                    price: so.price,
+                    delivery_status: so.delivery_status,
+                    date: so.date
+                    // commissionAmount and sellerAmount are EXCLUDED here
+                }));
+            }
+
+            // Scrub main order top-level fields
+            const mainOrder = this.scrubCustomerOrder(order[0]);
+
             responseReturn(res, 200, {
-                order: order[0]
+                order: {
+                    ...mainOrder,
+                    suborders: order[0].suborders || []
+                }
             })
         } catch (error) {
             console.log(error.message)
@@ -425,7 +459,21 @@ class orderController {
 
         try {
             const order = await authOrderModel.findById(orderId)
-            responseReturn(res, 200, { order })
+            if (!order) return responseReturn(res, 404, { error: 'Order not found' });
+            
+            // Scrub order for seller: They don't need system-wide totals, just their portion
+            const scrubbedOrder = {
+                _id: order._id,
+                orderId: order.orderId,
+                products: order.products,
+                price: order.price,
+                delivery_status: order.delivery_status,
+                payment_status: order.payment_status,
+                date: order.date,
+                sellerAmount: order.sellerAmount
+            };
+
+            responseReturn(res, 200, { order: scrubbedOrder })
         } catch (error) {
             console.log('get seller details error' + error.message)
         }

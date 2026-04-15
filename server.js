@@ -33,9 +33,11 @@ if (process.env.NODE_ENV === 'development') {
     "http://localhost:3002",
     "http://localhost:5173",
     "http://localhost:5174",
+    "http://localhost:5175",
     "http://127.0.0.1:5173",
     "http://10.242.59.136:5173",
     "http://10.242.59.136:5174",
+    "http://127.0.0.1:5175",
     "exp://192.23.1.35:8081"
   );
 }
@@ -56,6 +58,9 @@ app.set('trust proxy', 1);
 // 1. CORS
 app.use(cors({
   origin: (origin, callback) => {
+    // In development, allow ALL origins to prevent local testing friction
+    if (process.env.NODE_ENV === 'development') return callback(null, true);
+    
     if (!origin) return callback(null, true);
     if (allowedOrigins.includes(origin)) return callback(null, true);
     return callback(new Error('CORS: origin not allowed'));
@@ -99,7 +104,7 @@ app.use(hpp({ whitelist: ['sort', 'fields', 'page', 'limit', 'category', 'status
 // 8. Global Rate Limit
 const globalLimiter = rateLimit({
   windowMs: 1 * 60 * 1000,
-  max: process.env.NODE_ENV === 'production' ? 100 : 1000,
+  max: process.env.NODE_ENV === 'production' ? 100 : 100000, // Unlimited in dev
   message: { error: 'Too many requests, please slow down.', success: false },
   standardHeaders: true,
   legacyHeaders: false,

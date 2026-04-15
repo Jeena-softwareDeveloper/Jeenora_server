@@ -65,10 +65,10 @@ router.use('/market', require('./Awareness/marketRoutes'));
 // ============================================================
 
 // --- WEAR SECTION (PRIORITY) ---
-router.post('/wear/category/add', authMiddleware, wearCategoryController.add_category);
-router.get('/wear/category/get', wearCategoryController.get_categories);
-router.post('/wear/category/update/:id', authMiddleware, wearCategoryController.update_category);
-router.delete('/wear/category/delete/:id', authMiddleware, wearCategoryController.delete_category);
+router.use('/wear/category', require('./wear/wearCategoryRoutes'));
+router.use('/', require('./wear/sellerRoutes'));
+router.use('/', require('./wear/orderRoutes'));
+router.use('/', require('./wear/dashboardRoutes'));
 router.get('/wear/offer/campaign/active', authOptional, wearOfferController.get_active_campaigns);
 router.get('/wear/offer/campaign/all', authMiddleware, wearOfferController.get_all_campaigns);
 router.post('/wear/offer/campaign/add', authMiddleware, wearOfferController.add_campaign);
@@ -211,6 +211,9 @@ router.post('/auth/google-login', authLimiter, googleAuthController.googleLogin)
 router.put('/user/onboarding', authMiddleware, wearAuthController.update_profile);
 
 // 2. Home Screen & Catalog
+router.get('/get-products', homeControllers.get_products);
+router.get('/products/top-rated', homeControllers.get_top_rated_products);
+router.get('/get-gategorys', homeControllers.get_categorys);
 router.get('/home/layout', homeLayoutController.get_home_layout);
 router.get('/home/categories', homeLayoutController.get_home_categories);
 router.get('/home/banners', homeLayoutController.get_home_banners);

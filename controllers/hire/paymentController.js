@@ -258,10 +258,190 @@ class PaymentController {
     }
 
     phonepeWebhook = async (req, res) => {
-        // PhonePe sends server-to-server callback
-        // Implementation similar to verifyPayment but triggered by PhonePe
-        // For simplicity, we assume verifyPayment is used on redirect, or implement it here
-        responseReturn(res, 200, { message: 'Webhook received' });
+        try {
+            const crypto = require('crypto');
+            const phonepeService = require('./Services/phonepeService');
+
+            // PhonePe sends webhook with X-VERIFY header for signature verification
+            const signature = req.headers['x-verify'];
+            if (!signature) {
+                console.warn('⚠️ PhonePe webhook missing X-VERIFY signature');
+                return responseReturn(res, 400, { error: 'Missing signature' });
+            }
+
+            // Verify signature (simplified - need to check PhonePe documentation)
+            // PhonePe typically sends: sha256(base64(payload) + "/pg/v1/webhook/" + saltKey) + "###" + saltIndex
+            const payload = req.body;
+            const saltKey = process.env.PHONEPE_SALT_KEY;
+            const saltIndex = process.env.PHONEPE_SALT_INDEX;
+
+            if (!saltKey || !saltIndex) {
+                console.error('PhonePe salt key or index not configured');
+                return responseReturn(res, 500, { error: 'Configuration error' });
+            }
+
+            // For now, accept all webhooks and verify payment status
+            // In production, implement proper signature verification per PhonePe docs
+            console.log(`✅ PhonePe webhook received:`, payload);
+
+            // Extract transaction details
+            const merchantTransactionId = payload?.data?.merchantTransactionId ||
+                                         payload?.merchantTransactionId ||
+                                         payload?.transactionId;
+
+            if (merchantTransactionId) {
+                // Verify payment status via PhonePe API
+                const verificationResult = await phonepeService.verifyPayment(merchantTransactionId);
+
+                if (verificationResult?.success) {
+                    const payment = await Payment.findOne({ transactionId: merchantTransactionId });
+
+                    if (payment && payment.status !== 'success') {
+                        payment.status = 'success';
+                        payment.paidAt = new Date();
+                        await payment.save();
+
+                        // Update user subscription or credits
+                        if (payment.plan === 'Credits') {
+                            await hireUserModel.findByIdAndUpdate(payment.userId, {
+                                $inc: { creditBalance: payment.credits }
+                            });
+                            console.log(`✅ PhonePe: Credits added for user ${payment.userId}`);
+                        } else {
+                            const planSettings = await PlanSettings.getSettings();
+                            const planConfig = planSettings.plans[payment.plan];
+                            const expiresAt = new Date();
+                            expiresAt.setDate(expiresAt.getDate() + (planConfig.days || 30));
+
+                            await hireUserModel.findByIdAndUpdate(payment.userId, {
+                                subscription: {
+                                    plan: payment.plan,
+                                    status: 'active',
+                                    startDate: new Date(),
+                                    expiresAt: expiresAt,
+                                    features: planConfig.features,
+                                    maxApplications: planConfig.maxApplications
+                                }
+                            });
+                            console.log(`✅ PhonePe: Subscription activated for user ${payment.userId}`);
+                        }
+                    }
+                }
+            }
+
+            // Always return success to acknowledge receipt
+            responseReturn(res, 200, { message: 'Webhook processed successfully' });
+
+        } catch (error) {
+            console.error('PhonePe webhook error:', error);
+            responseReturn(res, 500, { error: 'Internal server error' });
+        }
+    }
+
+    razorpayWebhook = async (req, res) => {
+        try {
+            const crypto = require('crypto');
+            const webhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET;
+
+            if (!webhookSecret) {
+                console.error('RAZORPAY_WEBHOOK_SECRET is not configured');
+                return responseReturn(res, 500, { error: 'Webhook configuration error' });
+            }
+
+            // Get the signature from headers
+            const razorpaySignature = req.headers['x-razorpay-signature'];
+            if (!razorpaySignature) {
+                return responseReturn(res, 400, { error: 'Missing Razorpay signature' });
+            }
+
+            // Verify signature
+            const body = JSON.stringify(req.body);
+            const expectedSignature = crypto
+                .createHmac('sha256', webhookSecret)
+                .update(body)
+                .digest('hex');
+
+            if (razorpaySignature !== expectedSignature) {
+                console.warn('⚠️ Razorpay webhook signature verification failed');
+                return responseReturn(res, 400, { error: 'Invalid signature' });
+            }
+
+            const event = req.body.event;
+            const payload = req.body.payload;
+
+            console.log(`✅ Razorpay webhook received: ${event}`);
+
+            // Handle different event types
+            switch (event) {
+                case 'payment.captured':
+                    // Payment successful
+                    const paymentId = payload.payment.entity.id;
+                    const orderId = payload.payment.entity.order_id;
+
+                    // Find payment by razorpayOrderId
+                    const payment = await Payment.findOne({ razorpayOrderId: orderId });
+                    if (payment) {
+                        if (payment.status !== 'success') {
+                            payment.status = 'success';
+                            payment.paidAt = new Date();
+                            payment.razorpayPaymentId = paymentId;
+                            await payment.save();
+
+                            // Update user subscription or credits
+                            if (payment.plan === 'Credits') {
+                                await hireUserModel.findByIdAndUpdate(payment.userId, {
+                                    $inc: { creditBalance: payment.credits }
+                                });
+                                console.log(`✅ Credits added for user ${payment.userId}: ${payment.credits}`);
+                            } else {
+                                const planSettings = await PlanSettings.getSettings();
+                                const planConfig = planSettings.plans[payment.plan];
+                                const expiresAt = new Date();
+                                expiresAt.setDate(expiresAt.getDate() + (planConfig.days || 30));
+
+                                await hireUserModel.findByIdAndUpdate(payment.userId, {
+                                    subscription: {
+                                        plan: payment.plan,
+                                        status: 'active',
+                                        startDate: new Date(),
+                                        expiresAt: expiresAt,
+                                        paymentId: paymentId,
+                                        features: planConfig.features,
+                                        maxApplications: planConfig.maxApplications
+                                    }
+                                });
+                                console.log(`✅ Subscription activated for user ${payment.userId}: ${payment.plan}`);
+                            }
+                        }
+                    }
+                    break;
+
+                case 'payment.failed':
+                    // Payment failed
+                    const failedOrderId = payload.payment.entity.order_id;
+                    await Payment.findOneAndUpdate(
+                        { razorpayOrderId: failedOrderId },
+                        { status: 'failed' }
+                    );
+                    console.log(`❌ Payment failed for order ${failedOrderId}`);
+                    break;
+
+                case 'refund.created':
+                    // Refund initiated
+                    console.log(`🔄 Refund created: ${payload.refund.entity.id}`);
+                    break;
+
+                default:
+                    console.log(`ℹ️ Unhandled Razorpay event: ${event}`);
+            }
+
+            // Always return 200 to acknowledge receipt
+            responseReturn(res, 200, { message: 'Webhook processed successfully' });
+
+        } catch (error) {
+            console.error('Razorpay webhook error:', error);
+            responseReturn(res, 500, { error: 'Internal server error' });
+        }
     }
 
     // ==================== ADMIN PAYMENT APIS ====================

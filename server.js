@@ -1,4 +1,55 @@
 require("dotenv").config();
+
+// ============================================================
+// 🛡️ ENVIRONMENT VALIDATION
+// ============================================================
+const requiredEnvVars = [
+  'PORT',
+  'NODE_ENV',
+  'DB_URL',
+  'FRONTEND_URL',
+  'SECRET',
+  'ADMIN_EMAIL',
+  'ADMIN_PASSWORD',
+  'CLOUDINARY_CLOUD_NAME',
+  'CLOUDINARY_API_KEY',
+  'CLOUDINARY_API_SECRET',
+  'SMTP_HOST',
+  'SMTP_PORT',
+  'EMAIL_USER',
+  'EMAIL_PASSWORD',
+  'RAZORPAY_KEY_ID',
+  'RAZORPAY_KEY_SECRET',
+  'STRIPE_KEY'
+];
+
+const missingVars = requiredEnvVars.filter(varName => !process.env[varName]);
+if (missingVars.length > 0) {
+  console.error('❌ Missing required environment variables:', missingVars);
+  console.error('💡 Please check your .env file or set these variables');
+  if (process.env.NODE_ENV === 'production') {
+    process.exit(1);
+  } else {
+    console.warn('⚠️  Development mode: Continuing with missing variables (some features may fail)');
+  }
+}
+
+// Security warnings for exposed credentials in development
+if (process.env.NODE_ENV === 'development') {
+  const sensitiveDefaults = {
+    'ADMIN_PASSWORD': 'Jeenora.12345',
+    'EMAIL_PASSWORD': 'Jeena.1234',
+    'RAZORPAY_KEY_ID': 'rzp_live_',
+    'STRIPE_KEY': 'sk_test_'
+  };
+
+  for (const [varName, defaultValue] of Object.entries(sensitiveDefaults)) {
+    if (process.env[varName] && process.env[varName].includes(defaultValue)) {
+      console.warn(`⚠️  WARNING: ${varName} appears to be using default/example value`);
+      console.warn(`   Consider changing this in production!`);
+    }
+  }
+}
 const express = require("express");
 const app = express();
 const cors = require("cors");
@@ -104,7 +155,7 @@ app.use(hpp({ whitelist: ['sort', 'fields', 'page', 'limit', 'category', 'status
 // 8. Global Rate Limit
 const globalLimiter = rateLimit({
   windowMs: 1 * 60 * 1000,
-  max: process.env.NODE_ENV === 'production' ? 100 : 100000, // Unlimited in dev
+  max: process.env.NODE_ENV === 'production' ? 1000 : 100000, // Unlimited in dev
   message: { error: 'Too many requests, please slow down.', success: false },
   standardHeaders: true,
   legacyHeaders: false,

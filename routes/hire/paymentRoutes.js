@@ -9,6 +9,7 @@ router.post('/create-credit-order', authMiddleware, paymentController.createCred
 router.post('/verify', authMiddleware, paymentController.verifyPayment)
 router.get('/subscription', authMiddleware, paymentController.getSubscription)
 router.post('/phonepe-webhook', paymentController.phonepeWebhook)
+router.post('/razorpay-webhook', paymentController.razorpayWebhook)
 
 // ==================== ADMIN PAYMENT ROUTES ====================
 router.get('/admin/payments', authMiddleware, paymentController.getAllPayments)

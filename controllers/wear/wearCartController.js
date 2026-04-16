@@ -31,7 +31,7 @@ const wearCartController = {
                 console.log(`[ADD_TO_CART] Created new cart item: ${cartItem._id}`);
             }
 
-            res.status(200).json({ success: true, message: 'Item added to cart', cartItem });
+            res.status(200).json({ success: true, message: 'Item added to cart' });
         } catch (error) {
             console.error('[CART_ERROR]', error);
             res.status(500).json({ success: false, message: 'Internal Server Error' });
@@ -44,6 +44,7 @@ const wearCartController = {
             const userId = req.user.id;
             console.log(`[GET_CART] Fetching for User: ${userId}`);
             const cartItems = await WearCart.find({ userId })
+                .select('-userId')
                 .populate('productId', 'productName images variants');
 
             console.log(`[GET_CART] Found ${cartItems.length} items for User ${userId}`);

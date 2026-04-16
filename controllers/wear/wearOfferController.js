@@ -1,6 +1,7 @@
 const WearOfferCampaign = require("../../models/wear/wearOfferCampaignModel");
 const WearNotification = require("../../models/wear/wearNotificationModel");
 const Supplier = require("../../models/wear/supplierModel");
+const WearProductOffer = require("../../models/wear/productOfferModel");
 const WearProduct = require("../../models/wear/wearProductModel");
 const { responseReturn } = require("../../utiles/response");
 const { getIo } = require("../../utiles/socket");
@@ -376,6 +377,16 @@ class wearOfferController {
 
             await product.save();
             responseReturn(res, 200, { message: "Product details updated for offer", product });
+        } catch (error) {
+            responseReturn(res, 500, { error: error.message });
+        }
+    }
+
+    // --- GLOBAL PRODUCT OFFERS ---
+    get_active_product_offers = async (req, res) => {
+        try {
+            const offers = await WearProductOffer.find({ status: 'active' });
+            responseReturn(res, 200, { offers });
         } catch (error) {
             responseReturn(res, 500, { error: error.message });
         }

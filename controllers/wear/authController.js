@@ -11,9 +11,11 @@ const { responseReturn } = require('../../utiles/response');
 const crypto = require('crypto');
 const WearSession = require('../../models/wear/wearSessionModel');
 
+const { sendSMS } = require('../../services/smsService');
+
 // Config
-const ACCESS_TOKEN_EXPIRY = '7d'; // 7 days (increased from 15m for stable sessions)
-const REFRESH_TOKEN_EXPIRY_DAYS = 30; // 30 days
+const ACCESS_TOKEN_EXPIRY = '7d';
+const REFRESH_TOKEN_EXPIRY_DAYS = 30;
 
 // Helper: Generate Access Token
 const generateAccessToken = (id, role = 'wear_buyer', deviceId) => {
@@ -91,7 +93,7 @@ exports.send_otp = async (req, res) => {
         }
 
         // --- NOT A SILENT LOGIN ---
-        // Generate a 4-digit OTP for testing/local use
+        // Generate a 4-digit OTP
         const otpCode = Math.floor(1000 + Math.random() * 9000).toString();
         
         // Save OTP to database
@@ -110,8 +112,8 @@ exports.send_otp = async (req, res) => {
         return responseReturn(res, 200, {
             success: true,
             message: 'OTP sent successfully (Check console for code in dev)',
-            otp: otpCode, // Returning OTP for testing convenience
-            proceedWithFirebase: false
+            otp: otpCode,
+            proceedWithFirebase: true // Suggesting Firebase for modern clients
         });
 
     } catch (error) {

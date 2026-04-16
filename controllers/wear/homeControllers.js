@@ -36,44 +36,113 @@ class homeControllers {
 
     get_categorys = async (req, res) => {
         try {
-            const categorys = await category.find({})
+            const wearCategoryModel = require('../../models/wear/wearCategoryModel');
+            // Show ONLY Main Categories (Level 0) on home page
+            const categories = await wearCategoryModel.find({ level: 0 }).sort({ priority: 1 });
             responseReturn(res, 200, {
-                categorys
+                categories
             })
 
         } catch (error) {
-            console.log(error)
+            console.log('[API] Get Categories Error:', error.message)
+            responseReturn(res, 500, { error: error.message })
         }
     }
     // end method 
     get_products = async (req, res) => {
+        const parPage = 12;
+        const { category, searchValue, sortPrice, lowPrice, highPrice, pageNumber } = req.query;
         try {
-            const products = await productModel.find({}).limit(12).sort({
-                createdAt: -1
-            })
-            const allProduct1 = await productModel.find({}).limit(9).sort({
-                createdAt: -1
-            })
-            const latest_product = this.formateProduct(allProduct1);
+            let categoryRegexes = [];
+            let categoryNames = [];
 
-            const allProduct2 = await productModel.find({}).limit(9).sort({
-                rating: -1
-            })
-            const topRated_product = this.formateProduct(allProduct2);
+            if (category) {
+                const WearCategory = require('../../models/wear/wearCategoryModel');
+                // Support both name and slug
+                const catDoc = await WearCategory.findOne({ 
+                    $or: [{ name: { $regex: new RegExp(`^${category}$`, 'i') } }, { slug: category.toLowerCase() }] 
+                });
 
-            const allProduct3 = await productModel.find({}).limit(9).sort({
-                discount: -1
-            })
-            const discount_product = this.formateProduct(allProduct3);
+                if (catDoc) {
+                    const childCategories = await WearCategory.find({ parentId: catDoc._id });
+                    categoryNames = [catDoc.name, ...childCategories.map(c => c.name)];
+                    categoryRegexes = categoryNames.map(n => new RegExp(`^${n}$`, 'i'));
+                } else {
+                    categoryRegexes = [new RegExp(`^${category}$`, 'i')];
+                    categoryNames = [category];
+                }
+            }
+
+            // 1. Search Legacy Products
+            let legacyQuery = {};
+            if (category && categoryNames.length > 0) {
+                legacyQuery.category = { $in: categoryNames };
+            }
+
+            const legacyProducts = await productModel.find(legacyQuery).sort({ createdAt: -1 }).lean();
+            const legacyResult = new queryProducts(legacyProducts, req.query).ratingQuery().searchQuery().priceQuery().sortByPrice().getProducts();
+
+            // 2. Search Wear Products
+            let wearMatch = { status: 'active' };
+            if (category) {
+                if (categoryRegexes.length > 0) {
+                    wearMatch.$or = [
+                        { category: { $in: categoryRegexes } },
+                        { subCategory: { $in: categoryRegexes } }
+                    ];
+                } else {
+                    wearMatch.category = { $regex: new RegExp(`^${category}$`, 'i') };
+                }
+            }
+            if (searchValue) {
+                wearMatch.$or = [
+                    { productName: { $regex: searchValue, $options: 'i' } },
+                    { category: { $regex: searchValue, $options: 'i' } }
+                ];
+            }
+
+            const wearProductsRaw = await wearProductModel.find(wearMatch).sort({ createdAt: -1 }).lean();
+            const wearResult = wearProductsRaw.map(p => ({
+                ...p,
+                name: p.productName,
+                price: p.variants?.[0]?.listingPrice || 0,
+                discount: 0,
+                rating: 5,
+                type: 'wear'
+            }));
+
+            // Combine and De-duplicate
+            const combinedMap = new Map();
+            [...legacyResult, ...wearResult].forEach(p => {
+                const key = p.slug || p._id.toString();
+                if (!combinedMap.has(key)) {
+                    combinedMap.set(key, p);
+                }
+            });
+            const allCombined = Array.from(combinedMap.values());
+
+            // Sections (Legacy for backward compatibility)
+            const latest_product = this.formateProduct(allCombined.slice(0, 9));
+            const topRated_product = this.formateProduct(allCombined.sort((a,b) => b.rating - a.rating).slice(0, 9));
+            const discount_product = this.formateProduct(allCombined.sort((a,b) => b.discount - a.discount).slice(0, 9));
+
+            // Pagination
+            const totalProduct = allCombined.length;
+            const skip = (parseInt(pageNumber || 1) - 1) * parPage;
+            const paginatedResult = allCombined.slice(skip, skip + parPage);
+
             responseReturn(res, 200, {
-                products,
+                products: paginatedResult,
+                totalProduct,
+                parPage,
                 latest_product,
                 topRated_product,
                 discount_product
             })
 
         } catch (error) {
-            console.log(error.message)
+            console.log('[API] Get Products Error:', error.message)
+            responseReturn(res, 500, { error: error.message })
         }
     }
     // end method 
@@ -167,22 +236,31 @@ class homeControllers {
 
             // 2. Search Wear Products (New Catalog Style)
             let wearMatch = { status: 'active' };
+            const andConditions = [{ status: 'active' }];
+
             if (category) {
                 if (categoryRegexes.length > 0) {
-                    wearMatch.$or = [
-                        { category: { $in: categoryRegexes } },
-                        { subCategory: { $in: categoryRegexes } }
-                    ];
+                    andConditions.push({
+                        $or: [
+                            { category: { $in: categoryRegexes } },
+                            { subCategory: { $in: categoryRegexes } }
+                        ]
+                    });
                 } else {
-                    wearMatch.category = { $regex: new RegExp(`^${category}$`, 'i') };
+                    andConditions.push({ category: { $regex: new RegExp(`^${category}$`, 'i') } });
                 }
             }
+
             if (searchValue) {
-                wearMatch.$or = [
-                    { productName: { $regex: searchValue, $options: 'i' } },
-                    { category: { $regex: searchValue, $options: 'i' } }
-                ];
+                andConditions.push({
+                    $or: [
+                        { productName: { $regex: searchValue, $options: 'i' } },
+                        { category: { $regex: searchValue, $options: 'i' } }
+                    ]
+                });
             }
+
+            wearMatch = andConditions.length > 1 ? { $and: andConditions } : andConditions[0];
 
             const wearProductsRaw = await wearProductModel.find(wearMatch).sort({ createdAt: -1 }).lean();
             const wearResult = wearProductsRaw.map(p => ({
@@ -194,8 +272,15 @@ class homeControllers {
                 type: 'wear'
             }));
 
-            // Combine
-            const allCombined = [...legacyResult, ...wearResult];
+            // Combine and De-duplicate by slug or name
+            const combinedMap = new Map();
+            [...legacyResult, ...wearResult].forEach(p => {
+                const key = p.slug || p._id.toString();
+                if (!combinedMap.has(key)) {
+                    combinedMap.set(key, p);
+                }
+            });
+            const allCombined = Array.from(combinedMap.values());
 
             // Manual pagination for combined results
             const totalProduct = allCombined.length;
@@ -252,7 +337,7 @@ class homeControllers {
                 product = await productModel.findById(slug).populate({ path: 'offers', match: { status: 'active' } }).populate('sellerId', sellerSelection);
             }
 
-            // If still not found, check the new WearProduct model (Meesho-style)
+            // check the new WearProduct model (Meesho-style)
             let isWearProduct = false;
             if (!product) {
                 product = await wearProductModel.findOne({ slug })
@@ -269,56 +354,6 @@ class homeControllers {
             if (!product) {
                 return responseReturn(res, 404, { error: 'Product Not Found' });
             }
-
-            const activeModel = isWearProduct ? wearProductModel : productModel;
-
-            const relatedProducts = await activeModel.find({
-                _id: { $ne: product._id },
-                category: product.category
-            }).limit(12)
-
-            const moreProducts = await activeModel.find({
-                _id: { $ne: product._id },
-                sellerId: product.sellerId
-            }).limit(3)
-
-            let similarProducts = [];
-            if (product.catalogId) {
-                similarProducts = await activeModel.find({
-                    catalogId: product.catalogId
-                });
-            }
-
-            const thirtyDaysAgo = moment().subtract(30, 'days').toDate();
-            const allProductIds = [product._id.toString(), ...similarProducts.map(p => p._id.toString())];
-
-            const orderCounts = await customerOrderModel.aggregate([
-                { $match: { createdAt: { $gte: thirtyDaysAgo }, delivery_status: { $ne: 'cancelled' } } },
-                { $unwind: '$products' },
-                { $match: { 'products._id': { $in: allProductIds } } },
-                { $group: { _id: '$products._id', count: { $sum: 1 } } }
-            ]);
-
-            const countMap = {};
-            
-            // Fetch Config for Social Proof
-            const wearSetting = await adminSettingsModel.findOne({ settingKey: 'wear_config' });
-            const wearConfig = wearSetting ? wearSetting.settingValue : {};
-            const isSocialEnabled = wearConfig.social_proof_enabled !== false; // default true
-            const minThreshold = wearConfig.social_proof_min_threshold || 0;
-
-            orderCounts.forEach(c => { 
-                if (isSocialEnabled && c.count >= minThreshold) {
-                    countMap[c._id] = c.count; 
-                } else {
-                    countMap[c._id] = 0;
-                }
-            });
-
-            const enrichedSimilarProducts = similarProducts.map(p => ({
-                ...p.toObject(),
-                monthOrderCount: countMap[p._id.toString()] || 0
-            }));
 
             const scrubbedProduct = {
                 _id: product._id,
@@ -337,20 +372,79 @@ class homeControllers {
                 sellerId: product.sellerId?._id,
                 variants: product.variants || [],
                 offers: product.offers || [],
-                similarProducts: enrichedSimilarProducts,
-                monthOrderCount: countMap[product._id.toString()] || 0
+                catalogId: product.catalogId,
+                type: isWearProduct ? 'wear' : 'legacy'
             };
 
             responseReturn(res, 200, {
-                product: scrubbedProduct,
-                relatedProducts, // product list usually already limited in find
-                moreProducts,
-                similarProducts: enrichedSimilarProducts
+                product: scrubbedProduct
             })
 
         } catch (error) {
             console.log('[HOME_CONTROLLER_ERROR]', error.message)
             responseReturn(res, 500, { error: 'Internal Server Error' })
+        }
+    }
+
+    get_related_products = async (req, res) => {
+        const { category, productId } = req.query;
+        try {
+            const related = await wearProductModel.find({
+                _id: { $ne: productId },
+                category: category,
+                status: 'active'
+            }).limit(12).select('productName images variants slug category _id');
+
+            const legacyRelated = await productModel.find({
+                _id: { $ne: productId },
+                category: category
+            }).limit(12).select('name images price discount slug _id');
+
+            responseReturn(res, 200, {
+                related: [...related, ...legacyRelated].slice(0, 12)
+            })
+        } catch (error) {
+            responseReturn(res, 200, { related: [] })
+        }
+    }
+
+    get_similar_products = async (req, res) => {
+        const { catalogId, productId } = req.query;
+        try {
+            if (!catalogId) return responseReturn(res, 200, { similar: [] });
+            
+            const similar = await wearProductModel.find({
+                catalogId,
+                status: 'active'
+            }).select('productName images variants slug _id');
+
+            responseReturn(res, 200, {
+                similar
+            })
+        } catch (error) {
+            responseReturn(res, 200, { similar: [] })
+        }
+    }
+
+    get_social_stats = async (req, res) => {
+        const { productIds } = req.body; // Array of IDs
+        try {
+            if (!productIds || !Array.isArray(productIds)) return responseReturn(res, 200, { stats: {} });
+
+            const thirtyDaysAgo = moment().subtract(30, 'days').toDate();
+            const orderCounts = await customerOrderModel.aggregate([
+                { $match: { createdAt: { $gte: thirtyDaysAgo }, delivery_status: { $ne: 'cancelled' } } },
+                { $unwind: '$products' },
+                { $match: { 'products._id': { $in: productIds } } },
+                { $group: { _id: '$products._id', count: { $sum: 1 } } }
+            ]);
+
+            const stats = {};
+            orderCounts.forEach(c => { stats[c._id] = c.count; });
+
+            responseReturn(res, 200, { stats })
+        } catch (error) {
+            responseReturn(res, 200, { stats: {} })
         }
     }
     // end method 

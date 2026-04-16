@@ -45,7 +45,7 @@ const wearCartController = {
             console.log(`[GET_CART] Fetching for User: ${userId}`);
             const cartItems = await WearCart.find({ userId })
                 .select('-userId')
-                .populate('productId', 'productName images variants');
+                .populate('productId', 'productName images variants sellerId');
 
             console.log(`[GET_CART] Found ${cartItems.length} items for User ${userId}`);
             res.status(200).json({

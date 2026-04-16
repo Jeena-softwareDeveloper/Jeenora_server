@@ -8,6 +8,7 @@ const cloudinary = require('cloudinary').v2;
 const { responseReturn } = require('../../utiles/response');
 
 
+const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
 const WearSession = require('../../models/wear/wearSessionModel');
 
@@ -443,6 +444,146 @@ exports.profile_image_upload = async (req, res) => {
     });
 };
 
+// 4. Email Signup (Username, Email, Password)
+exports.email_signup = async (req, res) => {
+    try {
+        const { username, email, password } = req.body;
+
+        if (!username || !email || !password) {
+            return responseReturn(res, 400, { error: 'Username, email and password are required' });
+        }
+
+        const cleanEmail = email.toLowerCase().trim();
+
+        // Check if user already exists in either model
+        const existingBuyer = await WearBuyer.findOne({ $or: [{ email: cleanEmail }, { username }] });
+        const existingCustomer = await Customer.findOne({ $or: [{ email: cleanEmail }] });
+
+        if (existingBuyer || existingCustomer) {
+            return responseReturn(res, 400, { error: 'User with this email or username already exists' });
+        }
+
+        // Hash password
+        const hashedPassword = await bcrypt.hash(password, 10);
+
+        // Create new WearBuyer
+        const user = await WearBuyer.create({
+            username,
+            name: username, // Use username as default name
+            email: cleanEmail,
+            password: hashedPassword,
+            role: 'wear_buyer',
+            isVerified: true
+        });
+
+        // Log Activity
+        await WearLog.create({
+            user: user._id, phone: '', action: 'SIGNUP',
+            details: { page: 'Auth', method: 'Email_Signup' }
+        });
+
+        responseReturn(res, 201, {
+            success: true,
+            message: 'Account created successfully. Please login.'
+        });
+
+    } catch (error) {
+        console.error('Email Signup Error:', error);
+        responseReturn(res, 500, { error: error.message });
+    }
+};
+
+// 5. Email Login
+exports.email_login = async (req, res) => {
+    try {
+        const { email, password, deviceId, deviceName } = req.body;
+        const currentIp = req.ip || req.connection.remoteAddress;
+
+        if (!email || !password) {
+            return responseReturn(res, 400, { error: 'Email and password are required' });
+        }
+
+        const cleanEmail = email.toLowerCase().trim();
+
+        // Find user (search both models)
+        let user = await WearBuyer.findOne({ email: cleanEmail }).select('+password name email role image devices username');
+        if (!user) {
+            user = await Customer.findOne({ email: cleanEmail }).select('+password name email role image devices');
+        }
+
+        if (!user) {
+            return responseReturn(res, 401, { error: 'Invalid email or password' });
+        }
+
+        // Check password
+        const isMatch = await bcrypt.compare(password, user.password);
+        if (!isMatch) {
+            return responseReturn(res, 401, { error: 'Invalid email or password' });
+        }
+
+        // Generate Tokens
+        const accessToken = generateAccessToken(user._id, user.role, deviceId);
+        const refreshToken = generateRefreshToken();
+
+        // Create Session
+        const expiresAt = new Date();
+        expiresAt.setDate(expiresAt.getDate() + REFRESH_TOKEN_EXPIRY_DAYS);
+
+        await WearSession.create({
+            userId: user._id,
+            refreshToken,
+            deviceId,
+            deviceName: deviceName || 'Unknown Device',
+            ipAddress: currentIp,
+            expiresAt
+        });
+
+        // Update User Devices
+        if (deviceId) {
+            if (!user.devices) user.devices = [];
+            const deviceIndex = user.devices.findIndex(d => d.deviceId === deviceId);
+            if (deviceIndex > -1) {
+                user.devices[deviceIndex].status = 'trusted';
+                user.devices[deviceIndex].lastLogin = new Date();
+                user.devices[deviceIndex].ip = currentIp;
+            } else {
+                user.devices.push({
+                    deviceId,
+                    ip: currentIp,
+                    status: 'trusted',
+                    lastLogin: new Date()
+                });
+            }
+            await user.save();
+        }
+
+        // Log Activity
+        await WearLog.create({
+            user: user._id, phone: user.phone || '', action: 'LOGIN',
+            details: { page: 'Auth', method: 'Email_Login' },
+            device: { deviceId, ip: currentIp, platform: 'Web/Mobile' }
+        });
+
+        responseReturn(res, 200, {
+            success: true,
+            accessToken,
+            refreshToken,
+            userInfo: {
+                _id: user._id,
+                name: user.name,
+                email: user.email,
+                role: user.role,
+                image: user.image,
+                username: user.username
+            }
+        });
+
+    } catch (error) {
+        console.error('Email Login Error:', error);
+        responseReturn(res, 500, { error: error.message });
+    }
+};
+
 // Logout - Untrust the current device
 exports.logout = async (req, res) => {
     try {
@@ -475,6 +616,11 @@ exports.logout = async (req, res) => {
                 details: { page: 'Profile', method: 'Manual_Logout' },
                 device: { deviceId, ip, platform: 'Mobile' }
             });
+        }
+
+        const { blacklistToken } = require('../../middlewares/authMiddleware');
+        if (req.token) {
+            await blacklistToken(req.token);
         }
 
         responseReturn(res, 200, { success: true, message: 'Logged out successfully' });

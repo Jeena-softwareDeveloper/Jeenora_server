@@ -158,6 +158,7 @@ class orderController {
                 });
             }
 
+            console.log(`[PLACE_ORDER] Creating order for User: ${userId}`);
             const order = await customerOrder.create({
                 customerId: userId,
                 shippingInfo,
@@ -236,7 +237,15 @@ class orderController {
             }).countDocuments()
 
             responseReturn(res, 200, {
-                recentOrders: recentOrdersRaw.map(this.scrubCustomerOrder),
+                recentOrders: recentOrdersRaw.map(o => ({
+                    _id: o._id,
+                    products: o.products,
+                    price: o.price,
+                    payment_status: o.payment_status,
+                    delivery_status: o.delivery_status,
+                    date: o.date,
+                    shippingInfo: o.shippingInfo || 'Standard Delivery'
+                })),
                 pendingOrder,
                 totalOrder,
                 cancelledOrder
@@ -265,7 +274,18 @@ class orderController {
                     customerId: new ObjectId(customerId)
                 }).sort({ createdAt: -1 }).lean();
             }
-            responseReturn(res, 200, { orders: ordersRaw.map(this.scrubCustomerOrder) })
+            console.log(`[GET_ORDERS] Found ${ordersRaw.length} orders for Customer: ${customerId}`);
+            responseReturn(res, 200, { 
+                orders: ordersRaw.map(o => ({
+                    _id: o._id,
+                    products: o.products,
+                    price: o.price,
+                    payment_status: o.payment_status,
+                    delivery_status: o.delivery_status,
+                    date: o.date,
+                    shippingInfo: o.shippingInfo || 'Standard Delivery'
+                }))
+            })
         } catch (error) {
             responseReturn(res, 500, { error: 'Internal Server Error' })
         }

@@ -10,6 +10,7 @@ const wearProductModel = require('../../models/wear/wearProductModel')
 const productOfferModel = require('../../models/wear/productOfferModel')
 const customerOrderModel = require('../../models/wear/customerOrder')
 const adminSettingsModel = require('../../models/adminSettingsModel')
+const wearBuyerModel = require('../../models/wear/wearBuyerModel')
 
 
 
@@ -583,7 +584,10 @@ class homeControllers {
         try {
             if (!userId) return responseReturn(res, 400, { error: 'User ID required' });
 
-            const user = await customerModel.findById(userId);
+            // Try WearBuyer first, then Customer
+            let user = await wearBuyerModel.findById(userId);
+            if (!user) user = await customerModel.findById(userId);
+            
             if (!user) return responseReturn(res, 404, { error: 'User not found' });
 
             // Remove if exists to re-add at top (Limit 20)
@@ -605,10 +609,19 @@ class homeControllers {
     get_recent_products = async (req, res) => {
         const { userId } = req.params;
         try {
-            const user = await customerModel.findById(userId).populate({
+            // Try WearBuyer first
+            let user = await wearBuyerModel.findById(userId).populate({
                 path: 'recentViewed',
-                select: 'name price listingPrice originalPrice mrp images slug category subCategory _id variants shopName seller rating discount'
+                select: 'name productName price listingPrice originalPrice mrp images slug category subCategory _id variants shopName seller rating discount'
             });
+
+            // If not found in WearBuyer, try Customer
+            if (!user) {
+                user = await customerModel.findById(userId).populate({
+                    path: 'recentViewed',
+                    select: 'name productName price listingPrice originalPrice mrp images slug category subCategory _id variants shopName seller rating discount'
+                });
+            }
 
             if (!user) return responseReturn(res, 404, { error: 'User not found' });
 

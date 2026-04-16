@@ -5,12 +5,24 @@ const wearBuyerSchema = new mongoose.Schema({
         type: String,
         default: 'Guest'
     },
-    phone: {
+    username: {
         type: String,
         required: true,
         unique: true
     },
-    email: { type: String },
+    email: { 
+        type: String,
+        required: true,
+        unique: true
+    },
+    password: {
+        type: String,
+        required: true,
+        select: false
+    },
+    phone: {
+        type: String,
+    },
     image: { type: String },
     gender: { type: String },
     languages: { type: String },
@@ -55,7 +67,11 @@ const wearBuyerSchema = new mongoose.Schema({
     codDisabled: {
         type: Boolean,
         default: false  // set to true by admin when user has high COD cancel rate
-    }
+    },
+    recentViewed: [{
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'WearProduct'
+    }]
 }, { timestamps: true });
 
 module.exports = mongoose.model('WearBuyer', wearBuyerSchema);

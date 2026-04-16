@@ -10,6 +10,8 @@ router.get('/status', authMiddleware, supplierController.get_my_status);
 router.post('/verify-bank', authMiddleware, supplierController.verify_bank);
 router.post('/verify-ifsc', authMiddleware, supplierController.verify_ifsc);
 router.post('/verify-pincode', authMiddleware, supplierController.verify_pincode);
+router.post('/send-email-otp', authMiddleware, supplierController.send_verification_email);
+router.post('/verify-email-otp', authMiddleware, supplierController.verify_email_otp);
 router.post('/mark-congrats', authMiddleware, supplierController.mark_congrats_shown);
 
 // Catalog Management (Meesho Flow)

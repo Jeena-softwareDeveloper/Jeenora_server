@@ -546,6 +546,78 @@ class supplierController {
             responseReturn(res, 500, { error: error.message });
         }
     }
+    // 2.9 Mobile App - Send Email Verification OTP
+    send_verification_email = async (req, res) => {
+        const { email } = req.body;
+        if (!email) return responseReturn(res, 400, { error: 'Email is required' });
+
+        try {
+            const otp = Math.floor(100000 + Math.random() * 900000).toString();
+            
+            const WearEmailOtp = require('../../models/wear/wearEmailOtpModel');
+            const { sendEmail } = require('../../utiles/emailSender');
+
+            // Save OTP to DB
+            await WearEmailOtp.findOneAndUpdate(
+                { email },
+                { otp, createdAt: Date.now() },
+                { upsert: true, new: true }
+            );
+
+            // Send Email
+            const subject = 'Jeenora Supplier Registration - Email Verification';
+            const message = `Your verification code is ${otp}. It will expire in 5 minutes.`;
+            const html = `
+                <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e1e1e1; border-radius: 10px; overflow: hidden;">
+                  <div style="background: #7C3AED; padding: 30px; text-align: center;">
+                    <h1 style="color: white; margin: 0; font-size: 24px; letter-spacing: 2px;">JEENORA SUPPLIER</h1>
+                  </div>
+                  <div style="padding: 30px; background: #ffffff; text-align: center;">
+                    <h2 style="color: #333; margin-top: 0;">Verify Your Email</h2>
+                    <p style="font-size: 16px; line-height: 1.6; color: #555;">Use the code below to verify your email address for supplier registration.</p>
+                    <div style="margin: 30px 0; padding: 20px; background: #F3F4F6; border-radius: 12px; font-size: 32px; font-weight: 800; letter-spacing: 8px; color: #7C3AED;">
+                        ${otp}
+                    </div>
+                    <p style="font-size: 12px; color: #9CA3AF;">This code expires in 5 minutes.</p>
+                  </div>
+                  <div style="background: #F9FAFB; padding: 15px; text-align: center; font-size: 12px; color: #9CA3AF; border-top: 1px solid #F3F4F6;">
+                    &copy; ${new Date().getFullYear()} Jeenora Enterprise. All rights reserved.
+                  </div>
+                </div>
+            `;
+
+            const sent = await sendEmail(email, subject, message, html);
+            if (!sent) return responseReturn(res, 500, { error: 'Failed to send email' });
+
+            responseReturn(res, 200, { success: true, message: 'OTP sent successfully' });
+        } catch (error) {
+            console.error('Send Email OTP Error:', error);
+            responseReturn(res, 500, { error: error.message });
+        }
+    }
+
+    // 2.10 Mobile App - Verify Email OTP
+    verify_email_otp = async (req, res) => {
+        const { email, otp } = req.body;
+        if (!email || !otp) return responseReturn(res, 400, { error: 'Email and OTP are required' });
+
+        try {
+            const WearEmailOtp = require('../../models/wear/wearEmailOtpModel');
+            const record = await WearEmailOtp.findOne({ email, otp });
+
+            if (!record) {
+                return responseReturn(res, 400, { error: 'Invalid or expired OTP' });
+            }
+
+            // Delete OTP after verification
+            await WearEmailOtp.deleteOne({ _id: record._id });
+
+            responseReturn(res, 200, { success: true, message: 'Email verified successfully!' });
+        } catch (error) {
+            console.error('Verify Email OTP Error:', error);
+            responseReturn(res, 500, { error: error.message });
+        }
+    }
 }
 
 module.exports = new supplierController();

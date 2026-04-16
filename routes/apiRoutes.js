@@ -30,8 +30,11 @@ router.use('/wear/catalog', require('./wear/productRoutes'));
 const wearAuthController = require('../controllers/wear/authController');
 router.post('/wear/auth/send-otp', otpSendLimiter, wearAuthController.send_otp);
 router.post('/wear/auth/verify-otp', otpVerifyLimiter, wearAuthController.verify_otp);
+router.post('/wear/auth/register', wearAuthController.email_signup);
+router.post('/wear/auth/login', wearAuthController.email_login);
 router.post('/wear/auth/refresh-token', wearAuthController.refresh_token);
 router.get('/wear/auth/profile', authMiddleware, wearAuthController.get_profile);
+router.post('/wear/auth/logout', authMiddleware, wearAuthController.logout);
 
 // 4. SHOPPING EXPERIENCE (Cart, Wishlist, Offers)
 router.use('/wear/cart', require('./wear/wearCartRoutes'));
@@ -60,5 +63,6 @@ const homeControllers = require('../controllers/wear/homeControllers');
 router.get('/config/initial-data', require('../controllers/wear/configController').get_initial_data);
 router.get('/products/:slug', homeControllers.product_details); // Old Detail Path
 router.get('/get-products', homeControllers.get_products); // Old Home Path
+router.use('/user/addresses', require('./wear/addressRoutes')); // Legacy Address Path
 
 module.exports = router;

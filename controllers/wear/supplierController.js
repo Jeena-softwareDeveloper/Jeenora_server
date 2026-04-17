@@ -380,7 +380,8 @@ class supplierController {
 
             const suppliers = await Supplier.find(supplierQuery)
                 .sort({ createdAt: -1 })
-                .populate('user', 'name phone')
+                .populate('user', 'name phone email')
+                .select('+businessDetails.gstNumber +businessDetails.panNumber +businessDetails.panName +addressDetails +bankDetails')
                 .lean();
 
             // 2. Get Sellers (Legacy)
@@ -471,6 +472,7 @@ class supplierController {
         try {
             const supplier = await Supplier.findByIdAndUpdate(supplierId, { status }, { new: true });
             if (!supplier) {
+                console.log(`[DEBUG] Supplier not found for ID: ${supplierId}`);
                 return responseReturn(res, 404, { error: 'Supplier not found' });
             }
             responseReturn(res, 200, { success: true, message: 'Status updated successfully', data: supplier });

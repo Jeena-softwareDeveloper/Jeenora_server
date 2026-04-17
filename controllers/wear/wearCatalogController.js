@@ -415,6 +415,8 @@ class wearCatalogController {
             }));
 
             // 2. Get Legacy Products for this seller
+            const legacyProductsRaw = await productModel.find({ sellerId: new mongoose.Types.ObjectId(sellerId) }).sort({ createdAt: -1 }).lean();
+
             const legacyCatalogs = legacyProductsRaw.map(p => ({
                 ...p,
                 productName: p.name,

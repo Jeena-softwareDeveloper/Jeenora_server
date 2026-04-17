@@ -1,10 +1,31 @@
 const router = require('express').Router();
+
+router.use((req, res, next) => {
+    console.log(`[DEBUG apiRoutes] ${req.method} ${req.originalUrl}`);
+    next();
+});
+
 const { authMiddleware, authOptional } = require('../middlewares/authMiddleware');
 const { otpSendLimiter, otpVerifyLimiter } = require('../middlewares/securityMiddleware');
 
 // ============================================================
-// 📁 NON-WEAR MODULAR SYSTEMS (External Projects)
+// 📁 CORE SYSTEMS & LEGACY COMPATIBILITY
 // ============================================================
+router.use('/admin/risk', require('./admin/adminRiskRoutes')); 
+router.use('/admin/security', require('./admin/adminRiskRoutes')); 
+
+// Advanced Analytics
+const adminWearController = require('../controllers/wear/adminWearController');
+router.get('/admin/analytics/advanced', authMiddleware, adminWearController.get_advanced_analytics);
+
+
+// Admin Settings (Direct match to fix 404s)
+const adminSettingsController = require('../controllers/wear/adminSettingsController');
+router.get('/admin/settings/menuDisplayMode', authMiddleware, (req,res,next)=>{req.params.key='menuDisplayMode';next();}, adminSettingsController.getSetting);
+router.get('/admin/settings/wear_config', authMiddleware, (req,res,next)=>{req.params.key='wear_config';next();}, adminSettingsController.getSetting);
+router.get('/admin/settings', authMiddleware, adminSettingsController.getAllSettings);
+router.get('/admin/settings/:key', authMiddleware, adminSettingsController.getSetting);
+
 router.use('/admin/jobs', require('./admin/adminJobRoutes'));
 router.use('/admin/applications', require('./admin/adminApplicationRoutes'));
 router.use('/admin/resumes', require('./admin/adminResumeRoutes'));
@@ -14,11 +35,6 @@ router.use('/hire', require('./hire/jobRoutes')); // Proxy for all hire routes
 router.use('/analytics', require('./analytics/index'));
 router.use('/market', require('./Awareness/marketRoutes'));
 
-// ============================================================
-// 🎯 MODULAR WEAR STOREFRONT APIS (Splitted & Useful)
-// ============================================================
-
-// 1. PUBLIC STOREFRONT (Home, Search, Details, Reviews)
 router.use('/wear/home', require('./wear/homeRoutes'));
 router.use('/wear/category', require('./wear/wearCategoryRoutes'));
 router.use('/wear/review', require('./wear/wearReviewRoutes'));
@@ -41,28 +57,37 @@ router.use('/wear/cart', require('./wear/wearCartRoutes'));
 router.use('/wear/wishlist', require('./wear/wearWishlistRoutes'));
 router.use('/wear/offers', require('./wear/wearOfferRoutes'));
 
-// 5. USER ACCOUNT (Profile, Address, Wallet)
+// Aliases & Modular routes
+router.use('/wear/banner', require('./wear/wearBannerRoutes'));
+router.use('/wear/offer', require('./wear/wearOfferRoutes'));
+router.use('/user/addresses', require('./wear/addressRoutes'));
 router.use('/wear/user', require('./wear/userProfileRoutes'));
 router.use('/wear/address', require('./wear/addressRoutes'));
 
 // 6. TRANSACTIONS & SUPPLIER
 router.use('/wear/orders', require('./wear/orderRoutes'));
-router.use('/wear/supplier', require('./wear/supplierRoutes'));
 
-// 7. DASHBOARD & ANALYTICS
-router.use('/wear/dashboard', require('./wear/dashboardRoutes'));
+// 7. DASHBOARD, LOGS & ANALYTICS
+const wearLogController = require('../controllers/wear/wearLogController');
+router.get('/wear/logs', authMiddleware, wearLogController.getLogs); // Dashboard Alias
+router.get('/wear/stats', authMiddleware, wearLogController.getStats); // Dashboard Alias
 router.use('/wear/logs', require('./wear/wearLogRoutes'));
+router.use('/wear/dashboard', require('./wear/dashboardRoutes'));
 
-// 8. BANNERS
+// 8. VENDOR & SUPPLIER MANAGEMENT
+router.put('/wear/supplier/update-status/:supplierId', authMiddleware, require('../controllers/wear/supplierController').update_status); // Direct Alias
+router.use('/wear/supplier', require('./wear/supplierRoutes'));
 router.use('/wear/banners', require('./wear/wearBannerRoutes'));
+router.use('/wear/whatsapp', require('./wear/wearWhatsAppRoutes'));
+router.use('/', require('./wear/productOfferRoutes'));
+router.get('/wear/buyers', authMiddleware, adminWearController.get_wear_buyers);
 
-// ============================================================
-// ⚠️ LEGACY COMPATIBILITY (Temporary Redirects)
-// ============================================================
 const homeControllers = require('../controllers/wear/homeControllers');
 router.get('/config/initial-data', require('../controllers/wear/configController').get_initial_data);
 router.get('/products/:slug', homeControllers.product_details); // Old Detail Path
 router.get('/get-products', homeControllers.get_products); // Old Home Path
-router.use('/user/addresses', require('./wear/addressRoutes')); // Legacy Address Path
+router.use('/', require('./wear/sellerRoutes'));
+
+router.use('/', require('./wear/legacyAuthRoutes')); 
 
 module.exports = router;

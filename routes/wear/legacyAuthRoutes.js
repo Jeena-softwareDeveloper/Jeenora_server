@@ -32,6 +32,8 @@ router.post('/admin/update-seller-permissions', authMiddleware, authControllers.
 router.post('/admin/update-seller-password', authMiddleware, authControllers.update_seller_password)
 
 // Admin Settings Routes
+router.get('/admin/settings/menuDisplayMode', authMiddleware, (req,res,next)=>{req.params.key='menuDisplayMode';next();}, adminSettingsController.getSetting)
+router.get('/admin/settings/wear_config', authMiddleware, (req,res,next)=>{req.params.key='wear_config';next();}, adminSettingsController.getSetting)
 router.get('/admin/settings', authMiddleware, adminSettingsController.getAllSettings)
 router.get('/admin/settings/:key', authMiddleware, adminSettingsController.getSetting)
 router.post('/admin/settings', authMiddleware, adminSettingsController.updateSetting)

@@ -629,6 +629,50 @@ class adminWearController {
             responseReturn(res, 500, { error: error.message });
         }
     }
+    // --- L. BUYER/CONSUMER LISTING ---
+    get_wear_buyers = async (req, res) => {
+        const { page = 1, perPage = 10, search = '' } = req.query;
+        const skipPage = (parseInt(page) - 1) * parseInt(perPage);
+
+        try {
+            const query = { role: 'wear_buyer' };
+            if (search) {
+                query.$or = [
+                    { name: { $regex: search, $options: 'i' } },
+                    { email: { $regex: search, $options: 'i' } },
+                    { phone: { $regex: search, $options: 'i' } }
+                ];
+            }
+
+            const [buyers, total] = await Promise.all([
+                wearBuyerModel.find(query)
+                    .sort({ createdAt: -1 })
+                    .skip(skipPage)
+                    .limit(parseInt(perPage))
+                    .lean(),
+                wearBuyerModel.countDocuments(query)
+            ]);
+
+            // For each buyer, get their order count
+            const buyersWithOrderStats = await Promise.all(buyers.map(async (buyer) => {
+                const orderCount = await customerOrder.countDocuments({ customerId: buyer._id });
+                const totalSpent = await customerOrder.aggregate([
+                    { $match: { customerId: buyer._id, payment_status: 'paid' } },
+                    { $group: { _id: null, total: { $sum: '$price' } } }
+                ]);
+
+                return {
+                    ...buyer,
+                    orderCount,
+                    totalSpent: totalSpent[0]?.total || 0
+                };
+            }));
+
+            responseReturn(res, 200, { buyers: buyersWithOrderStats, total });
+        } catch (error) {
+            responseReturn(res, 500, { error: error.message });
+        }
+    }
 }
 
 module.exports = new adminWearController();

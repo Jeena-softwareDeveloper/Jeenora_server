@@ -174,13 +174,26 @@ if (process.env.NODE_ENV === 'development') {
 }
 
 
-// ... SOCKET.IO ...
+// --- SOCKET.IO (Temporarily Disabled) ---
+/*
 const io = socket(server, {
-  cors: { origin: allowedOrigins, credentials: true, methods: ["GET", "POST"] },
+  cors: { 
+    origin: [
+      ...allowedOrigins,
+      "http://localhost:3000",
+      "http://localhost:3001",
+      "http://localhost:3002"
+    ], 
+    credentials: true, 
+    methods: ["GET", "POST"] 
+  },
+  transports: ['websocket', 'polling'], // Prioritize websocket
+  allowEIO3: true // Support older clients if needed
 });
 socketHelper.init(io);
 require('./utiles/socketHandlers').initHandlers(io);
-console.log('✅ Socket.io initialized and handlers balanced');
+console.log('✅ Socket.io initialized (WS prioritized)');
+*/
 
 
 const userController = require("./controllers/analytics/userController");
@@ -189,8 +202,13 @@ setInterval(() => {
   userController.cleanupInactiveUsers().catch(console.error);
 }, 5 * 60 * 1000); // 5 minutes is plenty for background cleanup
 
+// --- ADMIN CORE ---
+app.use("/api/admin/risk", require("./routes/admin/adminRiskRoutes"));
+app.use("/api/admin/security", require("./routes/admin/adminRiskRoutes"));
+
 // --- API ROUTES ---
 app.use("/api", require("./routes/apiRoutes"));
+app.use("/api/v1", require("./routes/apiRoutes")); // Legacy/Versioned Compatibility
 
 // --- AWARENESS & ANALYTICS ---
 app.use("/api/awareness", require("./routes/Awareness/bannerRoutes"));
@@ -214,7 +232,7 @@ app.use("/api/awareness", require("./routes/Awareness/tickerRoutes"));
 app.use("/api/awareness", require("./routes/Awareness/homeContentRoutes"));
 
 app.get("/api/test", (req, res) => {
-  res.json({ message: "✅ API is working" });
+  res.json({ message: "✅ API is working", version: "2.1" });
 });
 
 // ============================================================

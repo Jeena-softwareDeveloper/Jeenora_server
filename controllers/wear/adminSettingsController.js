@@ -16,7 +16,6 @@ class adminSettingsController {
         }
     }
 
-    // Get all settings
     getAllSettings = async (req, res) => {
         try {
             const settings = await adminSettingsModel.find({});
@@ -41,13 +40,9 @@ class adminSettingsController {
         }
     }
 
-    // Update menu display mode for specific menu groups
     updateMenuDisplayMode = async (req, res) => {
         const { menuGroupSettings } = req.body;
         try {
-            // menuGroupSettings should be an object like:
-            // { "awareness": "grouped", "hire": "flat", "products": "grouped" }
-
             const setting = await adminSettingsModel.findOneAndUpdate(
                 { settingKey: 'menuDisplayMode' },
                 {

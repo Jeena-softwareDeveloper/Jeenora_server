@@ -14,6 +14,14 @@ router.post('/send-email-otp', authMiddleware, supplierController.send_verificat
 router.post('/verify-email-otp', authMiddleware, supplierController.verify_email_otp);
 router.post('/mark-congrats', authMiddleware, supplierController.mark_congrats_shown);
 
+// ✅ Supplier Dashboard (Mobile App — SupplierDashboard.jsx)
+router.get('/dashboard-stats', authMiddleware, supplierController.get_supplier_dashboard_data);
+router.get('/orders', authMiddleware, supplierController.get_supplier_orders);
+router.put('/order-status/:orderId', authMiddleware, supplierController.update_order_status);
+router.get('/order/:orderId', authMiddleware, supplierController.get_order_details);
+router.get('/payouts', authMiddleware, supplierController.get_supplier_payouts);
+router.get('/returns', authMiddleware, supplierController.get_supplier_returns);
+
 // Catalog Management (Meesho Flow)
 const wearCatalogController = require('../../controllers/wear/wearCatalogController');
 router.get('/catalog/list', wearCatalogController.get_public_catalogs); // Public

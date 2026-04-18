@@ -202,10 +202,6 @@ setInterval(() => {
   userController.cleanupInactiveUsers().catch(console.error);
 }, 5 * 60 * 1000); // 5 minutes is plenty for background cleanup
 
-// --- ADMIN CORE ---
-app.use("/api/admin/risk", require("./routes/admin/adminRiskRoutes"));
-app.use("/api/admin/security", require("./routes/admin/adminRiskRoutes"));
-
 // --- API ROUTES ---
 app.use("/api", require("./routes/apiRoutes"));
 app.use("/api/v1", require("./routes/apiRoutes")); // Legacy/Versioned Compatibility

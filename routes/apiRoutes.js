@@ -65,6 +65,7 @@ router.use('/wear/user', require('./wear/userProfileRoutes'));
 router.use('/wear/address', require('./wear/addressRoutes'));
 
 // 6. TRANSACTIONS & SUPPLIER
+router.use('/wear/payment', require('./wear/paymentRoutes')); // Stripe & withdrawal
 router.use('/wear/orders', require('./wear/orderRoutes'));
 
 // 7. DASHBOARD, LOGS & ANALYTICS

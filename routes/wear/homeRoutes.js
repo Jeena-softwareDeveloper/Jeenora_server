@@ -1,5 +1,6 @@
 const homeControllers = require('../../controllers/wear/homeControllers')
 const { apiLimiter } = require('../../middlewares/securityMiddleware')
+const { authMiddleware } = require('../../middlewares/authMiddleware')
 
 const router = require('express').Router()
 
@@ -16,5 +17,15 @@ router.post('/products/social-stats', homeControllers.get_social_stats)
 
 router.post('/customer/submit-review', apiLimiter, homeControllers.submit_review)
 router.get('/customer/get-reviews/:productId', homeControllers.get_reviews)
+
+// Customer AI Features
+const aiMasterController = require('../../controllers/wear/aiMasterController');
+router.post('/customer/ai/semantic-search', aiMasterController.conversational_search);
+router.post('/customer/ai/stylist', aiMasterController.virtual_stylist);
+router.post('/customer/ai/size-predictor', aiMasterController.size_predictor);
+router.get('/customer/ai/languages', aiMasterController.get_support_languages);
+router.post('/customer/ai/support', authMiddleware, aiMasterController.ai_customer_support);
+router.post('/customer/ai/track-behavior', aiMasterController.track_behavior);
+router.get('/customer/ai/personalized-recommendations', aiMasterController.get_personalized_recommendations);
 
 module.exports = router

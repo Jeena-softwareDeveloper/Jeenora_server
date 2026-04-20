@@ -51,15 +51,14 @@ class homeControllers {
     }
     // end method 
     get_products = async (req, res) => {
-        const parPage = 12;
-        const { category, searchValue, sortPrice, lowPrice, highPrice, pageNumber } = req.query;
+        const parPage = parseInt(req.query.limit) || 50;
+        const { category, searchValue, sort, gender, lowPrice, highPrice, pageNumber } = req.query;
         try {
             let categoryRegexes = [];
             let categoryNames = [];
 
             if (category) {
                 const WearCategory = require('../../models/wear/wearCategoryModel');
-                // Support both name and slug
                 const catDoc = await WearCategory.findOne({ 
                     $or: [{ name: { $regex: new RegExp(`^${category}$`, 'i') } }, { slug: category.toLowerCase() }] 
                 });
@@ -74,76 +73,109 @@ class homeControllers {
                 }
             }
 
-            // 1. Search Legacy Products
-            let legacyQuery = {};
-            if (category && categoryNames.length > 0) {
-                legacyQuery.category = { $in: categoryNames };
-            }
-
-            const legacyProducts = await productModel.find(legacyQuery).sort({ createdAt: -1 }).lean();
-            const legacyResult = new queryProducts(legacyProducts, req.query).ratingQuery().searchQuery().priceQuery().sortByPrice().getProducts();
-
-            // 2. Search Wear Products
+            // Build Wear Products query
             let wearMatch = { status: 'active' };
-            if (category) {
-                if (categoryRegexes.length > 0) {
-                    wearMatch.$or = [
+            const andConditions = [{ status: 'active' }];
+
+            if (category && categoryRegexes.length > 0) {
+                andConditions.push({
+                    $or: [
                         { category: { $in: categoryRegexes } },
                         { subCategory: { $in: categoryRegexes } }
-                    ];
-                } else {
-                    wearMatch.category = { $regex: new RegExp(`^${category}$`, 'i') };
-                }
-            }
-            if (searchValue) {
-                wearMatch.$or = [
-                    { productName: { $regex: searchValue, $options: 'i' } },
-                    { category: { $regex: searchValue, $options: 'i' } }
-                ];
+                    ]
+                });
             }
 
-            const wearProductsRaw = await wearProductModel.find(wearMatch).sort({ createdAt: -1 }).lean();
+            if (searchValue) {
+                andConditions.push({
+                    $or: [
+                        { productName: { $regex: searchValue, $options: 'i' } },
+                        { category: { $regex: searchValue, $options: 'i' } }
+                    ]
+                });
+            }
+
+            // Gender filter
+            if (gender) {
+                andConditions.push({
+                    $or: [
+                        { gender: { $regex: new RegExp(`^${gender}$`, 'i') } },
+                        { gender: 'unisex' }
+                    ]
+                });
+            }
+
+            // Price filter
+            if (lowPrice || highPrice) {
+                const priceFilter = {};
+                if (lowPrice) priceFilter.$gte = parseInt(lowPrice);
+                if (highPrice) priceFilter.$lte = parseInt(highPrice);
+                andConditions.push({ 'variants.listingPrice': priceFilter });
+            }
+
+            // Size Filter
+            if (req.query.size) {
+                const sizes = Array.isArray(req.query.size) ? req.query.size : req.query.size.split(',');
+                const sizeRegexes = sizes.map(s => new RegExp(`^${s}$`, 'i'));
+                andConditions.push({ 'variants.size': { $in: sizeRegexes } });
+            }
+
+            // Color Filter
+            if (req.query.color) {
+                const colors = Array.isArray(req.query.color) ? req.query.color : req.query.color.split(',');
+                const colorRegexes = colors.map(c => new RegExp(`^${c}$`, 'i'));
+                andConditions.push({ 'variants.color': { $in: colorRegexes } });
+            }
+
+            wearMatch = andConditions.length > 1 ? { $and: andConditions } : andConditions[0];
+
+            // Sort logic
+            let wearSort = { createdAt: -1 }; // default: newest
+            if (sort === 'low-to-high') wearSort = { 'variants.0.listingPrice': 1 };
+            else if (sort === 'high-to-low') wearSort = { 'variants.0.listingPrice': -1 };
+            else if (sort === 'top-rated') wearSort = { avgRating: -1, createdAt: -1 };
+
+            const wearProductsRaw = await wearProductModel.find(wearMatch).sort(wearSort).lean();
             const wearResult = wearProductsRaw.map(p => ({
                 ...p,
                 name: p.productName,
                 price: p.variants?.[0]?.listingPrice || 0,
                 discount: 0,
-                rating: 5,
+                rating: p.avgRating || 5,
                 type: 'wear'
             }));
 
-            // Combine and De-duplicate
+            // Legacy Products
+            let legacyQuery = {};
+            if (category && categoryNames.length > 0) legacyQuery.category = { $in: categoryNames };
+            if (searchValue) legacyQuery.name = { $regex: searchValue, $options: 'i' };
+            if (gender) legacyQuery.gender = { $regex: new RegExp(`^${gender}$`, 'i') };
+
+            let legacySort = { createdAt: -1 };
+            if (sort === 'low-to-high') legacySort = { price: 1 };
+            else if (sort === 'high-to-low') legacySort = { price: -1 };
+            else if (sort === 'top-rated') legacySort = { rating: -1 };
+
+            const legacyResult = await productModel.find(legacyQuery).sort(legacySort).lean();
+
+            // Combine & De-duplicate
             const combinedMap = new Map();
             [...legacyResult, ...wearResult].forEach(p => {
                 const key = p.slug || p._id.toString();
-                if (!combinedMap.has(key)) {
-                    combinedMap.set(key, p);
-                }
+                if (!combinedMap.has(key)) combinedMap.set(key, p);
             });
             const allCombined = Array.from(combinedMap.values());
 
-            // Sections (Legacy for backward compatibility)
-            const latest_product = this.formateProduct(allCombined.slice(0, 9));
-            const topRated_product = this.formateProduct(allCombined.sort((a,b) => b.rating - a.rating).slice(0, 9));
-            const discount_product = this.formateProduct(allCombined.sort((a,b) => b.discount - a.discount).slice(0, 9));
-
             // Pagination
-            const totalProduct = allCombined.length;
+            const totalProducts = allCombined.length;
             const skip = (parseInt(pageNumber || 1) - 1) * parPage;
-            const paginatedResult = allCombined.slice(skip, skip + parPage);
+            const products = allCombined.slice(skip, skip + parPage);
 
-            responseReturn(res, 200, {
-                products: paginatedResult,
-                totalProduct,
-                parPage,
-                latest_product,
-                topRated_product,
-                discount_product
-            })
+            responseReturn(res, 200, { products, totalProducts, parPage });
 
         } catch (error) {
-            console.log('[API] Get Products Error:', error.message)
-            responseReturn(res, 500, { error: error.message })
+            console.log('[API] Get Products Error:', error.message);
+            responseReturn(res, 500, { error: error.message });
         }
     }
     // end method 
@@ -233,7 +265,15 @@ class homeControllers {
                 );
             }
 
-            const legacyResult = new queryProducts(filteredLegacy, req.query).ratingQuery().searchQuery().priceQuery().sortByPrice().getProducts();
+            const legacyResult = new queryProducts(filteredLegacy, req.query)
+                .ratingQuery()
+                .searchQuery()
+                .priceQuery()
+                .sizeQuery()
+                .colorQuery()
+                .genderQuery()
+                .sortByPrice()
+                .getProducts();
 
             // 2. Search Wear Products (New Catalog Style)
             let wearMatch = { status: 'active' };
@@ -259,6 +299,18 @@ class homeControllers {
                         { category: { $regex: searchValue, $options: 'i' } }
                     ]
                 });
+            }
+
+            if (req.query.size) {
+                const sizes = Array.isArray(req.query.size) ? req.query.size : req.query.size.split(',');
+                const sizeRegexes = sizes.map(s => new RegExp(`^${s}$`, 'i'));
+                andConditions.push({ 'variants.size': { $in: sizeRegexes } });
+            }
+
+            if (req.query.color) {
+                const colors = Array.isArray(req.query.color) ? req.query.color : req.query.color.split(',');
+                const colorRegexes = colors.map(c => new RegExp(`^${c}$`, 'i'));
+                andConditions.push({ 'variants.color': { $in: colorRegexes } });
             }
 
             wearMatch = andConditions.length > 1 ? { $and: andConditions } : andConditions[0];

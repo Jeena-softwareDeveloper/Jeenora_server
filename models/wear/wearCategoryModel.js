@@ -15,9 +15,6 @@ const wearCategorySchema = new mongoose.Schema({
         required: true,
         unique: true
     },
-    description: {
-        type: String
-    },
     status: {
         type: String,
         enum: ['active', 'inactive'],
@@ -32,14 +29,6 @@ const wearCategorySchema = new mongoose.Schema({
         type: Number,
         default: 0 // 0: Main, 1: Sub, 2: Leaf
     },
-    attributes: [{
-        name: { type: String, required: true }, // e.g., "Length", "Material"
-        required: { type: Boolean, default: false },
-        type: { type: String, default: 'text' }, // text, number
-        isFilter: { type: Boolean, default: false },
-        isList: { type: Boolean, default: false },
-        options: [String] // List of options if isList is true
-    }],
     additionalDetails: [{
         name: { type: String, required: true }, // e.g., "Neck Type", "Sleeve Styling"
         required: { type: Boolean, default: false },

@@ -11,7 +11,7 @@ class WearCategoryController {
             if (err) {
                 responseReturn(res, 404, { error: 'Something went wrong' });
             } else {
-                let { name, description, attributes, additionalDetails, priority } = fields;
+                let { name, additionalDetails, priority } = fields;
                 let { image } = files;
 
                 if (!name || (Array.isArray(name) && !name[0])) {
@@ -24,11 +24,9 @@ class WearCategoryController {
 
                 // Handle formidable v3+ returns arrays for fields
                 name = Array.isArray(name) ? name[0] : name;
-                description = Array.isArray(description) ? description[0] : description;
                 let status = fields.status;
                 status = Array.isArray(status) ? status[0] : status;
                 image = Array.isArray(image) ? image[0] : image;
-                attributes = Array.isArray(attributes) ? attributes[0] : attributes;
                 additionalDetails = Array.isArray(additionalDetails) ? additionalDetails[0] : additionalDetails;
 
                 const getRawField = (field) => Array.isArray(field) ? field[0] : field;
@@ -44,7 +42,6 @@ class WearCategoryController {
                     }
                 };
 
-                let parsedAttributes = safeParse(getRawField(attributes)) || [];
                 let parsedAdditionalDetails = safeParse(getRawField(additionalDetails)) || [];
 
                 let parentId = fields.parentId;
@@ -104,13 +101,11 @@ class WearCategoryController {
 
                         const category = await wearCategoryModel.create({
                             name,
-                            description,
                             slug,
                             status: status || 'active',
                             image: result.secure_url,
                             parentId: parentId,
                             level: level,
-                            attributes: parsedAttributes,
                             additionalDetails: parsedAdditionalDetails,
                             priority: parseInt(priority) || 0
                         });
@@ -171,12 +166,11 @@ class WearCategoryController {
                 responseReturn(res, 404, { error: 'Something went wrong' });
             } else {
                 const { id } = req.params;
-                let { name, description, status, attributes, additionalDetails, priority } = fields;
+                let { name, status, additionalDetails, priority } = fields;
                 let { image } = files;
 
                 // Handle formidable v3+ arrays
                 name = Array.isArray(name) ? name[0] : name;
-                description = Array.isArray(description) ? description[0] : description;
                 status = Array.isArray(status) ? status[0] : status;
                 image = Array.isArray(image) ? image[0] : image;
                 try {
@@ -187,7 +181,6 @@ class WearCategoryController {
                         parentId = null;
                     }
 
-                    let parsedAttributes = null;
                     let parsedAdditionalDetails = null;
 
                     // Robust parsing for formidable v3+ which might return fields as strings or arrays of strings
@@ -204,8 +197,9 @@ class WearCategoryController {
                         }
                     };
 
-                    parsedAttributes = safeParse(getRawField(attributes));
-                    parsedAdditionalDetails = safeParse(getRawField(additionalDetails));
+                    if (additionalDetails !== undefined) {
+                        parsedAdditionalDetails = safeParse(getRawField(additionalDetails));
+                    }
 
                     if (parentId === id) {
                         return responseReturn(res, 400, { error: 'Category cannot be its own parent' });
@@ -248,12 +242,10 @@ class WearCategoryController {
                         updateData.name = trimmedName;
                         updateData.slug = slug;
                     }
-                    if (description) updateData.description = description;
                     if (status) updateData.status = status;
                     updateData.parentId = parentId;
                     updateData.level = level;
-                    if (parsedAttributes) updateData.attributes = parsedAttributes;
-                    if (parsedAdditionalDetails) updateData.additionalDetails = parsedAdditionalDetails;
+                    if (parsedAdditionalDetails !== null) updateData.additionalDetails = parsedAdditionalDetails;
                     if (priority !== undefined && priority !== null) {
                         const pVal = Array.isArray(priority) ? priority[0] : priority;
                         if (pVal !== "" && pVal !== "null") {
@@ -318,6 +310,71 @@ class WearCategoryController {
             responseReturn(res, 200, { message: 'Wear Category Deleted Successfully' });
         } catch (error) {
             console.error('Delete Wear Category Error:', error);
+            responseReturn(res, 500, { error: 'Internal Server Error' });
+        }
+    }
+
+    get_pure_categories = async (req, res) => {
+        const { parentId, level } = req.query;
+
+        try {
+            let query = { status: 'active' };
+            if (parentId) {
+                query.parentId = parentId === 'null' ? null : parentId;
+            } else if (level !== undefined) {
+                query.level = parseInt(level);
+            }
+
+            const categories = await wearCategoryModel.find(query)
+                .select('_id name image level parentId additionalDetails')
+                .sort({ priority: 1, createdAt: -1 })
+                .lean();
+
+            // Function to recursively get inherited details
+            const getInheritedDetails = async (catId, currentDetails = []) => {
+                const cat = await wearCategoryModel.findById(catId).select('parentId additionalDetails').lean();
+                if (!cat) return currentDetails;
+                
+                let merged = [...currentDetails, ...(cat.additionalDetails || [])];
+                
+                // Remove duplicates by name (keep the deepest level's version)
+                const unique = [];
+                const seen = new Set();
+                merged.forEach(d => {
+                    if (!seen.has(d.name)) {
+                        seen.add(d.name);
+                        unique.push(d);
+                    }
+                });
+
+                if (cat.parentId) {
+                    return await getInheritedDetails(cat.parentId, unique);
+                }
+                return unique;
+            };
+
+            // Add subCount and inheritedDetails to each category
+            const categoriesWithExtras = await Promise.all(
+                categories.map(async (cat) => {
+                    const subCount = await wearCategoryModel.countDocuments({ parentId: cat._id, status: 'active' });
+                    
+                    // If it's a leaf node (subCount === 0), it's crucial to have all inherited specs for the supplier
+                    let finalDetails = cat.additionalDetails || [];
+                    if (subCount === 0) {
+                        finalDetails = await getInheritedDetails(cat._id);
+                    }
+
+                    return {
+                        ...cat,
+                        additionalDetails: finalDetails,
+                        subCount
+                    };
+                })
+            );
+
+            responseReturn(res, 200, { categories: categoriesWithExtras });
+        } catch (error) {
+            console.error('Get Pure Wear Categories Error:', error);
             responseReturn(res, 500, { error: 'Internal Server Error' });
         }
     }

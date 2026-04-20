@@ -9,6 +9,36 @@ class queryProducts {
         this.products = this.query.category ? this.products.filter(c => c.category.toLowerCase() === this.query.category.toLowerCase()) : this.products
         return this
     }
+
+    sizeQuery = () => {
+        if (this.query.size) {
+            const sizes = Array.isArray(this.query.size) ? this.query.size : this.query.size.split(',');
+            this.products = this.products.filter(p => 
+                p.variants && p.variants.some(v => sizes.some(s => v.size && v.size.toLowerCase() === s.toLowerCase()))
+            );
+        }
+        return this
+    }
+
+    colorQuery = () => {
+        if (this.query.color) {
+            const colors = Array.isArray(this.query.color) ? this.query.color : this.query.color.split(',');
+            this.products = this.products.filter(p => 
+                p.variants && p.variants.some(v => colors.some(c => v.color && v.color.toLowerCase() === c.toLowerCase()))
+            );
+        }
+        return this
+    }
+
+    genderQuery = () => {
+        if (this.query.gender && this.query.gender !== 'all') {
+            this.products = this.products.filter(p => 
+                p.gender && p.gender.toLowerCase() === this.query.gender.toLowerCase()
+            );
+        }
+        return this
+    }
+
     ratingQuery = () => {
         this.products = this.query.rating ? this.products.filter(c => parseInt(this.query.rating) <= c.rating && c.rating < parseInt(this.query.rating) + 1) : this.products
         return this

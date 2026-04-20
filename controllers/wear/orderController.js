@@ -22,8 +22,101 @@ const razorpay = process.env.RAZORPAY_KEY_ID ? new Razorpay({
     key_secret: process.env.RAZORPAY_KEY_SECRET
 }) : null;
 
+const { sendEmail } = require('../../utiles/emailSender');
+const sellerModel = require('../../models/wear/sellerModel');
+
 class orderController {
-    // Transition helper is now imported as isValidTransition
+    // Helper to send beautiful transactional emails
+    send_order_notifications = async (order, type = 'placed') => {
+        try {
+            const customer = await customerModel.findById(order.customerId || order.userId);
+            if (!customer || !customer.email) return;
+
+            let subject = '';
+            let html = '';
+
+            if (type === 'placed' || type === 'paid') {
+                subject = `Order Confirmed - #${order._id.toString().slice(-8).toUpperCase()}`;
+                html = `
+                    <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #f0f0f0; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.05);">
+                        <div style="background: linear-gradient(135deg, #7C3AED, #4F46E5); padding: 40px 20px; text-align: center;">
+                            <h1 style="color: white; margin: 0; font-size: 28px; font-weight: 800; letter-spacing: -0.5px;">ORDER CONFIRMED</h1>
+                            <p style="color: #E0E7FF; margin-top: 10px; font-weight: 500;">Thank you for shopping with Jeenora Wear</p>
+                        </div>
+                        <div style="padding: 40px; background: #ffffff;">
+                            <h2 style="color: #1F2937; margin-top: 0; font-size: 20px;">Hi ${customer.name},</h2>
+                            <p style="color: #4B5563; line-height: 1.6;">Your order <b>#${order._id.toString().slice(-8).toUpperCase()}</b> has been successfully placed and is being processed by our vendors.</p>
+                            
+                            <div style="margin: 30px 0; padding: 25px; background: #F9FAFB; border-radius: 12px; border: 1px dashed #E5E7EB;">
+                                <div style="display: flex; justify-content: space-between; margin-bottom: 15px;">
+                                    <span style="color: #6B7280; font-size: 14px;">Total Amount:</span>
+                                    <span style="color: #111827; font-weight: 800; font-size: 18px;">₹${order.price}</span>
+                                </div>
+                                <div style="display: flex; justify-content: space-between;">
+                                    <span style="color: #6B7280; font-size: 14px;">Status:</span>
+                                    <span style="color: #059669; font-weight: 700; text-transform: uppercase; font-size: 12px; letter-spacing: 1px;">${type === 'paid' ? 'Paid & Confirmed' : 'Payment Pending'}</span>
+                                </div>
+                            </div>
+
+                            <p style="color: #4B5563; line-height: 1.6;">We'll notify you once your items are shipped.</p>
+                            
+                            <a href="https://jeenora.com/orders" style="display: inline-block; margin-top: 20px; background: #7C3AED; color: white; padding: 14px 28px; border-radius: 10px; text-decoration: none; font-weight: 800; font-size: 14px; text-transform: uppercase; letter-spacing: 1px;">Track My Order</a>
+                        </div>
+                        <div style="background: #F9FAFB; padding: 25px; text-align: center; border-top: 1px solid #F3F4F6;">
+                            <p style="margin: 0; color: #9CA3AF; font-size: 12px;">&copy; ${new Date().getFullYear()} Jeenora Enterprise. Built for Fashion.</p>
+                        </div>
+                    </div>
+                `;
+            } else if (type === 'status_update') {
+                subject = `Your Order is ${order.delivery_status.toUpperCase()} - #${order._id.toString().slice(-8).toUpperCase()}`;
+                const statusColor = order.delivery_status === 'shipped' ? '#3B82F6' : order.delivery_status === 'delivered' ? '#10B981' : '#7C3AED';
+                html = `
+                    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #eee; border-radius: 12px; overflow: hidden;">
+                        <div style="background: ${statusColor}; padding: 30px; text-align: center;">
+                            <h1 style="color: white; margin: 0; font-size: 24px;">ORDER UPDATE</h1>
+                        </div>
+                        <div style="padding: 40px;">
+                            <p style="font-size: 16px; color: #333;">Great news! Your order status has been updated to:</p>
+                            <div style="margin: 20px 0; font-size: 32px; font-weight: 900; color: ${statusColor}; text-align: center; text-transform: uppercase;">
+                                ${order.delivery_status}
+                            </div>
+                            <p style="color: #666; font-size: 14px;">Order ID: #${order._id.toString().slice(-8).toUpperCase()}</p>
+                        </div>
+                    </div>
+                `;
+            }
+
+            await sendEmail(customer.email, subject, '', html);
+
+            // Notify Sellers if first time placed
+            if (type === 'placed' || type === 'paid') {
+                const subOrders = await authOrderModel.find({ orderId: order._id });
+                for (const sub of subOrders) {
+                    const seller = await sellerModel.findById(sub.sellerId);
+                    if (seller && seller.email) {
+                        const sSubject = `New Order Received! #${order._id.toString().slice(-8).toUpperCase()}`;
+                        const sHtml = `
+                            <div style="font-family: Arial, sans-serif; max-width: 600px; border: 1px solid #eee; border-radius: 12px; overflow: hidden;">
+                                <div style="background: #111827; padding: 25px; text-align: center;">
+                                    <h1 style="color: white; margin: 0; font-size: 20px;">NEW INCOMING ORDER</h1>
+                                </div>
+                                <div style="padding: 30px;">
+                                    <h2 style="color: #333;">Action Required!</h2>
+                                    <p>You have received a new order for ${sub.products.length} items.</p>
+                                    <p style="font-size: 18px; font-weight: bold;">Order Value: ₹${sub.price}</p>
+                                    <a href="https://dashboard.jeenora.com/supplier-orders" style="display:inline-block; margin-top: 20px; background: #E11955; color: white; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: bold;">PROCESS ORDER</a>
+                                </div>
+                            </div>
+                        `;
+                        await sendEmail(seller.email, sSubject, '', sHtml);
+                    }
+                }
+            }
+
+        } catch (err) {
+            console.log('Notification Error:', err.message);
+        }
+    }
 
     paymentCheck = async (id) => {
         try {
@@ -177,7 +270,10 @@ class orderController {
             for (let k = 0; k < cardId.length; k++) {
                 await cardModel.findByIdAndDelete(cardId[k])
             }
-            responseReturn(res, 200, { message: "Order Placed Success", orderId: order.id })
+            // Start Notification (Async)
+            this.send_order_notifications(order, order.payment_status === 'paid' ? 'paid' : 'placed');
+
+            responseReturn(res, 201, { message: "Order placed successfully", orderId: order._id });
 
         } catch (error) {
 
@@ -519,6 +615,16 @@ class orderController {
 
             // SYNC UPWARDS TO MAIN ORDER
             await this.sync_main_order_status(order.orderId);
+            await order.save();
+
+            // Trigger notification if status is relevant for customer
+            if (['confirmed', 'shipped', 'delivered'].includes(status)) {
+                const mainOrder = await customerOrder.findById(order.orderId);
+                if (mainOrder) {
+                    mainOrder.delivery_status = status; // Mock update for template
+                    this.send_order_notifications(mainOrder, 'status_update');
+                }
+            }
 
             responseReturn(res, 200, { message: 'order status updated successfully' })
         } catch (error) {
@@ -663,6 +769,9 @@ class orderController {
                     year: splitTime[2]
                 });
             }
+
+            // Notify Success
+            this.send_order_notifications(order, 'paid');
 
             responseReturn(res, 200, { message: 'Payment verified successfully!' });
 

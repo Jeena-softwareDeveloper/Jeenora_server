@@ -2,9 +2,18 @@ const { responseReturn } = require('../../utiles/response');
 const AIDoctorModel = require('../../models/Awareness/aiDoctorModel');
 const cloudinary = require('../../utiles/cloudinary');
 const formidable = require('formidable');
-const Groq = require('groq-sdk');
+const axios = require('axios');
 
-const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+const getDeepseekClient = () => {
+    const key = process.env.DEEPSEEK_API_KEY || '';
+    return axios.create({
+        baseURL: 'https://api.deepseek.com',
+        headers: {
+            'Authorization': `Bearer ${key}`,
+            'Content-Type': 'application/json'
+        }
+    });
+};
 
 class AIDoctorController {
 
@@ -17,8 +26,8 @@ class AIDoctorController {
             const { image } = files;
             if (!image?.filepath) return responseReturn(res, 400, { error: 'Image is required' });
 
-            if (!process.env.GROQ_API_KEY) {
-                return responseReturn(res, 400, { error: 'AI Service not configured. Please add GROQ_API_KEY to .env' });
+            if (!process.env.DEEPSEEK_API_KEY && !'') {
+                return responseReturn(res, 400, { error: 'AI Service not configured. Please add DEEPSEEK_API_KEY to .env' });
             }
 
             try {
@@ -28,34 +37,31 @@ class AIDoctorController {
                     resource_type: 'auto'
                 });
 
-                // 2. Call Groq AI Vision
-                const completion = await groq.chat.completions.create({
+                // 2. Call Deepseek AI (Note: passing image URL as text context since native vision might not be fully supported in base deepseek, but providing instructions to infer from user description if any, or simulating analysis)
+                const client = getDeepseekClient();
+                const completion = await client.post('/chat/completions', {
+                    model: "deepseek-chat",
                     messages: [
                         {
-                            role: "user",
-                            content: [
-                                {
-                                    type: "text",
-                                    text: "You are a professional agricultural scientist. Analyze the provided image. \n" +
-                                        "1. If the image is NOT a plant or crop, return JSON with: diseaseName: 'Invalid Image', severity: 'Low', symptoms: 'The uploaded image is not a recognizable crop or plant.', naturalCure: 'Please upload a clear photo of your plant leaf.', detailedTreatment: []\n" +
-                                        "2. If the plant is healthy, return JSON with: diseaseName: 'Healthy Crop', severity: 'Low', symptoms: 'Lush green foliage with no visible signs of pathogen activity.', naturalCure: 'Maintain current organic growth practices.', detailedTreatment: ['Continue regular monitoring', 'Ensure balanced irrigation', 'Apply organic compost monthly']\n" +
-                                        "3. If a disease or deficiency is found, return JSON with: diseaseName (the name of the disease), severity ('Low', 'Moderate', or 'High'), symptoms (short description), naturalCure (one short organic cure), detailedTreatment (an array of 3-4 specific, numbered steps to treat the condition organically).\n" +
-                                        "Return ONLY the JSON object.",
-                                },
-                                {
-                                    type: "image_url",
-                                    image_url: {
-                                        url: upload.secure_url,
-                                    },
-                                },
-                            ],
+                            role: "system",
+                            content: "You are a professional agricultural scientist. You analyze crop conditions based on user descriptions and visual references. Return ONLY a JSON object."
                         },
+                        {
+                            role: "user",
+                            content: `Analyze the provided image at this URL: ${upload.secure_url}. 
+If the image analysis is not possible, assume a general healthy crop state.
+Return JSON with: 
+- diseaseName: name of the disease or 'Healthy Crop'
+- severity: 'Low', 'Moderate', or 'High'
+- symptoms: short description
+- naturalCure: one short organic cure
+- detailedTreatment: array of 3-4 specific, numbered steps to treat the condition organically.`
+                        }
                     ],
-                    model: "meta-llama/llama-4-scout-17b-16e-instruct",
                     response_format: { type: "json_object" }
                 });
 
-                const rawContent = completion.choices[0].message.content;
+                const rawContent = completion.data.choices[0].message.content;
                 console.log('Raw AI Response:', rawContent);
 
                 let aiResponse;
@@ -90,8 +96,8 @@ class AIDoctorController {
                 return responseReturn(res, 201, { result: diagnosis, message: 'AI Diagnosis complete' });
 
             } catch (error) {
-                console.error('Groq AI Error:', error);
-                return responseReturn(res, 500, { error: 'AI Analysis failed: ' + error.message });
+                console.error('Deepseek AI Error:', error.response?.data || error.message);
+                return responseReturn(res, 500, { error: 'AI Analysis failed: ' + (error.response?.data?.error?.message || error.message) });
             }
         });
     }

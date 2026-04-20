@@ -24,8 +24,13 @@ router.get('/returns', authMiddleware, supplierController.get_supplier_returns);
 
 // Catalog Management (Meesho Flow)
 const wearCatalogController = require('../../controllers/wear/wearCatalogController');
+const aiMasterController = require('../../controllers/wear/aiMasterController');
 router.get('/catalog/list', wearCatalogController.get_public_catalogs); // Public
 router.post('/catalog/add', authMiddleware, wearCatalogController.add_catalog);
+router.post('/ai-recommend', authMiddleware, aiMasterController.generate_ai_recommendation);
+router.post('/ai-advise-price', authMiddleware, aiMasterController.advise_price);
+router.post('/ai-seo-tags', authMiddleware, aiMasterController.generate_seo_tags);
+router.post('/ai-smart-reply', authMiddleware, aiMasterController.smart_review_reply);
 router.get('/catalog/my-list', authMiddleware, wearCatalogController.get_my_catalogs);
 router.get('/catalog/manual-list', authMiddleware, wearCatalogController.get_supplier_catalogs); // NEW: Dashboard specific list
 router.put('/catalog/update/:productId', authMiddleware, wearCatalogController.update_catalog);

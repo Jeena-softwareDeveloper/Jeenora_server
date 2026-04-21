@@ -84,7 +84,10 @@ router.use('/', require('./wear/productOfferRoutes'));
 router.get('/wear/buyers', authMiddleware, adminWearController.get_wear_buyers);
 
 const homeControllers = require('../controllers/wear/homeControllers');
-router.get('/config/initial-data', require('../controllers/wear/configController').get_initial_data);
+const configController = require('../controllers/wear/configController');
+router.get('/config/initial-data', configController.get_initial_data);
+router.get('/config/nav-menu/:platform', configController.get_nav_menu);
+router.post('/config/nav-menu/update', configController.update_nav_menu);
 router.get('/products/:slug', homeControllers.product_details); // Old Detail Path
 router.get('/get-products', homeControllers.get_products); // Old Home Path
 router.use('/', require('./wear/sellerRoutes'));

@@ -16,6 +16,7 @@ const customerModel = require('../../models/wear/customerModel')
 const wearAuditLogModel = require('../../models/wear/wearAuditLogModel')
 const Razorpay = require('razorpay');
 const crypto = require('crypto');
+const WearNotification = require('../../models/wear/wearNotificationModel');
 
 const razorpay = process.env.RAZORPAY_KEY_ID ? new Razorpay({
     key_id: process.env.RAZORPAY_KEY_ID,
@@ -93,6 +94,21 @@ class orderController {
                 const subOrders = await authOrderModel.find({ orderId: order._id });
                 for (const sub of subOrders) {
                     const seller = await sellerModel.findById(sub.sellerId);
+                    
+                    // 1. Create In-App Dashboard Notification for the vendor
+                    // Note: sub.sellerId references the Supplier. We need the User ID to notify them.
+                    const supplier = await require('../../models/wear/supplierModel').findById(sub.sellerId);
+                    if (supplier && supplier.user) {
+                        await WearNotification.create({
+                            userId: supplier.user,
+                            title: 'New Multi-Vendor Order',
+                            message: `You have a new order (#${order._id.toString().slice(-8).toUpperCase()}) for ₹${sub.price}. Please process it.`,
+                            type: 'order',
+                            metadata: { orderId: sub._id, mainOrderId: order._id }
+                        });
+                    }
+
+                    // 2. Send Email Notification
                     if (seller && seller.email) {
                         const sSubject = `New Order Received! #${order._id.toString().slice(-8).toUpperCase()}`;
                         const sHtml = `
@@ -164,7 +180,8 @@ class orderController {
         for (let i = 0; i < products.length; i++) {
             const pro = products[i].products
             for (let j = 0; j < pro.length; j++) {
-                const tempCusPro = pro[j].productInfo;
+                // Use spread to avoid polluting original product info references
+                const tempCusPro = { ...pro[j].productInfo }; 
                 tempCusPro.quantity = pro[j].quantity
                 customerOrderProduct.push(tempCusPro)
                 if (pro[j]._id) {
@@ -231,7 +248,7 @@ class orderController {
 
                 let storePor = [];
                 for (let j = 0; j < pro.length; j++) {
-                    const tempPro = pro[j].productInfo;
+                    const tempPro = { ...pro[j].productInfo };
                     tempPro.quantity = pro[j].quantity;
                     storePor.push(tempPro);
                 }
@@ -747,7 +764,8 @@ class orderController {
 
             await authOrderModel.updateMany({ orderId: new ObjectId(orderId) }, {
                 payment_status: 'paid',
-                delivery_status: 'confirmed'
+                delivery_status: 'confirmed',
+                paymentId: razorpay_payment_id
             });
 
             // 4. SETTLE WALLETS BASED ON SNAPSHOTS

@@ -20,7 +20,8 @@ const requiredEnvVars = [
   'EMAIL_PASSWORD',
   'RAZORPAY_KEY_ID',
   'RAZORPAY_KEY_SECRET',
-  'STRIPE_KEY'
+  'STRIPE_KEY',
+  'DEEPSEEK_API_KEY'
 ];
 
 const missingVars = requiredEnvVars.filter(varName => !process.env[varName]);

@@ -20,4 +20,10 @@ router.post('/admin/ai/marketing-seo', authMiddleware, aiMasterController.meta_a
 router.get('/admin/ai/inventory-forecast', authMiddleware, aiMasterController.inventory_forecaster)
 router.get('/admin/ai/logs', authMiddleware, aiMasterController.get_ai_logs) // AI Usage Dashboard
 
+// Supplier AI Endpoints
+router.post('/supplier/ai-observe-image', authMiddleware, aiMasterController.ai_observe_image)
+router.post('/supplier/ai-recommend', authMiddleware, aiMasterController.generate_ai_recommendation)
+router.post('/supplier/ai-advise-price', authMiddleware, aiMasterController.advise_price)
+router.post('/supplier/ai-seo-tags', authMiddleware, aiMasterController.generate_seo_tags)
+
 module.exports = router

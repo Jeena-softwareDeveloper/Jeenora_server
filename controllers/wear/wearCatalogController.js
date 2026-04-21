@@ -193,7 +193,13 @@ class wearCatalogController {
                 { $sort: { createdAt: -1 } },
                 {
                     $group: {
-                        _id: "$catalogId",
+                        _id: { 
+                            $cond: { 
+                                if: { $and: [{ $ne: ["$catalogId", null] }, { $ne: ["$catalogId", ""] }] }, 
+                                then: "$catalogId", 
+                                else: "$_id" 
+                            } 
+                        },
                         mainProduct: { $first: "$$ROOT" }, // Get the most recent or primary
                         allProducts: { $push: "$$ROOT" },
                         count: { $sum: 1 },
@@ -209,7 +215,7 @@ class wearCatalogController {
             const catalogs = groupedCatalogs.map(g => ({
                 ...g.mainProduct,
                 _id: g.mainProduct._id, // Keep the ID of the main product for reference
-                catalogId: g._id,
+                catalogId: g.mainProduct.catalogId || g._id,
                 similarProductsCount: g.count,
                 similarProducts: g.allProducts
             }));
@@ -397,7 +403,13 @@ class wearCatalogController {
                 { $sort: { createdAt: -1 } },
                 {
                     $group: {
-                        _id: "$catalogId",
+                        _id: { 
+                            $cond: { 
+                                if: { $and: [{ $ne: ["$catalogId", null] }, { $ne: ["$catalogId", ""] }] }, 
+                                then: "$catalogId", 
+                                else: "$_id" 
+                            } 
+                        },
                         mainProduct: { $first: "$$ROOT" },
                         allProducts: { $push: "$$ROOT" },
                         count: { $sum: 1 }
@@ -409,7 +421,7 @@ class wearCatalogController {
             const wearCatalogs = groupedCatalogs.map(g => ({
                 ...g.mainProduct,
                 _id: g.mainProduct._id,
-                catalogId: g._id,
+                catalogId: g.mainProduct.catalogId || g._id, // Assign accurate catalogId
                 similarProductsCount: g.count,
                 similarProducts: g.allProducts
             }));
@@ -697,6 +709,129 @@ class wearCatalogController {
 
             responseReturn(res, 200, { success: true, message: 'Catalog deleted successfully' });
         } catch (error) {
+            responseReturn(res, 500, { error: error.message });
+        }
+    }
+    // Supplier: Get a specific catalog by catalogId (for edit pre-fill)
+    get_catalog_by_id = async (req, res) => {
+        const { catalogId } = req.params;
+        const { id } = req;
+        try {
+            const supplier = await Supplier.findOne({ user: id });
+            if (!supplier) return responseReturn(res, 404, { error: 'Supplier not found' });
+
+            let products = await WearProduct.find({
+                catalogId,
+                sellerId: supplier._id
+            }).lean();
+
+            if (!products || products.length === 0) {
+                // Fallback: Check if catalogId passed was actually an _id
+                if (catalogId.length === 24) {
+                    const singleProduct = await WearProduct.findOne({
+                        _id: catalogId,
+                        sellerId: supplier._id
+                    }).lean();
+                    if (singleProduct) {
+                        products = [singleProduct];
+                    }
+                }
+            }
+
+            if (!products || products.length === 0) {
+                return responseReturn(res, 403, { error: 'Catalog not found or not authorized' });
+            }
+
+            // Return the same structure myCatalogs returns (primary + similarProducts)
+            const primary = products.find(p => p.isPrimary) || products[0];
+            const catalog = {
+                ...primary,
+                catalogId,
+                similarProducts: products,
+                similarProductsCount: products.length
+            };
+
+            responseReturn(res, 200, { success: true, catalog });
+        } catch (error) {
+            console.error('Get Catalog By ID Error:', error);
+            responseReturn(res, 500, { error: error.message });
+        }
+    }
+
+    // Supplier: Edit their own catalog (resets status to 'pending' for re-review)
+    supplier_edit_catalog = async (req, res) => {
+        const { catalogId } = req.params;
+        const { id } = req;
+        const { products: updatedProducts, catalogInfo: info } = req.body;
+
+        try {
+            const supplier = await Supplier.findOne({ user: id });
+            if (!supplier) return responseReturn(res, 404, { error: 'Supplier not found' });
+
+            // Verify ownership
+            let ownProducts = await WearProduct.find({ catalogId, sellerId: supplier._id });
+            
+            // Fallback for missing/legacy catalogId
+            if ((!ownProducts || ownProducts.length === 0) && catalogId.length === 24) {
+                const singleProduct = await WearProduct.findOne({ _id: catalogId, sellerId: supplier._id });
+                if (singleProduct) ownProducts = [singleProduct];
+            }
+
+            if (!ownProducts || ownProducts.length === 0) {
+                return responseReturn(res, 403, { error: 'Not authorized or catalog not found' });
+            }
+
+            const saved = [];
+
+            for (const item of (updatedProducts || [])) {
+                // Process any new base64 images
+                const processedImages = [];
+                if (item.images && Array.isArray(item.images)) {
+                    for (const img of item.images) {
+                        if (img.startsWith('data:image')) {
+                            const url = await this.uploadImage(img);
+                            if (url) processedImages.push(url);
+                        } else {
+                            processedImages.push(img);
+                        }
+                    }
+                }
+
+                const updatePayload = {
+                    productName: info?.productName ? (updatedProducts.length > 1 ? `${info.productName} (${item.color})` : info.productName) : item.productName,
+                    description: item.description || '',
+                    category: info?.category || item.category,
+                    subCategory: info?.subCategory || item.subCategory,
+                    images: processedImages.length > 0 ? processedImages : item.images,
+                    hsnCode: info?.hsnCode,
+                    gstPercentage: info?.gstPercentage ? parseInt(info.gstPercentage) : undefined,
+                    weight: info?.weight ? parseInt(info.weight) : undefined,
+                    dimensions: info?.dimensions,
+                    additionalDetails: item.highlights || item.additionalDetails,
+                    variants: (item.variants || []).map(v => ({
+                        ...v,
+                        color: item.color,
+                        listingPrice: parseFloat(v.listingPrice),
+                        mrp: parseFloat(v.mrp),
+                        stock: parseInt(v.stock)
+                    })),
+                    status: 'pending', // Reset to pending for re-review
+                    updatedAt: new Date()
+                };
+
+                if (item._id && mongoose.Types.ObjectId.isValid(item._id)) {
+                    const updated = await WearProduct.findByIdAndUpdate(item._id, updatePayload, { new: true });
+                    if (updated) saved.push(updated);
+                }
+            }
+
+            responseReturn(res, 200, {
+                success: true,
+                message: 'Catalog updated and submitted for re-review. It will be visible once approved.',
+                data: saved
+            });
+        } catch (error) {
+            console.error('Supplier Edit Catalog Error:', error);
             responseReturn(res, 500, { error: error.message });
         }
     }

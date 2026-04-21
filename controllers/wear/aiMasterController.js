@@ -446,6 +446,187 @@ RETURN ONLY JSON:
             return responseReturn(res, 500, { error: 'Recommendation failed' });
         }
     }
+
+    /* ========================================================
+       4. EMOTION-AWARE NUDGE ENGINE (2030-level UX)
+       ======================================================== */
+
+    /**
+     * Detects user hesitation signals and returns a contextual AI nudge.
+     * Called from frontend when: user lingers >30s, removes from cart, or browses price range repeatedly.
+     * 
+     * Signal Types:
+     *  - 'long_view'       → User staring at product page > 30 seconds
+     *  - 'cart_remove'     → User added then removed from cart
+     *  - 'price_hover'     → User hovering price range filter repeatedly
+     *  - 'repeat_visit'    → Visited same product 2+ times without buying
+     */
+    emotion_aware_nudge = async (req, res) => {
+        try {
+            const { signal, productName, category, price, userId } = req.body;
+
+            if (!signal || !productName) {
+                return responseReturn(res, 400, { error: 'signal and productName are required' });
+            }
+
+            // Fetch recent behavior to understand user context
+            let behaviorContext = '';
+            if (userId) {
+                try {
+                    const recentBehavior = await userBehaviorModel.find({ userId })
+                        .sort({ timestamp: -1 })
+                        .limit(3)
+                        .lean();
+                    const recentCategories = [...new Set(recentBehavior.map(b => b.category).filter(Boolean))];
+                    if (recentCategories.length > 0) {
+                        behaviorContext = `User has also shown interest in: ${recentCategories.join(', ')}.`;
+                    }
+                } catch (behaviorErr) {
+                    // Non-critical, continue without behavior context
+                }
+            }
+
+            // Build signal-specific prompt
+            const signalDescriptions = {
+                'long_view':    `User has been viewing "${productName}" for over 30 seconds without adding to cart.`,
+                'cart_remove':  `User added "${productName}" to cart but then removed it — possibly hesitating on price or fit.`,
+                'price_hover':  `User is repeatedly using the price filter while browsing "${category}" — budget-conscious shopper.`,
+                'repeat_visit': `User has visited "${productName}" (₹${price}) more than once without purchasing.`
+            };
+
+            const signalDesc = signalDescriptions[signal] || `User is showing hesitation signals for "${productName}".`;
+
+            const prompt = `TASK: You are Jeeni, a friendly Jeenora shopping assistant. 
+Signal: ${signalDesc}
+${behaviorContext}
+Product Price: ₹${price || 'unknown'}. Category: ${category || 'fashion'}.
+
+Generate a short, warm, human-like nudge (1-2 sentences max) to re-engage this customer. 
+Be natural — not salesy. You can mention: size guide, easy returns, limited stock, or a matching item.
+
+DO NOT use generic phrases like "Don't miss out!" or "Act now!".
+
+RETURN ONLY JSON:
+{
+  "nudge": "Your warm, natural 1-2 sentence nudge here",
+  "nudgeType": "one of: size_help | return_policy | social_proof | stock_alert | style_tip",
+  "ctaText": "Short button text like: 'Check Size Guide' or 'View Similar'"
+}`;
+
+            const aiResponse = await this.call_deepseek_conversational(prompt);
+
+            await this.log_ai_action(
+                userId || 'Guest',
+                'customer',
+                'Emotion Aware Nudge',
+                `Signal: ${signal} | Product: ${productName}`,
+                aiResponse
+            );
+
+            return responseReturn(res, 200, {
+                nudge: aiResponse.nudge,
+                nudgeType: aiResponse.nudgeType,
+                ctaText: aiResponse.ctaText
+            });
+
+        } catch (error) {
+            console.error('[NUDGE_ERROR]', error.message);
+            return responseReturn(res, 500, { error: 'Nudge generation failed' });
+        }
+    }
+
+    /* ========================================================
+       5. PREDICTIVE RESTOCK ALERT (Cron-Powered, 2030 Supply Chain)
+       ======================================================== */
+
+    /**
+     * Called by node-cron daily at 9 AM IST.
+     * Scans inventory, uses DeepSeek to predict critical restocks,
+     * and saves notifications to supplier's WearNotification feed.
+     */
+    run_predictive_restock_cron = async () => {
+        const wearNotificationModel = require('../../models/wear/wearNotificationModel');
+        const supplierModel = require('../../models/wear/supplierModel');
+
+        console.log('[CRON] 🤖 Running Predictive Restock AI...');
+
+        try {
+            // 1. Find LOW stock products (< 15 units) grouped by supplier
+            const lowStockProducts = await wearProductModel.find({ stock: { $lt: 15 }, status: 'active' })
+                .select('productName stock category supplierId price brand')
+                .lean();
+
+            if (lowStockProducts.length === 0) {
+                console.log('[CRON] ✅ All products sufficiently stocked. No alerts needed.');
+                return;
+            }
+
+            // 2. Group by supplierId
+            const bySupplier = {};
+            lowStockProducts.forEach(p => {
+                const sid = p.supplierId?.toString() || 'unknown';
+                if (!bySupplier[sid]) bySupplier[sid] = [];
+                bySupplier[sid].push(p);
+            });
+
+            // 3. For each supplier, run AI forecast + create notification
+            for (const [supplierId, products] of Object.entries(bySupplier)) {
+                if (supplierId === 'unknown') continue;
+
+                const productSummary = products.map(p =>
+                    `${p.productName} (Stock: ${p.stock}, Category: ${p.category})`
+                ).join(' | ');
+
+                const prompt = `TASK: You are a Supply Chain AI for Indian fashion ecommerce Jeenora.
+Supplier has these LOW STOCK items: [${productSummary}]
+Today's date context: ${new Date().toLocaleDateString('en-IN', { month: 'long', day: 'numeric' })}.
+
+Based on upcoming Indian seasons, festivals, and fashion trends — give a short, actionable restock recommendation.
+
+RETURN ONLY JSON:
+{
+  "alertTitle": "Short alert title (max 8 words)",
+  "alertMessage": "2-3 sentence friendly advisory explaining which products to restock and why (mention season/festival if relevant)",
+  "urgencyLevel": "high | medium | low"
+}`;
+
+                let aiResponse;
+                try {
+                    aiResponse = await this.call_deepseek_with_guardrail(prompt);
+                } catch (aiErr) {
+                    console.error(`[CRON] AI failed for supplier ${supplierId}:`, aiErr.message);
+                    continue;
+                }
+
+                // 4. Save notification to supplier's notification feed
+                try {
+                    await wearNotificationModel.create({
+                        userId: supplierId,
+                        title: aiResponse.alertTitle || '⚠️ Low Stock Alert',
+                        message: aiResponse.alertMessage || `You have ${products.length} products running low on stock.`,
+                        type: 'system',
+                        category: 'Inventory',
+                        metadata: {
+                            urgencyLevel: aiResponse.urgencyLevel || 'medium',
+                            productCount: products.length,
+                            products: products.map(p => ({ name: p.productName, stock: p.stock }))
+                        }
+                    });
+                    console.log(`[CRON] ✅ Restock alert saved for supplier: ${supplierId} (${products.length} products)`);
+                } catch (saveErr) {
+                    console.error(`[CRON] Failed to save notification for ${supplierId}:`, saveErr.message);
+                }
+
+                await this.log_ai_action(supplierId, 'supplier', 'Predictive Restock Cron', productSummary, aiResponse);
+            }
+
+            console.log(`[CRON] ✅ Predictive Restock scan complete. Processed ${Object.keys(bySupplier).length} suppliers.`);
+
+        } catch (error) {
+            console.error('[CRON] ❌ Predictive Restock Cron failed:', error.message);
+        }
+    }
 }
 
 module.exports = new AIMasterController();
+

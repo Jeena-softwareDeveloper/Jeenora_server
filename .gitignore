@@ -19,7 +19,6 @@ yarn-error.log*
 debug.log
 error.log
 wear_debug.log
-
 node_modules/
 dist/
 build/
@@ -28,3 +27,4 @@ yarn-debug.log*
 yarn-error.log*
 .DS_Store
 *.log
+.env

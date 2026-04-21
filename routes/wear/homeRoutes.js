@@ -28,4 +28,11 @@ router.post('/customer/ai/support', authMiddleware, aiMasterController.ai_custom
 router.post('/customer/ai/track-behavior', aiMasterController.track_behavior);
 router.get('/customer/ai/personalized-recommendations', aiMasterController.get_personalized_recommendations);
 
+// 🧠 Emotion-Aware Nudge — detects hesitation & sends contextual AI message
+// Signals: 'long_view' | 'cart_remove' | 'price_hover' | 'repeat_visit'
+router.post('/customer/ai/nudge', aiMasterController.emotion_aware_nudge);
+
+// 🌍 Hyper-Local Social Proof — city-wise purchase counts for product cards
+router.post('/products/local-social-proof', homeControllers.get_local_social_proof);
+
 module.exports = router

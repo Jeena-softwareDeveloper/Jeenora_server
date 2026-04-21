@@ -202,6 +202,27 @@ setInterval(() => {
   userController.cleanupInactiveUsers().catch(console.error);
 }, 5 * 60 * 1000); // 5 minutes is plenty for background cleanup
 
+// ============================================================
+// 🤖 AI CRON JOBS — Predictive Intelligence (2030-level)
+// ============================================================
+const cron = require('node-cron');
+const aiMasterController = require('./controllers/wear/aiMasterController');
+
+// 🔔 Predictive Restock Alert — runs every day at 9:00 AM IST (UTC+5:30 = 3:30 UTC)
+// Scans low-stock products, uses DeepSeek AI to generate supplier notifications
+cron.schedule('30 3 * * *', async () => {
+  try {
+    console.log('[CRON] ⏰ 9:00 AM IST — Starting Predictive Restock AI Job...');
+    await aiMasterController.run_predictive_restock_cron();
+  } catch (error) {
+    console.error('[CRON] ❌ Restock cron crashed:', error.message);
+  }
+}, {
+  timezone: 'Asia/Kolkata'
+});
+
+console.log('[CRON] ✅ Predictive Restock Cron registered — fires daily at 9:00 AM IST');
+
 // --- API ROUTES ---
 app.use("/api", require("./routes/apiRoutes"));
 app.use("/api/v1", require("./routes/apiRoutes")); // Legacy/Versioned Compatibility

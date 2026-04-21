@@ -503,6 +503,76 @@ class homeControllers {
     // end method 
 
 
+    /**
+     * 🌍 HYPER-LOCAL SOCIAL PROOF
+     * Returns city-specific purchase counts for a list of products.
+     * Frontend uses this to display: "23 people from Chennai bought this this week"
+     * 
+     * POST /api/wear/home/products/local-social-proof
+     * Body: { productIds: [...], city: "Chennai" }
+     */
+    get_local_social_proof = async (req, res) => {
+        const { productIds, city } = req.body;
+        try {
+            if (!productIds || !Array.isArray(productIds)) {
+                return responseReturn(res, 200, { localProof: {} });
+            }
+
+            const sevenDaysAgo = moment().subtract(7, 'days').toDate();
+
+            // Build match — if city is provided, filter by shipping city
+            const matchStage = {
+                createdAt: { $gte: sevenDaysAgo },
+                delivery_status: { $ne: 'cancelled' }
+            };
+            if (city && city.trim()) {
+                // Case-insensitive city match on shippingInfo
+                matchStage['shippingInfo.city'] = { $regex: new RegExp(`^${city.trim()}$`, 'i') };
+            }
+
+            const orderCounts = await customerOrderModel.aggregate([
+                { $match: matchStage },
+                { $unwind: '$products' },
+                {
+                    $match: {
+                        'products._id': { $in: productIds.map(id => id.toString()) }
+                    }
+                },
+                {
+                    $group: {
+                        _id: '$products._id',
+                        count: { $sum: 1 },
+                        // Collect up to 3 distinct cities for fallback display
+                        cities: { $addToSet: '$shippingInfo.city' }
+                    }
+                }
+            ]);
+
+            // Format response: { productId: { count: 12, city: "Chennai", label: "12 people from Chennai bought this" } }
+            const localProof = {};
+            orderCounts.forEach(entry => {
+                const displayCity = city || (entry.cities?.[0] || 'your area');
+                const count = entry.count || 0;
+                if (count > 0) {
+                    localProof[entry._id] = {
+                        count,
+                        city: displayCity,
+                        label: count === 1
+                            ? `1 person from ${displayCity} bought this week`
+                            : `${count} people from ${displayCity} bought this week`
+                    };
+                }
+            });
+
+            return responseReturn(res, 200, { localProof });
+
+        } catch (error) {
+            console.log('[LOCAL_SOCIAL_PROOF_ERROR]', error.message);
+            return responseReturn(res, 200, { localProof: {} });
+        }
+    }
+    // end method
+
     submit_review = async (req, res) => {
         const { productId, rating, review, name } = req.body
         try {

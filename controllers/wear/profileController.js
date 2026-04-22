@@ -81,25 +81,75 @@ class profileController {
         }
     }
 
-    // Get real bank details from Supplier model
+    // Get bank details from Supplier or User model
     get_bank_details = async (req, res) => {
         const { id } = req;
         try {
+            // Check Supplier first
             const Supplier = require('../../models/wear/supplierModel');
             const supplier = await Supplier.findOne({ user: id }).select('bankDetails');
 
             if (supplier && supplier.bankDetails) {
                 return responseReturn(res, 200, {
                     bankDetails: {
-                        accountName: supplier.bankDetails.accountHolderName,
+                        accountHolderName: supplier.bankDetails.accountHolderName,
                         accountNumber: supplier.bankDetails.accountNumber,
                         ifsc: supplier.bankDetails.ifscCode,
-                        bankName: supplier.bankDetails.bankName
+                        bankName: supplier.bankDetails.bankName,
+                        branchName: supplier.bankDetails.branchName,
+                        isVerified: true
                     }
                 });
             }
 
-            responseReturn(res, 200, { bankDetails: null, message: 'No bank details found. Please complete supplier registration.' });
+            // Check User/Buyer
+            let user = await customerModel.findById(id).select('+bankDetails');
+            if (!user) user = await WearBuyer.findById(id).select('+bankDetails');
+
+            if (user && user.bankDetails && user.bankDetails.accountNumber) {
+                return responseReturn(res, 200, {
+                    bankDetails: {
+                        accountHolderName: user.bankDetails.accountHolderName,
+                        accountNumber: user.bankDetails.accountNumber,
+                        ifsc: user.bankDetails.ifscCode,
+                        bankName: user.bankDetails.bankName,
+                        branchName: user.bankDetails.branchName,
+                        isVerified: user.bankDetails.isVerified
+                    }
+                });
+            }
+
+            responseReturn(res, 200, { bankDetails: null, message: 'No bank details found.' });
+        } catch (error) {
+            responseReturn(res, 500, { error: error.message });
+        }
+    }
+
+    // Update bank details (for refunds/payouts)
+    update_bank_details = async (req, res) => {
+        const { id } = req;
+        const { bankDetails } = req.body;
+        try {
+            let user = await customerModel.findByIdAndUpdate(
+                id,
+                { bankDetails: { ...bankDetails, isVerified: true } },
+                { new: true }
+            );
+
+            if (!user) {
+                user = await WearBuyer.findByIdAndUpdate(
+                    id,
+                    { bankDetails: { ...bankDetails, isVerified: true } },
+                    { new: true }
+                );
+            }
+
+            if (!user) return responseReturn(res, 404, { error: 'User not found' });
+
+            responseReturn(res, 200, {
+                message: 'Bank details updated successfully',
+                bankDetails: user.bankDetails
+            });
         } catch (error) {
             responseReturn(res, 500, { error: error.message });
         }
@@ -126,7 +176,9 @@ class profileController {
     get_notification_settings = async (req, res) => {
         const { id } = req;
         try {
-            const user = await customerModel.findById(id).select('notificationSettings');
+            let user = await customerModel.findById(id).select('notificationSettings');
+            if (!user) user = await WearBuyer.findById(id).select('notificationSettings');
+            
             if (!user) return responseReturn(res, 404, { error: 'User not found' });
 
             responseReturn(res, 200, {
@@ -136,7 +188,7 @@ class profileController {
                     newArrivals: true,
                     priceDrops: true,
                     emailNotifications: true,
-                    smsNotifications: true,
+                    whatsappNotifications: true,
                     pushNotifications: true
                 }
             });
@@ -150,11 +202,21 @@ class profileController {
         const { id } = req;
         const settings = req.body;
         try {
-            const user = await customerModel.findByIdAndUpdate(
+            let user = await customerModel.findByIdAndUpdate(
                 id,
                 { notificationSettings: settings },
                 { new: true }
             ).select('notificationSettings');
+
+            if (!user) {
+                user = await WearBuyer.findByIdAndUpdate(
+                    id,
+                    { notificationSettings: settings },
+                    { new: true }
+                ).select('notificationSettings');
+            }
+
+            if (!user) return responseReturn(res, 404, { error: 'User not found' });
 
             responseReturn(res, 200, {
                 settings: user.notificationSettings,

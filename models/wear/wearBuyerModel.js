@@ -71,7 +71,22 @@ const wearBuyerSchema = new mongoose.Schema({
     recentViewed: [{
         type: mongoose.Schema.Types.ObjectId,
         ref: 'WearProduct'
-    }]
+    }],
+    notificationSettings: {
+        orderUpdates: { type: Boolean, default: true },
+        promotions: { type: Boolean, default: true },
+        pushNotifications: { type: Boolean, default: true },
+        whatsappNotifications: { type: Boolean, default: true },
+        emailNotifications: { type: Boolean, default: true }
+    },
+    bankDetails: {
+        accountHolderName: { type: String, select: false },
+        accountNumber: { type: String, select: false },
+        ifscCode: { type: String, select: false },
+        bankName: { type: String, select: false },
+        branchName: { type: String, select: false },
+        isVerified: { type: Boolean, default: false, select: false }
+    }
 }, { timestamps: true });
 
 module.exports = mongoose.model('WearBuyer', wearBuyerSchema);

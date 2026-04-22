@@ -176,8 +176,6 @@ if (process.env.NODE_ENV === 'development') {
 
 
 // --- SOCKET.IO ---
-const socket = require("socket.io");
-const socketHelper = require('./utiles/socket');
 
 const io = socket(server, {
   cors: { 

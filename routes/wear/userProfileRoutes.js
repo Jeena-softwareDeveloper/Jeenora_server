@@ -9,6 +9,7 @@ router.get('/profile', profileController.get_profile);
 router.put('/profile/update', profileController.update_profile);
 router.get('/wallet', walletController.get_wallet);
 router.get('/bank-details', profileController.get_bank_details);
+router.put('/bank-details', profileController.update_bank_details);
 router.post('/support', profileController.submit_support_ticket);
 
 // Settings

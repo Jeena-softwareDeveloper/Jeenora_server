@@ -33,8 +33,10 @@ class WhatsAppClient {
                     '--disable-accelerated-2d-canvas',
                     '--no-first-run',
                     '--no-zygote',
-                    '--single-process',
-                    '--disable-gpu'
+                    '--disable-gpu',
+                    '--hide-scrollbars',
+                    '--disable-extensions',
+                    '--disable-notifications'
                 ]
             }
         });
@@ -88,18 +90,28 @@ class WhatsAppClient {
 
     async sendMessage(to, message) {
         if (this.status !== 'connected') {
-            throw new Error('WhatsApp not connected');
+            console.error(`[WhatsApp] Attempted to send message but status is: ${this.status}`);
+            throw new Error(`WhatsApp not connected (Status: ${this.status})`);
         }
 
-        // Format number: remove +, extra characters, and append @c.us
-        const formattedTo = to.replace(/[^0-9]/g, '');
+        // Format number: remove +, extra characters
+        let formattedTo = to.replace(/[^0-9]/g, '');
+        
+        // AUTO-PREPEND 91 if it's a 10-digit number (Standard for Indian users)
+        if (formattedTo.length === 10) {
+            console.log(`[WhatsApp] Auto-prepending 91 to 10-digit number: ${formattedTo}`);
+            formattedTo = '91' + formattedTo;
+        }
+
         const chatId = formattedTo.includes('@c.us') ? formattedTo : `${formattedTo}@c.us`;
         
+        console.log(`[WhatsApp] Sending message to ${chatId}...`);
         try {
             await this.client.sendMessage(chatId, message);
+            console.log(`[WhatsApp] Message successfully sent to ${chatId}`);
             return true;
         } catch (err) {
-            console.error('[WhatsApp] Send error:', err);
+            console.error(`[WhatsApp] Send error to ${chatId}:`, err);
             throw err;
         }
     }

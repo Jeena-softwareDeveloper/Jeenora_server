@@ -151,7 +151,7 @@ class supplierController {
             }
 
             if (!supplier) {
-                return responseReturn(res, 404, { error: 'No application found' });
+                return responseReturn(res, 200, { success: true, data: { status: 'none', hasShownCongrats: false, shopName: '' } });
             }
             
             // Explicit response building (Strict Whitelist - No ID or bank details)
@@ -513,9 +513,38 @@ class supplierController {
         try {
             const supplier = await Supplier.findByIdAndUpdate(supplierId, { status }, { new: true });
             if (!supplier) {
-                console.log(`[DEBUG] Supplier not found for ID: ${supplierId}`);
                 return responseReturn(res, 404, { error: 'Supplier not found' });
             }
+
+            // AI Notification Integration
+            try {
+                const aiService = require('../../utiles/aiService');
+                const whatsappClient = require('../../utiles/whatsappClient');
+                const WearBuyer = require('../../models/wear/wearBuyerModel');
+                
+                // Fetch associated user account for notification settings
+                const userAccount = await WearBuyer.findById(supplier.user).select('+notificationSettings');
+                const settings = userAccount?.notificationSettings || { orderUpdates: true, whatsappNotifications: true };
+
+                if (settings.whatsappNotifications && settings.orderUpdates) {
+                    const event = status === 'approved' ? 'application_approved' : (status === 'rejected' ? 'application_rejected' : `status_${status}`);
+                    const message = await aiService.generateNotificationMessage('supplier', event, {
+                        shopName: supplier.businessDetails?.shopName,
+                        name: supplier.supplierDetails?.fullName,
+                        status: status
+                    });
+
+                    if (supplier.supplierDetails?.phone) {
+                        await whatsappClient.sendMessage(supplier.supplierDetails.phone, message);
+                        console.log(`[AI Notification] Status update sent to ${supplier.supplierDetails.phone}: ${message}`);
+                    }
+                } else {
+                    console.log(`[AI Notification] Skipped for ${supplierId} due to user preferences.`);
+                }
+            } catch (aiError) {
+                console.error('[AI Notification] Failed to send status update notification:', aiError.message);
+            }
+
             responseReturn(res, 200, { success: true, message: 'Status updated successfully', data: supplier });
         } catch (error) {
             responseReturn(res, 500, { error: error.message });

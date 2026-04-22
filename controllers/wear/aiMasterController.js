@@ -697,6 +697,10 @@ RETURN ONLY JSON:
             }
 
             console.log(`[CRON] ✅ Predictive Restock scan complete. Processed ${Object.keys(bySupplier).length} suppliers.`);
+        } catch (error) {
+            console.error('[CRON] ❌ Predictive Restock Cron failed:', error.message);
+        }
+    }
 
     /* ========================================================
        6. AUTOMATED AI REPORTING (ADMIN & SUPPLIER)

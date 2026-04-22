@@ -102,6 +102,14 @@ const customerSchema = new Schema({
         type: Schema.ObjectId,
         ref: 'customer',
         select: false
+    },
+    bankDetails: {
+        accountHolderName: { type: String, select: false },
+        accountNumber: { type: String, select: false },
+        ifscCode: { type: String, select: false },
+        bankName: { type: String, select: false },
+        branchName: { type: String, select: false },
+        isVerified: { type: Boolean, default: false, select: false }
     }
 }, { timestamps: true })
 

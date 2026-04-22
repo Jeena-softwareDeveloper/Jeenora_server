@@ -9,6 +9,13 @@ const { authMiddleware, authOptional } = require('../middlewares/authMiddleware'
 const { otpSendLimiter, otpVerifyLimiter } = require('../middlewares/securityMiddleware');
 
 // ============================================================
+// 8. VENDOR & SUPPLIER MANAGEMENT (Prioritized)
+// ============================================================
+const supplierController = require('../controllers/wear/supplierController');
+router.use('/wear/supplier', require('./wear/supplierRoutes'));
+router.put('/wear/supplier/update-status/:supplierId', authMiddleware, supplierController.update_status); 
+
+// ============================================================
 // 📁 CORE SYSTEMS & LEGACY COMPATIBILITY
 // ============================================================
 router.use('/admin/risk', require('./admin/adminRiskRoutes')); 
@@ -59,6 +66,7 @@ router.use('/wear/offers', require('./wear/wearOfferRoutes'));
 
 // Aliases & Modular routes
 router.use('/wear/banner', require('./wear/wearBannerRoutes'));
+router.use('/wear/banners', require('./wear/wearBannerRoutes'));
 router.use('/wear/offer', require('./wear/wearOfferRoutes'));
 router.use('/user/addresses', require('./wear/addressRoutes'));
 router.use('/wear/user', require('./wear/userProfileRoutes'));
@@ -75,9 +83,6 @@ router.get('/wear/stats', authMiddleware, wearLogController.getStats); // Dashbo
 router.use('/wear/logs', require('./wear/wearLogRoutes'));
 router.use('/wear/dashboard', require('./wear/dashboardRoutes'));
 
-// 8. VENDOR & SUPPLIER MANAGEMENT
-router.put('/wear/supplier/update-status/:supplierId', authMiddleware, require('../controllers/wear/supplierController').update_status); // Direct Alias
-router.use('/wear/supplier', require('./wear/supplierRoutes'));
 router.use('/wear/whatsapp', require('./wear/wearWhatsAppRoutes'));
 router.use('/hire/whatsapp', require('./wear/wearWhatsAppRoutes')); // Mirror for Dashboard compatibility
 router.use('/', require('./wear/productOfferRoutes'));

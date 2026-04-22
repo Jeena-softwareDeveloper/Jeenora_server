@@ -1,14 +1,11 @@
 const { responseReturn } = require("../../utiles/response");
+const whatsappClient = require("../../utiles/whatsappClient");
 
 class wearWhatsAppController {
     getStatus = async (req, res) => {
         try {
-            // Stub for WhatsApp status
-            responseReturn(res, 200, {
-                isConnected: false,
-                status: 'disconnected',
-                qrCode: null
-            });
+            const data = whatsappClient.getStatus();
+            responseReturn(res, 200, data);
         } catch (error) {
             responseReturn(res, 500, { error: error.message });
         }
@@ -16,8 +13,9 @@ class wearWhatsAppController {
 
     initialize = async (req, res) => {
         try {
-            // Stub for initialization
-            responseReturn(res, 200, { message: 'Service initialization started (Stub)' });
+            // Kick off initialization in background (socket will handle updates)
+            whatsappClient.initialize();
+            responseReturn(res, 200, { message: 'WhatsApp initialization started' });
         } catch (error) {
             responseReturn(res, 500, { error: error.message });
         }
@@ -25,9 +23,25 @@ class wearWhatsAppController {
 
     logout = async (req, res) => {
         try {
-            responseReturn(res, 200, { message: 'Logged out (Stub)' });
+            await whatsappClient.logout();
+            responseReturn(res, 200, { message: 'WhatsApp logged out successfully' });
         } catch (error) {
             responseReturn(res, 500, { error: error.message });
+        }
+    }
+
+    testMessage = async (req, res) => {
+        try {
+            const { phoneNumber, message } = req.body;
+            if (!phoneNumber || !message) {
+                return responseReturn(res, 400, { error: 'Phone number and message are required' });
+            }
+
+            await whatsappClient.sendMessage(phoneNumber, message);
+            responseReturn(res, 200, { message: 'Test message sent successfully' });
+        } catch (error) {
+            console.error('[WhatsApp Controller] Test message error:', error);
+            responseReturn(res, 500, { error: error.message || 'Failed to send test message' });
         }
     }
 }

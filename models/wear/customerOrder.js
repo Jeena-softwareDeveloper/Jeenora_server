@@ -18,6 +18,11 @@ const customerOrder = new Schema({
         type: String,
         required: true
     },
+    payment_method: {
+        type: String,
+        required: true,
+        enum: ['COD', 'ONLINE']
+    },
     shippingInfo: {
         type: Object,
         required: true
@@ -25,11 +30,11 @@ const customerOrder = new Schema({
     delivery_status: {
         type: String,
         required: true,
-        enum: ['pending', 'confirmed', 'processing', 'shipped', 'delivered', 'cancelled', 'returned'],
+        enum: ['pending_payment', 'pending', 'confirmed', 'processing', 'shipped', 'delivered', 'cancelled', 'returned'],
         validate: {
             validator: function (v) {
-                // 'this.isNew' allows the initial 'pending' state
-                if (this.isNew) return v === 'pending';
+                // 'this.isNew' allows the initial 'pending' or 'pending_payment' states
+                if (this.isNew) return ['pending', 'pending_payment'].includes(v);
 
                 // For updates via .save(), enforce state machine
                 return isValidTransition(this.delivery_status, v);
@@ -46,6 +51,10 @@ const customerOrder = new Schema({
     },
     paymentId: {
         type: String
+    },
+    cartItemIds: {
+        type: [Schema.ObjectId],
+        default: []
     }
 }, { timestamps: true })
 

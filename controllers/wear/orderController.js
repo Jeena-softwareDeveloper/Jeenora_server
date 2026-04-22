@@ -25,6 +25,7 @@ const razorpay = process.env.RAZORPAY_KEY_ID ? new Razorpay({
 
 const { sendEmail } = require('../../utiles/emailSender');
 const sellerModel = require('../../models/wear/sellerModel');
+const whatsappClient = require('../../utiles/whatsappClient');
 
 class orderController {
     // Helper to send beautiful transactional emails
@@ -89,8 +90,18 @@ class orderController {
 
             await sendEmail(customer.email, subject, '', html);
 
+            // --- WHATSAPP NOTIFICATION (CUSTOMER) ---
+            if (customer.phone) {
+                const orderIdShort = order._id.toString().slice(-8).toUpperCase();
+                const waMessage = `*Order Confirmed!* 🛍️\n\nHi ${customer.name}, your order *#${orderIdShort}* for *₹${order.price}* has been placed successfully. Thank you for shopping with Jeenora Wear.\n\nTrack here: https://jeenora.com/orders`;
+                whatsappClient.sendMessage(customer.phone, waMessage);
+            }
+
             // Notify Sellers if first time placed
-            if (type === 'placed' || type === 'paid') {
+            // CRITICAL: Only notify seller if it's COD (placed) or ONLINE (paid)
+            const shouldNotifySeller = (type === 'paid') || (type === 'placed' && order.payment_method === 'COD');
+
+            if (shouldNotifySeller) {
                 const subOrders = await authOrderModel.find({ orderId: order._id });
                 for (const sub of subOrders) {
                     const seller = await sellerModel.findById(sub.sellerId);
@@ -125,6 +136,13 @@ class orderController {
                             </div>
                         `;
                         await sendEmail(seller.email, sSubject, '', sHtml);
+                    }
+
+                    // --- WHATSAPP NOTIFICATION (SELLER) ---
+                    if (seller && seller.phoneNumber) {
+                        const orderIdShort = order._id.toString().slice(-8).toUpperCase();
+                        const sWaMessage = `*New Order Received!* 🚀\n\nYou have received a new order *#${orderIdShort}* for *₹${sub.price}*.\n\nShip it soon to keep your performance score high! Check details: https://dashboard.jeenora.com/orders`;
+                        whatsappClient.sendMessage(seller.phoneNumber, sWaMessage);
                     }
                 }
             }
@@ -170,7 +188,8 @@ class orderController {
     }
     // end method 
     place_order = async (req, res) => {
-        const { price, products, shipping_fee, shippingInfo, userId } = req.body
+        const { price, products, shipping_fee, shippingInfo, userId, payment_method } = req.body;
+        const initial_delivery_status = payment_method === 'ONLINE' ? 'pending_payment' : 'pending';
         let authorOrderData = []
         let cardId = []
         const tempDate = moment(Date.now()).format('LLL')
@@ -275,22 +294,32 @@ class orderController {
                 products: customerOrderProduct,
                 price: price + shipping_fee,
                 payment_status: 'unpaid',
-                delivery_status: 'pending',
+                payment_method,
+                delivery_status: initial_delivery_status,
                 date: tempDate,
-                totalCommission: totalCommission
+                totalCommission: totalCommission,
+                cartItemIds: cardId
             });
 
-            // Update orderId for suborders
-            authorOrderData = authorOrderData.map(o => ({ ...o, orderId: order.id }));
-
+            // Update orderId and stats for suborders
+            authorOrderData = authorOrderData.map(o => ({ 
+                ...o, 
+                orderId: order.id, 
+                delivery_status: initial_delivery_status 
+            }));
             await authOrderModel.insertMany(authorOrderData);
-            for (let k = 0; k < cardId.length; k++) {
-                await cardModel.findByIdAndDelete(cardId[k])
+            
+            if (payment_method === 'COD') {
+                for (let k = 0; k < cardId.length; k++) {
+                    await cardModel.findByIdAndDelete(cardId[k])
+                }
             }
+            
             // Start Notification (Async)
             this.send_order_notifications(order, order.payment_status === 'paid' ? 'paid' : 'placed');
 
-            responseReturn(res, 201, { message: "Order placed successfully", orderId: order._id });
+            const successMsg = payment_method === 'ONLINE' ? "Order initiated! Redirecting to payment..." : "Order placed successfully";
+            responseReturn(res, 201, { message: successMsg, orderId: order._id });
 
         } catch (error) {
 
@@ -460,6 +489,9 @@ class orderController {
             } else {
                 const orders = await customerOrder.aggregate([
                     {
+                        $match: { delivery_status: { $ne: 'pending_payment' } }
+                    },
+                    {
                         $lookup: {
                             from: 'authororders',
                             localField: "_id",
@@ -469,6 +501,9 @@ class orderController {
                     }
                 ]).skip(skipPage).limit(parPage).sort({ createdAt: -1 })
                 const totalOrder = await customerOrder.aggregate([
+                    {
+                        $match: { delivery_status: { $ne: 'pending_payment' } }
+                    },
                     {
                         $lookup: {
                             from: 'authororders',
@@ -574,9 +609,11 @@ class orderController {
             } else {
                 const orders = await authOrderModel.find({
                     sellerId,
+                    delivery_status: { $ne: 'pending_payment' }
                 }).skip(skipPage).limit(parPage).sort({ createdAt: -1 })
                 const totalOrder = await authOrderModel.find({
-                    sellerId
+                    sellerId,
+                    delivery_status: { $ne: 'pending_payment' }
                 }).countDocuments()
                 responseReturn(res, 200, { orders, totalOrder })
             }
@@ -767,6 +804,13 @@ class orderController {
                 delivery_status: 'confirmed',
                 paymentId: razorpay_payment_id
             });
+
+            // CLEAR CART NOW (since payment is finally successful)
+            if (order.cartItemIds && order.cartItemIds.length > 0) {
+                for (const cardId of order.cartItemIds) {
+                    await cardModel.findByIdAndDelete(cardId);
+                }
+            }
 
             // 4. SETTLE WALLETS BASED ON SNAPSHOTS
             const time = moment(Date.now()).format('l');
@@ -960,6 +1004,40 @@ class orderController {
             responseReturn(res, 500, { message: 'Internal server error' });
         }
     }
+    customer_order_fail = async (req, res) => {
+        const { orderId } = req.params;
+        try {
+            const order = await customerOrder.findById(orderId);
+            if (!order) return responseReturn(res, 404, { message: 'Order not found' });
 
+            // Only allow "failing" an order if it's currently awaiting payment
+            if (order.delivery_status !== 'pending_payment') {
+                return responseReturn(res, 400, { message: 'Order cannot be abandoned in this state' });
+            }
+
+            // Return Stock
+            for (const item of order.products) {
+                const isWear = !!item.variants || !!item.size;
+                if (isWear) {
+                    await wearProductModel.findOneAndUpdate(
+                        { _id: item._id, "variants.size": item.size },
+                        { $inc: { "variants.$.stock": item.quantity } }
+                    );
+                } else {
+                    await productModel.findByIdAndUpdate(
+                        item._id,
+                        { $inc: { stock: item.quantity } }
+                    );
+                }
+            }
+
+            await customerOrder.findByIdAndUpdate(orderId, { delivery_status: 'cancelled' });
+            await authOrderModel.updateMany({ orderId: new ObjectId(orderId) }, { delivery_status: 'cancelled' });
+
+            responseReturn(res, 200, { message: 'Order abandoned and stock released' });
+        } catch (error) {
+            responseReturn(res, 500, { message: error.message });
+        }
+    }
 }
 module.exports = new orderController() 

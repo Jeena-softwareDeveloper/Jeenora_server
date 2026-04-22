@@ -10,6 +10,7 @@ router.get('/home/customer/get-dashboard-data/:userId', orderController.get_cust
 router.get('/home/customer/get-orders/:customerId/:status', orderController.get_orders)
 router.get('/home/customer/get-order-details/:orderId', orderController.get_order_details)
 router.put('/home/customer/order-cancel/:orderId', orderController.customer_order_cancel)
+router.put('/home/customer/order-fail/:orderId', orderController.customer_order_fail)
 router.get('/admin/order/:orderId', orderController.get_admin_order)
 router.post('/order/create-payment', orderController.create_payment)
 router.post('/order/razorpay-create-order', orderController.create_razorpay_order)

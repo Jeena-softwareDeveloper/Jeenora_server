@@ -138,8 +138,8 @@ app.use(helmet({
 }));
 
 // 3. Size Limits
-app.use(express.json({ limit: '5mb' }));
-app.use(express.urlencoded({ limit: '5mb', extended: true }));
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
 // 4. Cookies
 app.use(cookieParser());
@@ -175,8 +175,10 @@ if (process.env.NODE_ENV === 'development') {
 }
 
 
-// --- SOCKET.IO (Temporarily Disabled) ---
-/*
+// --- SOCKET.IO ---
+const socket = require("socket.io");
+const socketHelper = require('./utiles/socket');
+
 const io = socket(server, {
   cors: { 
     origin: [
@@ -194,7 +196,6 @@ const io = socket(server, {
 socketHelper.init(io);
 require('./utiles/socketHandlers').initHandlers(io);
 console.log('✅ Socket.io initialized (WS prioritized)');
-*/
 
 
 const userController = require("./controllers/analytics/userController");
@@ -208,9 +209,12 @@ setInterval(() => {
 // ============================================================
 const cron = require('node-cron');
 const aiMasterController = require('./controllers/wear/aiMasterController');
+const whatsappClient = require('./utiles/whatsappClient');
 
-// 🔔 Predictive Restock Alert — runs every day at 9:00 AM IST (UTC+5:30 = 3:30 UTC)
-// Scans low-stock products, uses DeepSeek AI to generate supplier notifications
+// 🚀 Initialize WhatsApp Client on startup (attempts auto-reconnect if session exists)
+whatsappClient.initialize();
+
+// 🔔 Predictive Restock Alert — runs every day at 9:00 AM IST
 cron.schedule('30 3 * * *', async () => {
   try {
     console.log('[CRON] ⏰ 9:00 AM IST — Starting Predictive Restock AI Job...');
@@ -218,11 +222,29 @@ cron.schedule('30 3 * * *', async () => {
   } catch (error) {
     console.error('[CRON] ❌ Restock cron crashed:', error.message);
   }
-}, {
-  timezone: 'Asia/Kolkata'
-});
+}, { timezone: 'Asia/Kolkata' });
 
-console.log('[CRON] ✅ Predictive Restock Cron registered — fires daily at 9:00 AM IST');
+// 📊 Admin Daily Briefing — runs every day at 8:00 AM IST
+cron.schedule('0 2 * * *', async () => {
+  try {
+    console.log('[CRON] ⏰ 8:00 AM IST — Starting Admin Daily Briefing...');
+    await aiMasterController.generate_admin_daily_briefing();
+  } catch (error) {
+    console.error('[CRON] ❌ Admin Briefing cron crashed:', error.message);
+  }
+}, { timezone: 'Asia/Kolkata' });
+
+// 📈 Supplier Weekly Growth Report — runs every Monday at 10:00 AM IST
+cron.schedule('30 4 * * 1', async () => {
+  try {
+    console.log('[CRON] ⏰ Monday 10:00 AM IST — Starting Supplier Weekly Reports...');
+    await aiMasterController.generate_supplier_weekly_report();
+  } catch (error) {
+    console.error('[CRON] ❌ Supplier Report cron crashed:', error.message);
+  }
+}, { timezone: 'Asia/Kolkata' });
+
+console.log('[CRON] ✅ AI Predictive & Performance Crons registered.');
 
 // --- API ROUTES ---
 app.use("/api", require("./routes/apiRoutes"));

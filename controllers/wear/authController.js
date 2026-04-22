@@ -444,23 +444,24 @@ exports.profile_image_upload = async (req, res) => {
     });
 };
 
-// 4. Email Signup (Username, Email, Password)
+// 4. Email Signup (Username, Email, Password, Phone)
 exports.email_signup = async (req, res) => {
     try {
-        const { username, email, password } = req.body;
+        const { username, email, password, phone } = req.body;
 
-        if (!username || !email || !password) {
-            return responseReturn(res, 400, { error: 'Username, email and password are required' });
+        if (!username || !email || !password || !phone) {
+            return responseReturn(res, 400, { error: 'Username, email, password and phone are required' });
         }
 
         const cleanEmail = email.toLowerCase().trim();
+        const cleanPhone = phone.toString().replace(/\D/g, '');
 
         // Check if user already exists in either model
-        const existingBuyer = await WearBuyer.findOne({ $or: [{ email: cleanEmail }, { username }] });
-        const existingCustomer = await Customer.findOne({ $or: [{ email: cleanEmail }] });
+        const existingBuyer = await WearBuyer.findOne({ $or: [{ email: cleanEmail }, { phone: cleanPhone }, { username }] });
+        const existingCustomer = await Customer.findOne({ $or: [{ email: cleanEmail }, { phone: cleanPhone }] });
 
         if (existingBuyer || existingCustomer) {
-            return responseReturn(res, 400, { error: 'User with this email or username already exists' });
+            return responseReturn(res, 400, { error: 'User with this email, phone or username already exists' });
         }
 
         // Hash password
@@ -471,6 +472,7 @@ exports.email_signup = async (req, res) => {
             username,
             name: username, // Use username as default name
             email: cleanEmail,
+            phone: cleanPhone,
             password: hashedPassword,
             role: 'wear_buyer',
             isVerified: true

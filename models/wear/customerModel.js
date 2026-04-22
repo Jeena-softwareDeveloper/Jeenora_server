@@ -11,6 +11,7 @@ const customerSchema = new Schema({
     },
     phone: {
         type: String,
+        required: true
     },
     image: {
         type: String,

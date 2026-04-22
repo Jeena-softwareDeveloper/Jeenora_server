@@ -5,6 +5,10 @@ const wearReviewModel = require('../../models/wear/wearReviewModel');
 const wearProductModel = require('../../models/wear/wearProductModel');
 const AILog = require('../../models/wear/aiLogModel');
 const userBehaviorModel = require('../../models/wear/userBehaviorModel');
+const whatsappClient = require('../../utiles/whatsappClient');
+const { sendEmail } = require('../../utiles/emailSender');
+const sellerModel = require('../../models/wear/sellerModel');
+const moment = require('moment');
 
 // 🔒 THE ULTIMATE STRICT GUARDRAIL FOR AI
 const STRICT_GUARDRAIL = `CRITICAL SYSTEM RESTRICTION: 
@@ -694,8 +698,137 @@ RETURN ONLY JSON:
 
             console.log(`[CRON] ✅ Predictive Restock scan complete. Processed ${Object.keys(bySupplier).length} suppliers.`);
 
+    /* ========================================================
+       6. AUTOMATED AI REPORTING (ADMIN & SUPPLIER)
+       ======================================================== */
+
+    /**
+     * Generates a Daily Briefing for the Admin.
+     * Summarizes yesterday's business health.
+     */
+    generate_admin_daily_briefing = async () => {
+        console.log('[AI_AUTO] 🤖 Generating Admin Daily Briefing...');
+        try {
+            const yesterday = moment().subtract(1, 'days').startOf('day');
+            const today = moment().startOf('day');
+
+            // 1. Fetch Stats
+            const orders = await customerOrder.find({
+                createdAt: { $gte: yesterday.toDate(), $lt: today.toDate() }
+            });
+
+            const totalRevenue = orders.reduce((sum, o) => sum + (o.price || 0), 0);
+            const totalOrders = orders.length;
+            const paidOrders = orders.filter(o => o.payment_status === 'paid').length;
+            
+            // Fetch any fraud alerts from previous day (from AILog or metadata)
+            const fraudAlerts = await AILog.countDocuments({
+                featureName: 'Fraud Assistant Scan',
+                createdAt: { $gte: yesterday.toDate(), $lt: today.toDate() }
+            });
+
+            const dataSummary = `Stats for ${yesterday.format('DD MMM YYYY')}:
+            Revenue: ₹${totalRevenue}
+            Orders: ${totalOrders} (${paidOrders} Paid)
+            Fraud Alerts Logged: ${fraudAlerts}`;
+
+            const prompt = `TASK: You are the Jeenora Chief AI Officer. 
+            Generate a concise "High-Level Executive Briefing" for the Admin based on these stats:
+            "${dataSummary}"
+            
+            Tone: Professional, data-driven, and slightly futuristic. 
+            Include: 1 sentence on health, 1 sentence on risk (fraud), and 1 positive takeaway.
+            
+            RETURN ONLY JSON:
+            {
+              "subject": "Jeenora Daily Briefing - ${yesterday.format('DD MMM')}",
+              "brief": "Your summary here...",
+              "whatsappMsg": "Short emoji-rich version for WhatsApp"
+            }`;
+
+            const aiResponse = await this.call_deepseek_with_guardrail(prompt);
+
+            // 2. Deliver to Admin
+            const adminEmail = process.env.ADMIN_EMAIL || 'admin@jeenora.com';
+            const adminPhone = process.env.ADMIN_PHONE; // Should be set in .env
+
+            // Send Email
+            await sendEmail(adminEmail, aiResponse.subject, aiResponse.brief);
+
+            // Send WhatsApp if client is ready
+            if (adminPhone && whatsappClient.status === 'connected') {
+                await whatsappClient.sendMessage(adminPhone, `📊 *${aiResponse.subject}*\n\n${aiResponse.whatsappMsg}`);
+            }
+
+            console.log('[AI_AUTO] ✅ Admin Daily Briefing sent.');
+
         } catch (error) {
-            console.error('[CRON] ❌ Predictive Restock Cron failed:', error.message);
+            console.error('[AI_AUTO] ❌ Admin Briefing failed:', error.message);
+        }
+    }
+
+    /**
+     * Generates a Weekly Growth Report for a Specific Supplier.
+     */
+    generate_supplier_weekly_report = async () => {
+        console.log('[AI_AUTO] 🤖 Generating Supplier Weekly Reports...');
+        try {
+            const lastWeek = moment().subtract(7, 'days').startOf('day');
+
+            // Find all active suppliers
+            const suppliers = await sellerModel.find({ status: 'active' });
+
+            for (const supplier of suppliers) {
+                // 1. Fetch Stats for this supplier
+                const orders = await customerOrder.find({
+                    'products.sellerId': supplier._id,
+                    createdAt: { $gte: lastWeek.toDate() },
+                    delivery_status: { $nin: ['cancelled', 'pending_payment'] }
+                });
+
+                if (orders.length === 0) continue; // Skip if no sales
+
+                const revenue = orders.reduce((sum, o) => {
+                    const sellerProds = o.products.filter(p => p.sellerId.toString() === supplier._id.toString());
+                    return sum + sellerProds.reduce((pSum, sp) => pSum + (sp.price * sp.quantity), 0);
+                }, 0);
+
+                const dataSummary = `Supplier: ${supplier.name}
+                Period: Last 7 days
+                Total Sales Revenue: ₹${revenue}
+                Total Orders: ${orders.length}
+                Top Category: ${orders[0].products[0].category || 'General'}`;
+
+                const prompt = `TASK: You are the Jeenora Supplier Growth AI.
+                Analyze these stats for ${supplier.name}:
+                "${dataSummary}"
+                
+                Generate a "Weekly Success Summary". 
+                Include: 1 sentence congratulating them, 1 insight about their performance, and 1 growth tip.
+                
+                RETURN ONLY JSON:
+                {
+                  "subject": "Your Jeenora Weekly Growth Report 📈",
+                  "summary": "Your detailed report here...",
+                  "whatsappMsg": "Short emoji-rich version for WhatsApp"
+                }`;
+
+                const aiResponse = await this.call_deepseek_with_guardrail(prompt);
+
+                // 2. Deliver to Supplier
+                if (supplier.email) {
+                    await sendEmail(supplier.email, aiResponse.subject, aiResponse.summary);
+                }
+
+                if (supplier.phoneNumber && whatsappClient.status === 'connected') {
+                    await whatsappClient.sendMessage(supplier.phoneNumber, `📈 *${aiResponse.subject}*\n\n${aiResponse.whatsappMsg}`);
+                }
+
+                console.log(`[AI_AUTO] ✅ Weekly report sent to: ${supplier.name}`);
+            }
+
+        } catch (error) {
+            console.error('[AI_AUTO] ❌ Supplier Reports failed:', error.message);
         }
     }
 }

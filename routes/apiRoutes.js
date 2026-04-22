@@ -78,8 +78,8 @@ router.use('/wear/dashboard', require('./wear/dashboardRoutes'));
 // 8. VENDOR & SUPPLIER MANAGEMENT
 router.put('/wear/supplier/update-status/:supplierId', authMiddleware, require('../controllers/wear/supplierController').update_status); // Direct Alias
 router.use('/wear/supplier', require('./wear/supplierRoutes'));
-router.use('/wear/banners', require('./wear/wearBannerRoutes'));
 router.use('/wear/whatsapp', require('./wear/wearWhatsAppRoutes'));
+router.use('/hire/whatsapp', require('./wear/wearWhatsAppRoutes')); // Mirror for Dashboard compatibility
 router.use('/', require('./wear/productOfferRoutes'));
 router.get('/wear/buyers', authMiddleware, adminWearController.get_wear_buyers);
 

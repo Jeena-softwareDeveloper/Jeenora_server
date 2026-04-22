@@ -458,6 +458,9 @@ class supplierController {
             ]);
 
             const countMap = new Map();
+            const newProductMap = new Map(); // Track if any product is < 24h old
+            const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+
             wearCounts.forEach(c => {
                 const idStr = c._id.toString();
                 countMap.set(idStr, (countMap.get(idStr) || 0) + c.count);
@@ -467,10 +470,26 @@ class supplierController {
                 countMap.set(idStr, (countMap.get(idStr) || 0) + c.count);
             });
 
-            // Attach counts to combined list
+            // Find suppliers with new products
+            const [newWearProducts, newLegacyProducts] = await Promise.all([
+                WearProduct.find({ 
+                    sellerId: { $in: allVendorObjectIds },
+                    createdAt: { $gt: oneDayAgo }
+                }, 'sellerId').lean(),
+                legacyProductModel.find({
+                    sellerId: { $in: allVendorObjectIds },
+                    createdAt: { $gt: oneDayAgo }
+                }, 'sellerId').lean()
+            ]);
+
+            newWearProducts.forEach(p => newProductMap.set(p.sellerId.toString(), true));
+            newLegacyProducts.forEach(p => newProductMap.set(p.sellerId.toString(), true));
+
+            // Attach counts & flags to combined list
             const combinedWithCounts = combined.map(v => ({
                 ...v,
-                productCount: countMap.get(v._id.toString()) || 0
+                productCount: countMap.get(v._id.toString()) || 0,
+                hasNewProducts: newProductMap.has(v._id.toString())
             }));
 
             // Re-sort and paginate combined list

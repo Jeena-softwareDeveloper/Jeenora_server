@@ -39,6 +39,7 @@ router.use('/admin/resumes', require('./admin/adminResumeRoutes'));
 router.use('/admin/chat-support', require('./admin/chatSupportRoutes'));
 
 router.use('/hire', require('./hire/jobRoutes')); // Proxy for all hire routes
+router.use('/hire/payment', require('./hire/paymentRoutes'));
 router.use('/analytics', require('./analytics/index'));
 router.use('/market', require('./Awareness/marketRoutes'));
 

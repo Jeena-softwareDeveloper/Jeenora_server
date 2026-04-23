@@ -446,15 +446,17 @@ class PaymentController {
 
     cashfreeWebhook = async (req, res) => {
         try {
-            const crypto = require('crypto');
-            
-            // Cashfree sends signature in x-cf-signature header
-            const signature = req.headers['x-cf-signature'];
-            const timestamp = req.headers['x-cf-event-timestamp'];
+            console.log('--- Cashfree Webhook Debug Info ---');
+            console.log('Headers:', JSON.stringify(req.headers, null, 2));
+            console.log('Body:', JSON.stringify(req.body, null, 2));
+
+            // Cashfree signature can be in multiple places depending on version
+            const signature = req.headers['x-cf-signature'] || req.headers['x-webhook-signature'];
             
             if (!signature) {
-                console.warn('⚠️ Cashfree webhook missing signature');
-                return responseReturn(res, 400, { error: 'Missing signature' });
+                console.warn('⚠️ Cashfree webhook missing signature. (Treating as test or version mismatch)');
+                // If it's a test, we might still want to return 200 to satisfy Cashfree's dashboard
+                return responseReturn(res, 200, { message: 'Webhook received (waiting for live signature)' });
             }
 
             console.log(`✅ Cashfree webhook received:`, req.body);

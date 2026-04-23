@@ -280,16 +280,23 @@ app.use((err, req, res, next) => {
   // Log internally for debugging
   console.error(`[ERROR] ${req.method} ${req.originalUrl} →`, err.message);
 
-  // CORS error (already handled above, but catch it here too)
+  const statusCode = err.status || err.statusCode || 500;
+  
+  // CORS error
   if (err.message && err.message.startsWith('CORS')) {
     return res.status(403).json({ error: 'CORS policy: request not allowed', success: false });
   }
 
-  // Don't expose internal details in production
-  const statusCode = err.status || err.statusCode || 500;
-  const message = process.env.NODE_ENV === 'production'
-    ? 'An internal server error occurred'
-    : err.message;
+  // Handle Payload Too Large
+  if (statusCode === 413) {
+    return res.status(413).json({ error: 'File/Request too large! Please reduce image size.', success: false });
+  }
+
+  // In production, mask 500 errors but show specific client errors (400, 404, 413, etc)
+  let message = err.message;
+  if (process.env.NODE_ENV === 'production' && statusCode >= 500) {
+    message = 'An internal server error occurred';
+  }
 
   return res.status(statusCode).json({ error: message, success: false });
 });

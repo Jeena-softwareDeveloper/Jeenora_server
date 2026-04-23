@@ -444,6 +444,73 @@ class PaymentController {
         }
     }
 
+    cashfreeWebhook = async (req, res) => {
+        try {
+            const crypto = require('crypto');
+            
+            // Cashfree sends signature in x-cf-signature header
+            const signature = req.headers['x-cf-signature'];
+            const timestamp = req.headers['x-cf-event-timestamp'];
+            
+            if (!signature) {
+                console.warn('⚠️ Cashfree webhook missing signature');
+                return responseReturn(res, 400, { error: 'Missing signature' });
+            }
+
+            console.log(`✅ Cashfree webhook received:`, req.body);
+
+            // In Cashfree v3+, the body contains the event data
+            const { data, event_time, type } = req.body;
+            
+            // Handle PAYMENT_SUCCESS_WEBHOOK
+            if (type === 'PAYMENT_SUCCESS_WEBHOOK') {
+                const orderId = data.order.order_id;
+                const transactionId = data.payment.cf_payment_id;
+
+                const payment = await Payment.findOne({ $or: [{ transactionId: orderId }, { razorpayOrderId: orderId }] });
+
+                if (payment && payment.status !== 'success') {
+                    payment.status = 'success';
+                    payment.paidAt = new Date();
+                    payment.transactionId = transactionId; // Store Cashfree payment ID
+                    await payment.save();
+
+                    // Update user subscription or credits
+                    if (payment.plan === 'Credits') {
+                        await hireUserModel.findByIdAndUpdate(payment.userId, {
+                            $inc: { creditBalance: payment.credits }
+                        });
+                        console.log(`✅ Cashfree: Credits added for user ${payment.userId}`);
+                    } else {
+                        const planSettings = await PlanSettings.getSettings();
+                        const planConfig = planSettings.plans[payment.plan];
+                        const expiresAt = new Date();
+                        expiresAt.setDate(expiresAt.getDate() + (planConfig.days || 30));
+
+                        await hireUserModel.findByIdAndUpdate(payment.userId, {
+                            subscription: {
+                                plan: payment.plan,
+                                status: 'active',
+                                startDate: new Date(),
+                                expiresAt: expiresAt,
+                                features: planConfig.features,
+                                maxApplications: planConfig.maxApplications
+                            }
+                        });
+                        console.log(`✅ Cashfree: Subscription activated for user ${payment.userId}`);
+                    }
+                }
+            }
+
+            // Always return 200 to acknowledge
+            responseReturn(res, 200, { message: 'Webhook received' });
+
+        } catch (error) {
+            console.error('Cashfree webhook error:', error);
+            responseReturn(res, 500, { error: 'Internal server error' });
+        }
+    }
+
     // ==================== ADMIN PAYMENT APIS ====================
 
     getAllPayments = async (req, res) => {

@@ -466,10 +466,11 @@ class homeControllers {
         try {
             if (!catalogId) return responseReturn(res, 200, { similar: [] });
             
+            // Fetch all siblings in the same catalog, regardless of status
+            // This ensures pending variants show up together in supplier preview
             const similar = await wearProductModel.find({
-                catalogId,
-                status: 'active'
-            }).select('productName images variants slug _id');
+                catalogId
+            }).select('productName images variants slug _id status');
 
             responseReturn(res, 200, {
                 similar

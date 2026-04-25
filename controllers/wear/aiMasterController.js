@@ -250,14 +250,31 @@ class AIMasterController {
 
     generate_ai_recommendation = async (req, res) => {
         try {
-            const { productName, category } = req.body;
-            const prompt = `TASK: Write premium product description for "${productName}" (${category}). Max 4 bullets. RETURN ONLY JSON: {"description": "intro\\n\\n• bull 1"}`;
+            const { productName, category, specs, existingDescription } = req.body;
+            
+            const prompt = `TASK: Generate a high-converting, professional product description.
+            
+            INPUT DATA:
+            - Product Name: "${productName}"
+            - Category: "${category}"
+            - Specifications: "${specs || 'Not provided'}"
+            - Existing Content: "${existingDescription || 'None'}"
+            
+            STRICT RULES:
+            1. OBSERVE the Product Name carefully. If it's a specific code or technical name, include it naturally.
+            2. USE the provided Specifications (Fabric, Fit, etc.) as the core facts. DO NOT hallucinate facts not in the input.
+            3. If the Product Name seems like a placeholder or gibberish, focus heavily on the Category and Specs to create a professional listing.
+            4. Tone: Premium, modern, and reliable.
+            5. Structure: 1 short intro paragraph followed by 4 clear bullet points highlighting quality and style.
+            
+            RETURN ONLY JSON: {"description": "intro text here...\\n\\n• point 1\\n• point 2..."}`;
             
             let aiResponse = await this.call_deepseek_with_guardrail(prompt);
-            await this.log_ai_action(req.id, req.role, 'Product Description AI', `Product: ${productName}`, aiResponse);
+            await this.log_ai_action(req.id, req.role, 'Product Description AI', `Product: ${productName} | Category: ${category}`, aiResponse);
             return responseReturn(res, 200, { description: aiResponse.description });
         } catch (error) {
-            responseReturn(res, 500, { error: 'Failed recommendation' });
+            console.error("AI Recommendation Error:", error.message);
+            responseReturn(res, 500, { error: 'Failed to generate tailored recommendation' });
         }
     }
 

@@ -1108,7 +1108,7 @@ class orderController {
                     "customer_email": user.email || "customer@example.com"
                 },
                 "order_meta": {
-                    "return_url": `${process.env.FRONTEND_URL}/payment/verify?order_id={order_id}&my_order_id=${order._id}`,
+                    "return_url": `${(process.env.CASHFREE_ENVIRONMENT === 'PRODUCTION' ? (process.env.FRONTEND_URL?.replace('http://', 'https://') || 'https://jeenora.com') : process.env.FRONTEND_URL)}/payment/verify?order_id={order_id}&my_order_id=${order._id}`,
                     "notify_url": `${process.env.BACKEND_URL || 'https://api.jeenora.com'}/api/wear/orders/order/cashfree-webhook`
                 }
             };

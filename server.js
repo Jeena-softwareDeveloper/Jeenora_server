@@ -75,7 +75,8 @@ let allowedOrigins = [
   "https://hire.jeenora.com",
   "https://dashboard.jeenora.com",
   "https://jeenora.com",
-  "https://www.jeenora.com"
+  "https://www.jeenora.com",
+  "https://jeenoraecommerce.vercel.app"
 ];
 
 if (process.env.NODE_ENV === 'development') {

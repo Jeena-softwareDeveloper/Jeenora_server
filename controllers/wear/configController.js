@@ -40,11 +40,18 @@ class configController {
                 { id: 'manufacturer', name: 'Manufacturer', description: 'Produce and sell your own goods' }
             ];
 
+            const paymentKeys = {
+                razorpayKeyId: process.env.RAZORPAY_KEY_ID,
+                cashfreeAppId: process.env.CASHFREE_APP_ID,
+                cashfreeEnvironment: process.env.CASHFREE_ENVIRONMENT || 'SANDBOX'
+            };
+
             responseReturn(res, 200, {
                 languages,
                 versioning,
                 wearConfig,
                 businessTypes,
+                paymentKeys,
                 success: true
             });
         } catch (error) {

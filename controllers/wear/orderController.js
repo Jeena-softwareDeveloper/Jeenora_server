@@ -26,6 +26,12 @@ const razorpay = process.env.RAZORPAY_KEY_ID ? new Razorpay({
 const { sendEmail } = require('../../utiles/emailSender');
 const sellerModel = require('../../models/wear/sellerModel');
 const whatsappClient = require('../../utiles/whatsappClient');
+const { Cashfree, CFEnvironment } = require('cashfree-pg');
+
+const cashfreeInstance = new Cashfree();
+cashfreeInstance.XClientId = process.env.CASHFREE_APP_ID;
+cashfreeInstance.XClientSecret = process.env.CASHFREE_SECRET_KEY;
+cashfreeInstance.XEnvironment = process.env.CASHFREE_ENVIRONMENT === 'PRODUCTION' ? CFEnvironment.PRODUCTION : CFEnvironment.SANDBOX;
 
 class orderController {
     // Helper to send beautiful transactional emails
@@ -222,7 +228,7 @@ class orderController {
     // end method 
     place_order = async (req, res) => {
         const { price, products, shipping_fee, shippingInfo, userId, payment_method } = req.body;
-        const initial_delivery_status = payment_method === 'ONLINE' ? 'pending_payment' : 'pending';
+        const initial_delivery_status = payment_method !== 'COD' ? 'pending_payment' : 'pending';
         let authorOrderData = []
         let cardId = []
         const tempDate = moment(Date.now()).format('LLL')
@@ -355,8 +361,8 @@ class orderController {
             responseReturn(res, 201, { message: successMsg, orderId: order._id });
 
         } catch (error) {
-
-            console.log(error.message)
+            console.error('[PLACE_ORDER] Error:', error.message);
+            return responseReturn(res, 500, { error: error.message || 'Internal Server Error' });
         }
 
     }
@@ -1070,6 +1076,126 @@ class orderController {
             responseReturn(res, 200, { message: 'Order abandoned and stock released' });
         } catch (error) {
             responseReturn(res, 500, { message: error.message });
+        }
+    }
+
+    create_cashfree_order = async (req, res) => {
+        const { orderId } = req.body;
+        try {
+            const order = await customerOrder.findById(orderId);
+            if (!order) {
+                return responseReturn(res, 404, { message: 'Order not found' });
+            }
+
+            let user = await customerModel.findById(order.customerId);
+            if (!user) {
+                const WearBuyer = require('../../models/wear/wearBuyerModel');
+                user = await WearBuyer.findById(order.customerId);
+            }
+
+            if (!user) {
+                return responseReturn(res, 404, { message: 'User associated with this order not found' });
+            }
+            
+            const request = {
+                "order_amount": order.price,
+                "order_currency": "INR",
+                "order_id": `order_${order._id}_${Date.now()}`,
+                "customer_details": {
+                    "customer_id": user._id.toString(),
+                    "customer_phone": user.phone || "9999999999", 
+                    "customer_name": user.name || user.username || "Customer",
+                    "customer_email": user.email || "customer@example.com"
+                },
+                "order_meta": {
+                    "return_url": `${process.env.FRONTEND_URL}/payment/verify?order_id={order_id}&my_order_id=${order._id}`,
+                    "notify_url": `${process.env.BACKEND_URL || 'https://api.jeenora.com'}/api/wear/orders/order/cashfree-webhook`
+                }
+            };
+
+            const cashfreeResponse = await cashfreeInstance.PGCreateOrder(request);
+            
+            // Link the cashfree order id to our order for verification later
+            await customerOrder.findByIdAndUpdate(orderId, {
+                payment_id: request.order_id // Temporarily store the cashfree order id
+            });
+
+            responseReturn(res, 200, { cashfreeOrder: cashfreeResponse.data });
+
+        } catch (error) {
+            console.error('[CASHFREE_CREATE_ERROR]', error.response ? error.response.data : error.message);
+            responseReturn(res, 500, { message: 'Cashfree order creation failed', error: error.response ? error.response.data : error.message });
+        }
+    }
+
+    verify_cashfree_payment = async (req, res) => {
+        const { cashfree_order_id, orderId } = req.body;
+
+        try {
+            const response = await cashfreeInstance.PGOrderFetchPayments(cashfree_order_id);
+            const payments = response.data;
+
+            // Check if any payment is successful
+            const successPayment = payments.find(p => p.payment_status === 'SUCCESS');
+
+            if (!successPayment) {
+                return responseReturn(res, 400, { message: 'Payment not successful or pending' });
+            }
+
+            const order = await customerOrder.findById(orderId);
+            if (!order) return responseReturn(res, 404, { message: 'Order not found' });
+            
+            if (order.payment_status === 'paid') {
+                return responseReturn(res, 200, { message: 'Payment already verified' });
+            }
+
+            // Update order status
+            await customerOrder.findByIdAndUpdate(orderId, {
+                payment_status: 'paid',
+                delivery_status: 'confirmed',
+                payment_id: successPayment.cf_payment_id
+            });
+
+            await authOrderModel.updateMany({ orderId: new ObjectId(orderId) }, {
+                payment_status: 'paid',
+                delivery_status: 'confirmed',
+                paymentId: successPayment.cf_payment_id
+            });
+
+            // Clear cart
+            if (order.cartItemIds && order.cartItemIds.length > 0) {
+                for (const cardId of order.cartItemIds) {
+                    await cardModel.findByIdAndDelete(cardId);
+                }
+            }
+
+            // Settle wallets
+            const time = moment(Date.now()).format('l');
+            const splitTime = time.split('/');
+
+            await myShopWallet.create({
+                amount: order.totalCommission || 0,
+                month: splitTime[0],
+                year: splitTime[2]
+            });
+
+            const auOrders = await authOrderModel.find({ orderId: new ObjectId(orderId) });
+            for (const auOrder of auOrders) {
+                await sellerWallet.create({
+                    sellerId: auOrder.sellerId.toString(),
+                    amount: auOrder.sellerAmount || auOrder.price,
+                    month: splitTime[0],
+                    year: splitTime[2]
+                });
+            }
+
+            this.send_order_notifications(order, 'paid');
+
+            responseReturn(res, 200, { message: 'Payment verified successfully!' });
+
+        } catch (error) {
+            console.error('[CASHFREE_VERIFY_ERROR]', error.response ? error.response.data : error.message);
+            responseReturn(res, 500, { message: 'Verification failed', error: error.response ? error.response.data : error.message });
         }
     }
 }

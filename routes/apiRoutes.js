@@ -42,6 +42,7 @@ router.use('/hire', require('./hire/jobRoutes')); // Proxy for all hire routes
 router.use('/hire/payment', require('./hire/paymentRoutes'));
 router.use('/analytics', require('./analytics/index'));
 router.use('/market', require('./Awareness/marketRoutes'));
+router.use('/search', require('./wear/searchRoutes'));
 
 router.use('/wear/home', require('./wear/homeRoutes'));
 router.use('/wear/category', require('./wear/wearCategoryRoutes'));

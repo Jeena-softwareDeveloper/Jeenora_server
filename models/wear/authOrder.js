@@ -29,10 +29,10 @@ const authSchema = new Schema({
     delivery_status: {
         type: String,
         required: true,
-        enum: ['pending', 'confirmed', 'processing', 'shipped', 'delivered', 'cancelled', 'returned'],
+        enum: ['pending_payment', 'pending', 'confirmed', 'processing', 'shipped', 'delivered', 'cancelled', 'returned'],
         validate: {
             validator: function (v) {
-                if (this.isNew) return v === 'pending';
+                if (this.isNew) return ['pending', 'pending_payment'].includes(v);
                 return isValidTransition(this.delivery_status, v);
             }
         }

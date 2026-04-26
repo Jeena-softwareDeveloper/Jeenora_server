@@ -60,6 +60,13 @@ class wearCatalogController {
             const productsToCreate = Array.isArray(body) ? body : [body];
             const createdProducts = [];
 
+            // --- KEY FIX: Generate ONE shared catalogId for this entire upload batch ---
+            // If the frontend already sent a sharedCatalogId (e.g. for a re-upload), use it.
+            // Otherwise generate a fresh one so all products in this batch group together.
+            const sharedCatalogId = (productsToCreate[0]?.catalogId && productsToCreate.every(p => p.catalogId === productsToCreate[0].catalogId))
+                ? productsToCreate[0].catalogId
+                : new mongoose.Types.ObjectId().toString();
+
             for (const item of productsToCreate) {
                 // --- IMAGE PROCESSING ---
                 // Support automatic background removal if requested
@@ -100,7 +107,7 @@ class wearCatalogController {
                     // 1. Update Existing Product
                     product = await WearProduct.findByIdAndUpdate(item._id, {
                         sellerId: supplier._id,
-                        catalogId: item.catalogId,
+                        catalogId: sharedCatalogId,
                         productName: item.productName,
                         description: item.description,
                         miniDescription: item.miniDescription,
@@ -126,7 +133,7 @@ class wearCatalogController {
                     // 2. Create New Product Variation
                     product = await WearProduct.create({
                         sellerId: supplier._id,
-                        catalogId: item.catalogId,
+                        catalogId: sharedCatalogId,
                         productName: item.productName,
                         description: item.description,
                         miniDescription: item.miniDescription,
@@ -154,7 +161,7 @@ class wearCatalogController {
 
             responseReturn(res, 201, {
                 success: true,
-                message: `${createdProducts.length} product(s) uploaded successfully to catalog ${productsToCreate[0]?.catalogId}.`,
+                message: `${createdProducts.length} product(s) uploaded successfully to catalog ${sharedCatalogId}.`,
                 data: createdProducts
             });
         } catch (error) {
@@ -189,9 +196,9 @@ class wearCatalogController {
                     $group: {
                         _id: { 
                             $cond: { 
-                                if: { $and: [{ $ne: ["$catalogId", null] }, { $ne: ["$catalogId", ""] }] }, 
-                                then: "$catalogId", 
-                                else: "$_id" 
+                                if: { $or: [{ $eq: ["$catalogId", null] }, { $eq: ["$catalogId", ""] }, { $not: ["$catalogId"] }] }, 
+                                then: "$_id", 
+                                else: { $toString: "$catalogId" } 
                             } 
                         },
                         mainProduct: { $first: "$$ROOT" },
@@ -282,7 +289,13 @@ class wearCatalogController {
                 { $sort: { createdAt: -1 } },
                 {
                     $group: {
-                        _id: "$catalogId",
+                        _id: { 
+                            $cond: { 
+                                if: { $or: [{ $eq: ["$catalogId", null] }, { $eq: ["$catalogId", ""] }, { $not: ["$catalogId"] }] }, 
+                                then: "$_id", 
+                                else: { $toString: "$catalogId" }
+                            } 
+                        },
                         mainProduct: { $first: "$$ROOT" },
                         allProducts: { $push: "$$ROOT" },
                         count: { $sum: 1 },
@@ -383,7 +396,13 @@ class wearCatalogController {
                 { $sort: { createdAt: -1 } },
                 {
                     $group: {
-                        _id: "$catalogId",
+                        _id: { 
+                            $cond: { 
+                                if: { $or: [{ $eq: ["$catalogId", null] }, { $eq: ["$catalogId", ""] }, { $not: ["$catalogId"] }] }, 
+                                then: "$_id", 
+                                else: { $toString: "$catalogId" } 
+                            } 
+                        },
                         mainProduct: { $first: "$$ROOT" },
                         allProducts: { $push: "$$ROOT" },
                         count: { $sum: 1 }
@@ -422,9 +441,9 @@ class wearCatalogController {
                     $group: {
                         _id: { 
                             $cond: { 
-                                if: { $and: [{ $ne: ["$catalogId", null] }, { $ne: ["$catalogId", ""] }] }, 
-                                then: "$catalogId", 
-                                else: "$_id" 
+                                if: { $or: [{ $eq: ["$catalogId", null] }, { $eq: ["$catalogId", ""] }, { $not: ["$catalogId"] }] }, 
+                                then: "$_id", 
+                                else: { $toString: "$catalogId" } 
                             } 
                         },
                         mainProduct: { $first: "$$ROOT" },
@@ -574,7 +593,13 @@ class wearCatalogController {
                 },
                 {
                     $group: {
-                        _id: "$catalogId",
+                        _id: { 
+                            $cond: { 
+                                if: { $or: [{ $eq: ["$catalogId", null] }, { $eq: ["$catalogId", ""] }, { $not: ["$catalogId"] }] }, 
+                                then: "$_id", 
+                                else: { $toString: "$catalogId" }
+                            } 
+                        },
                         mainProduct: { $first: "$$ROOT" },
                         allProducts: { $push: "$$ROOT" },
                         count: { $sum: 1 }
@@ -830,7 +855,11 @@ class wearCatalogController {
                         color: item.color,
                         listingPrice: parseFloat(v.listingPrice),
                         mrp: parseFloat(v.mrp),
-                        stock: parseInt(v.stock)
+                        stock: parseInt(v.stock),
+                        priceTiers: (v.priceTiers || []).map(t => ({
+                            minQty: parseInt(t.minQty),
+                            price: parseFloat(t.price)
+                        })).filter(t => !isNaN(t.minQty) && !isNaN(t.price))
                     })),
                     status: 'pending', // Reset to pending for re-review
                     updatedAt: new Date()

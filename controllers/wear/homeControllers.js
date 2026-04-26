@@ -373,14 +373,20 @@ class homeControllers {
     }
 
     get_similar_products = async (req, res) => {
-        const { catalogId, productId } = req.query;
+            const { catalogId, productId } = req.query;
         try {
             if (!catalogId) return responseReturn(res, 200, { similar: [] });
             
+            // Handle both String and ObjectId versions of catalogId to be robust against data inconsistency
+            let catalogIds = [catalogId];
+            const mongoose = require('mongoose');
+            if (mongoose.Types.ObjectId.isValid(catalogId)) {
+                catalogIds.push(new mongoose.Types.ObjectId(catalogId));
+            }
+
             // Fetch all siblings in the same catalog, regardless of status
-            // This ensures pending variants show up together in supplier preview
             const similar = await wearProductModel.find({
-                catalogId
+                catalogId: { $in: catalogIds }
             }).select('productName images variants slug _id status');
 
             responseReturn(res, 200, {

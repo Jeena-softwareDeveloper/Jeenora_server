@@ -178,16 +178,10 @@ class wearCatalogController {
                 return responseReturn(res, 200, { success: true, catalogs: [] });
             }
 
-            console.log(`[Inventory] Supplier found: ${supplier._id}`);
-
-            // Debug: Check count before aggregation
-            const rawCount = await WearProduct.countDocuments({ sellerId: supplier._id });
-            console.log(`[Inventory] Raw product count (simple find) for seller ${supplier._id}: ${rawCount}`);
-
-            // Ensure sellerId is an ObjectId for aggregation
             const sellerObjectId = new mongoose.Types.ObjectId(String(supplier._id));
+            const productModel = require('../../models/wear/productModel');
 
-            // Use aggregation to group by catalogId
+            // 1. Get Grouped Wear Catalogs (aggregated by catalogId)
             const groupedCatalogs = await WearProduct.aggregate([
                 { $match: { sellerId: sellerObjectId } },
                 { $sort: { createdAt: -1 } },
@@ -200,27 +194,50 @@ class wearCatalogController {
                                 else: "$_id" 
                             } 
                         },
-                        mainProduct: { $first: "$$ROOT" }, // Get the most recent or primary
+                        mainProduct: { $first: "$$ROOT" },
                         allProducts: { $push: "$$ROOT" },
-                        count: { $sum: 1 },
-                        status: { $first: "$status" }
+                        count: { $sum: 1 }
                     }
                 },
                 { $sort: { "mainProduct.createdAt": -1 } }
             ]);
 
-            console.log(`[Inventory] Aggregated Groups: ${groupedCatalogs.length}`);
-
-            // Map back to a cleaner structure for UI
-            const catalogs = groupedCatalogs.map(g => ({
+            const wearCatalogs = groupedCatalogs.map(g => ({
                 ...g.mainProduct,
-                _id: g.mainProduct._id, // Keep the ID of the main product for reference
+                _id: g.mainProduct._id,
                 catalogId: g.mainProduct.catalogId || g._id,
                 similarProductsCount: g.count,
                 similarProducts: g.allProducts
             }));
 
-            responseReturn(res, 200, { success: true, catalogs });
+            // 2. Get Legacy Products for this seller
+            const legacyProductsRaw = await productModel.find({ sellerId: sellerObjectId }).sort({ createdAt: -1 }).lean();
+
+            const legacyCatalogs = legacyProductsRaw.map(p => ({
+                ...p,
+                productName: p.name,
+                catalogId: p._id,
+                variants: p.variants || [{
+                    listingPrice: p.price,
+                    mrp: p.price + (p.discount || 0),
+                    size: 'Standard',
+                    color: 'Multi',
+                    stock: p.stock
+                }],
+                similarProductsCount: 1,
+                similarProducts: [p],
+                isLegacy: true,
+                status: p.status || 'active'
+            }));
+
+            // 3. Combine and Sort
+            const allCatalogs = [...wearCatalogs, ...legacyCatalogs].sort((a, b) =>
+                new Date(b.createdAt) - new Date(a.createdAt)
+            );
+
+            console.log(`[Inventory] Returning ${allCatalogs.length} catalogs total (${wearCatalogs.length} wear, ${legacyCatalogs.length} legacy)`);
+
+            responseReturn(res, 200, { success: true, catalogs: allCatalogs });
         } catch (error) {
             console.error('[Inventory] Error:', error);
             responseReturn(res, 500, { error: error.message });

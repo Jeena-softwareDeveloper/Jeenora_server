@@ -10,23 +10,15 @@ const { responseReturn } = require('../../utiles/response')
 const { mongo: { ObjectId } } = require('mongoose')
 const productModel = require('../../models/wear/productModel')
 const wearProductModel = require('../../models/wear/wearProductModel')
-const stripe = require('stripe')(process.env.STRIPE_KEY || 'sk_test_51Q5pOLF4md42MzNFfd346XC4Ei7UQAadIsfGlApQRmoY7LTNTKCrkzzrXV7LHegwEVhXjoGd4LnCkQI6dDvDiFAB00dT4MULfg')
 const { ORDER_STATUS, isValidTransition } = require('../../utiles/orderValidators')
 const customerModel = require('../../models/wear/customerModel')
 const wearAuditLogModel = require('../../models/wear/wearAuditLogModel')
 const WearNotification = require('../../models/wear/wearNotificationModel');
 const shiprocketService = require('../../utiles/shiprocketService');
-const aiService = require('../../utiles/aiService');
-const Razorpay = require('razorpay');
-const crypto = require('crypto');
-
-const razorpay = process.env.RAZORPAY_KEY_ID ? new Razorpay({
-    key_id: process.env.RAZORPAY_KEY_ID,
-    key_secret: process.env.RAZORPAY_KEY_SECRET
-}) : null;
 
 const { sendEmail } = require('../../utiles/emailSender');
 const sellerModel = require('../../models/wear/sellerModel');
+const aiService = require('../../utiles/aiService');
 const whatsappClient = require('../../utiles/whatsappClient');
 const { Cashfree, CFEnvironment } = require('cashfree-pg');
 
@@ -106,7 +98,7 @@ class orderController {
             // 2. WHATSAPP NOTIFICATION (CUSTOMER)
             if (customer.phone && settings.whatsappNotifications && settings.orderUpdates) {
                 try {
-                    const aiService = require('../../utiles/aiService');
+
                     const orderIdShort = order._id.toString().slice(-8).toUpperCase();
                     
                     const waMessage = await aiService.generateNotificationMessage('user', type, {
@@ -118,7 +110,7 @@ class orderController {
                     });
 
                     await whatsappClient.sendMessage(customer.phone, waMessage);
-                    console.log(`[AI Order Notification] Sent to Customer ${customer.phone}: ${waMessage}`);
+
                 } catch (waError) {
                     console.error('[AI Order Notification] Customer WhatsApp failed:', waError.message);
                 }
@@ -171,7 +163,7 @@ class orderController {
                     // --- AI WHATSAPP NOTIFICATION (SELLER) ---
                     if (seller && seller.phoneNumber && sSettings.whatsappNotifications && sSettings.orderUpdates) {
                         try {
-                            const aiService = require('../../utiles/aiService');
+
                             const orderIdShort = order._id.toString().slice(-8).toUpperCase();
                             
                             const sWaMessage = await aiService.generateNotificationMessage('supplier', 'order_received', {
@@ -182,7 +174,7 @@ class orderController {
                             });
 
                             await whatsappClient.sendMessage(seller.phoneNumber, sWaMessage);
-                            console.log(`[AI Order Notification] Sent to Seller ${seller.phoneNumber}: ${sWaMessage}`);
+
                         } catch (waError) {
                             console.error('[AI Order Notification] Seller WhatsApp failed:', waError.message);
                         }
@@ -190,7 +182,7 @@ class orderController {
                 }
             }
         } catch (err) {
-            console.log('Notification Error:', err.message);
+
         }
     }
 
@@ -235,6 +227,7 @@ class orderController {
                 })),
                 payment_method: mainOrder.payment_method === 'COD' ? 'Postpaid' : 'Prepaid',
                 sub_total: order.price,
+                // Dimensions (Placeholder - Should ideally come from product data)
                 length: 10, width: 10, height: 10, weight: 0.5
             };
 
@@ -255,7 +248,7 @@ class orderController {
                     shipData.billing_pincode = cleanAddress.pincode;
                 }
             } catch (err) {
-                console.log('AI Scrubbing skipped:', err.message);
+
             }
 
             const srResponse = await shiprocketService.createOrder(shipData);
@@ -274,7 +267,7 @@ class orderController {
                         }
                     }
                 } catch (err) {
-                    console.log('AI Courier Selection failed, using default:', err.message);
+
                 }
 
                 await model.findByIdAndUpdate(orderId, {
@@ -285,7 +278,7 @@ class orderController {
                     is_high_risk: false,
                     risk_score: 0
                 });
-                console.log(`[SHIPROCKET] ${isSubOrder ? 'Sub-Order' : 'Main-Order'} ${orderId} synced with AI Courier Selection.`);
+
                 return srResponse;
             }
         } catch (err) {
@@ -324,10 +317,10 @@ class orderController {
             }
             return true
         } catch (error) {
-            console.log(error)
+
         }
     }
-    // end method 
+    
     place_order = async (req, res) => {
         const { price, products, shipping_fee, shippingInfo, userId, payment_method } = req.body;
         const initial_delivery_status = payment_method !== 'COD' ? 'pending_payment' : 'pending';
@@ -428,7 +421,6 @@ class orderController {
                 });
             }
 
-            console.log(`[PLACE_ORDER] Creating order for User: ${userId}`);
             const order = await customerOrder.create({
                 customerId: userId,
                 shippingInfo,
@@ -463,10 +455,10 @@ class orderController {
                             is_high_risk: true, 
                             risk_score: risk.risk_score || 80 
                         });
-                        console.log(`[RISK] High RTO risk detected for ${shippingInfo.phone}`);
+
                     }
                 } catch (riskErr) {
-                    console.log('Risk check failed, continuing...');
+
                 }
             }
             
@@ -502,11 +494,11 @@ class orderController {
                 await customerOrder.findByIdAndUpdate(mainOrderId, { delivery_status: 'cancelled' });
             }
         } catch (err) {
-            console.log('Sync Logic Error:', err.message);
+
         }
     }
 
-    // End Method
+    
 
     // Centralized Scrubber for Customer Orders (Client-Facing)
     scrubCustomerOrder = (o) => ({
@@ -553,11 +545,11 @@ class orderController {
             })
 
         } catch (error) {
-            console.log(error.message)
+
             responseReturn(res, 500, { error: 'Internal Server Error' })
         }
     }
-    // End Method
+    
 
     get_orders = async (req, res) => {
         const { customerId, status } = req.params
@@ -575,7 +567,7 @@ class orderController {
                     customerId: new ObjectId(customerId)
                 }).sort({ createdAt: -1 }).lean();
             }
-            console.log(`[GET_ORDERS] Found ${ordersRaw.length} orders for Customer: ${customerId}`);
+
             responseReturn(res, 200, { 
                 orders: ordersRaw.map(o => ({
                     _id: o._id,
@@ -591,7 +583,7 @@ class orderController {
             responseReturn(res, 500, { error: 'Internal Server Error' })
         }
     }
-    // End Method 
+    
 
     get_order_details = async (req, res) => {
         const { orderId } = req.params
@@ -632,10 +624,10 @@ class orderController {
                 }
             })
         } catch (error) {
-            console.log(error.message)
+
         }
     }
-    // End Method 
+    
 
     get_admin_orders = async (req, res) => {
         let { page, searchValue, parPage } = req.query
@@ -675,10 +667,10 @@ class orderController {
                 responseReturn(res, 200, { orders, totalOrder: totalOrder.length })
             }
         } catch (error) {
-            console.log(error.message)
+
         }
     }
-    // End Method 
+    
     get_admin_order = async (req, res) => {
         const { orderId } = req.params
         try {
@@ -697,10 +689,10 @@ class orderController {
             ])
             responseReturn(res, 200, { order: order[0] })
         } catch (error) {
-            console.log('get admin order details' + error.message)
+
         }
     }
-    // End Method 
+    
     admin_order_status_update = async (req, res) => {
         const { orderId } = req.params
         const { status } = req.body
@@ -750,12 +742,12 @@ class orderController {
 
             responseReturn(res, 200, { message: 'order Status change success' })
         } catch (error) {
-            console.log('admin order status update error: ' + error.message)
+
             responseReturn(res, 500, { message: 'internal server error' })
         }
 
     }
-    // End Method 
+    
     get_seller_orders = async (req, res) => {
         const { sellerId } = req.params
         let { page, searchValue, parPage } = req.query
@@ -778,11 +770,11 @@ class orderController {
             }
 
         } catch (error) {
-            console.log('get seller Order error' + error.message)
+
             responseReturn(res, 500, { message: 'internal server error' })
         }
     }
-    // End Method 
+    
     get_seller_order = async (req, res) => {
         const { orderId } = req.params
 
@@ -804,10 +796,10 @@ class orderController {
 
             responseReturn(res, 200, { order: scrubbedOrder })
         } catch (error) {
-            console.log('get seller details error' + error.message)
+
         }
     }
-    // End Method 
+    
     seller_order_status_update = async (req, res) => {
         const { orderId } = req.params
         const { status } = req.body
@@ -828,7 +820,6 @@ class orderController {
 
             // SYNC UPWARDS TO MAIN ORDER
             await this.sync_main_order_status(order.orderId);
-            await order.save();
 
             // Trigger notification if status is relevant for customer
             if (['confirmed', 'shipped', 'delivered', 'cancelled'].includes(status)) {
@@ -854,30 +845,12 @@ class orderController {
 
             responseReturn(res, 200, { message: 'order status updated successfully' })
         } catch (error) {
-            console.log('seller order status update error: ' + error.message)
+
             responseReturn(res, 500, { message: 'internal server error' })
         }
     }
-    // End Method 
+    
 
-    create_payment = async (req, res) => {
-        const { price } = req.body
-        try {
-            const amount = Math.round(price * 100 * 0.33);
-            const payment = await stripe.paymentIntents.create({
-                amount: amount,
-                currency: 'usd',
-                automatic_payment_methods: {
-                    enabled: true
-                }
-            })
-            responseReturn(res, 200, { clientSecret: payment.client_secret })
-        } catch (error) {
-            console.log(error.message)
-        }
-    }
-
-    //END METHOD
     order_confirm = async (req, res) => {
         const { orderId } = req.params
         try {
@@ -914,109 +887,11 @@ class orderController {
 
 
         } catch (error) {
-            console.log(error.message)
+
         }
 
     }
-    // End Method 
-
-    create_razorpay_order = async (req, res) => {
-        const { orderId } = req.body;
-        try {
-            const order = await customerOrder.findById(orderId);
-            if (!order) {
-                return responseReturn(res, 404, { message: 'Order not found' });
-            }
-
-            const options = {
-                amount: Math.round(order.price * 100), // amount in the smallest currency unit
-                currency: "INR",
-                receipt: `receipt_order_${order._id}`,
-            };
-
-            if (!razorpay) {
-                return responseReturn(res, 500, { message: 'Razorpay is not configured on the server' });
-            }
-
-            const razorOrder = await razorpay.orders.create(options);
-            responseReturn(res, 200, { razorOrder });
-
-        } catch (error) {
-            console.log(error.message);
-            responseReturn(res, 500, { message: 'Razorpay order creation failed' });
-        }
-    }
-
-    verify_razorpay_payment = async (req, res) => {
-        const { razorpay_order_id, razorpay_payment_id, razorpay_signature, orderId } = req.body;
-
-        try {
-            // 1. SIGNATURE VERIFICATION (STRICT MODE)
-            const shasum = crypto.createHmac('sha256', process.env.RAZORPAY_KEY_SECRET);
-            shasum.update(`${razorpay_order_id}|${razorpay_payment_id}`);
-            const digest = shasum.digest('hex');
-
-            if (digest !== razorpay_signature) {
-                return responseReturn(res, 400, { message: 'Security Alert: Payment signature mismatch!' });
-            }
-
-            // 2. IDEMPOTENCY CHECK (Prevent duplicate verification)
-            const order = await customerOrder.findById(orderId);
-            if (!order) return responseReturn(res, 404, { message: 'Order not found' });
-            if (order.payment_status === 'paid') {
-                return responseReturn(res, 200, { message: 'Payment already verified' });
-            }
-
-            // 3. UPDATE ORDER STATUS -> PAYMENT SUCCESS
-            await customerOrder.findByIdAndUpdate(orderId, {
-                payment_status: 'paid',
-                delivery_status: 'confirmed', // Move to confirmed after payment
-                payment_id: razorpay_payment_id
-            });
-
-            await authOrderModel.updateMany({ orderId: new ObjectId(orderId) }, {
-                payment_status: 'paid',
-                delivery_status: 'confirmed',
-                paymentId: razorpay_payment_id
-            });
-
-            // CLEAR CART NOW (since payment is finally successful)
-            if (order.cartItemIds && order.cartItemIds.length > 0) {
-                for (const cardId of order.cartItemIds) {
-                    await cardModel.findByIdAndDelete(cardId);
-                }
-            }
-
-            // 4. SETTLE WALLETS BASED ON SNAPSHOTS
-            const time = moment(Date.now()).format('l');
-            const splitTime = time.split('/');
-
-            await myShopWallet.create({
-                amount: order.totalCommission || 0, // Snapshot from creation
-                month: splitTime[0],
-                year: splitTime[2]
-            });
-
-            const auOrders = await authOrderModel.find({ orderId: new ObjectId(orderId) });
-            for (const auOrder of auOrders) {
-                await sellerWallet.create({
-                    sellerId: auOrder.sellerId.toString(),
-                    amount: auOrder.sellerAmount || auOrder.price, // Snapshot from creation
-                    month: splitTime[0],
-                    year: splitTime[2]
-                });
-            }
-
-            // Notify Success
-            this.send_order_notifications(order, 'paid');
-
-            responseReturn(res, 200, { message: 'Payment verified successfully!' });
-
-        } catch (error) {
-            console.log(error.message);
-            responseReturn(res, 500, { message: 'Internal server error during verification' });
-        }
-    }
+    
 
     // ATOMIC STOCK LOCKING (NO OVERSELLING GUARANTEE)
     decrease_stock = async (req, res) => {
@@ -1073,7 +948,7 @@ class orderController {
         }
     }
 
-    // END METHOD
+    
     // ATOMIC STOCK RELEASE (RECOVERY)
     increase_stock = async (req, res) => {
         const { productId } = req.params;
@@ -1114,7 +989,7 @@ class orderController {
         }
     }
 
-    // END METHOD
+    
 
 
 
@@ -1175,7 +1050,7 @@ class orderController {
 
             responseReturn(res, 200, { message: 'Order cancelled and rewards reversed successfully' });
         } catch (error) {
-            console.log('Customer order cancel error: ' + error.message);
+
             responseReturn(res, 500, { message: 'Internal server error' });
         }
     }
@@ -1225,7 +1100,7 @@ class orderController {
 
             let user = await customerModel.findById(order.customerId);
             if (!user) {
-                const WearBuyer = require('../../models/wear/wearBuyerModel');
+
                 user = await WearBuyer.findById(order.customerId);
             }
 
@@ -1338,7 +1213,7 @@ class orderController {
     // 🤖 AI LOGISTICS AUTOMATION (CRON JOB)
     // ============================================================
     automated_tracking_check = async () => {
-        console.log('[AI LOGISTICS] 🚀 Starting automated tracking check...');
+
         try {
             // Find orders that are shipped but not delivered
             const activeOrders = await customerOrder.find({
@@ -1371,7 +1246,6 @@ class orderController {
                                 itemName: order.products[0]?.name || 'Item'
                             });
                             await whatsappClient.sendMessage(customer.phone, aiMsg);
-                            console.log(`[AI LOGISTICS] Delay alert sent to ${customer.name} for Order #${order._id}`);
                         }
                     }
 
@@ -1386,7 +1260,6 @@ class orderController {
                                 itemName: order.products[0]?.name || 'Item'
                             });
                             await whatsappClient.sendMessage(customer.phone, aiMsg);
-                            console.log(`[AI LOGISTICS] NDR resolution message sent to ${customer.name}`);
                         }
                     }
                 } catch (err) {

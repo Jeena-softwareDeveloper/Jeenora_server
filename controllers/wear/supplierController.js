@@ -49,8 +49,7 @@ class supplierController {
         const { ifscCode } = req.body;
         if (!ifscCode) return responseReturn(res, 400, { error: 'IFSC code is required' });
 
-        try {
-            const axios = require('axios');
+        try {
             const ifscRes = await axios.get(`https://ifsc.razorpay.com/${ifscCode}`);
 
             if (ifscRes.data) {
@@ -78,8 +77,7 @@ class supplierController {
         const { pincode } = req.body;
         if (!pincode || pincode.length !== 6) return responseReturn(res, 400, { error: 'Valid 6-digit pincode is required' });
 
-        try {
-            const axios = require('axios');
+        try {
             const response = await axios.get(`https://api.postalpincode.in/pincode/${pincode}`);
             const data = response.data;
 
@@ -135,9 +133,7 @@ class supplierController {
                 // try to find by phone number from the user object in request (added by middleware)
                 const phone = req.user?.phone;
                 if (phone) {
-                    // Find all possible user IDs for this phone
-                    const WearBuyer = require('../../models/wear/wearBuyerModel');
-                    const Customer = require('../../models/wear/customerModel');
+                    // Find all possible user IDs for this phone
 
                     const buyer = await WearBuyer.findOne({ phone });
                     const customer = await Customer.findOne({ phone });
@@ -275,8 +271,7 @@ class supplierController {
                 } else if (allCancelled) {
                     await customerOrder.findByIdAndUpdate(order.orderId, { delivery_status: 'cancelled' });
                 }
-            } catch (err) {
-                console.log('Sync Logic Error:', err.message);
+            } catch (err) {
             }
 
             responseReturn(res, 200, { success: true, message: `Order status updated to ${status}`, order });
@@ -517,10 +512,7 @@ class supplierController {
             }
 
             // AI Notification Integration
-            try {
-                const aiService = require('../../utiles/aiService');
-                const whatsappClient = require('../../utiles/whatsappClient');
-                const WearBuyer = require('../../models/wear/wearBuyerModel');
+            try {
                 
                 // Fetch associated user account for notification settings
                 const userAccount = await WearBuyer.findById(supplier.user).select('+notificationSettings');
@@ -535,11 +527,9 @@ class supplierController {
                     });
 
                     if (supplier.supplierDetails?.phone) {
-                        await whatsappClient.sendMessage(supplier.supplierDetails.phone, message);
-                        console.log(`[AI Notification] Status update sent to ${supplier.supplierDetails.phone}: ${message}`);
+                        await whatsappClient.sendMessage(supplier.supplierDetails.phone, message);
                     }
-                } else {
-                    console.log(`[AI Notification] Skipped for ${supplierId} due to user preferences.`);
+                } else {
                 }
             } catch (aiError) {
                 console.error('[AI Notification] Failed to send status update notification:', aiError.message);

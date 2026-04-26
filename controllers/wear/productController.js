@@ -3,6 +3,13 @@ const { responseReturn } = require("../../utiles/response")
 const cloudinary = require('cloudinary').v2
 const productModel = require('../../models/wear/productModel')
 
+cloudinary.config({
+    cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+    api_key: process.env.CLOUDINARY_API_KEY,
+    api_secret: process.env.CLOUDINARY_API_SECRET,
+    secure: true
+});
+
 class productController {
     add_product = async (req, res) => {
         const { id } = req;
@@ -20,14 +27,7 @@ class productController {
             }
 
             name = name.trim();
-            const slug = name.split(' ').join('-');
-
-            cloudinary.config({
-                cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-                api_key: process.env.CLOUDINARY_API_KEY,
-                api_secret: process.env.CLOUDINARY_API_SECRET,
-                secure: true,
-            });
+            const slug = name.split(' ').join('-');
 
             try {
                 let allImageUrl = [];
@@ -66,7 +66,7 @@ class productController {
         });
     };
 
-    /// end method 
+    
 
     products_get = async (req, res) => {
         const { page, searchValue, parPage } = req.query
@@ -94,15 +94,13 @@ class productController {
 
             }
 
-        } catch (error) {
-
-            console.log(error.message)
+        } catch (error) {
         }
 
     }
 
 
-    /// end method 
+    
 
 
     product_get = async (req, res) => {
@@ -111,12 +109,11 @@ class productController {
             const product = await productModel.findById(productId)
             responseReturn(res, 200, { product })
 
-        } catch (error) {
-            console.log(error.message)
+        } catch (error) {
         }
     }
 
-    /// end method 
+    
 
 
 
@@ -145,7 +142,7 @@ class productController {
             responseReturn(res, 500, { error: error.message });
         }
     }
-    /// end method 
+    
     product_image_update = async (req, res) => {
         const form = formidable({ multiples: true })
 
@@ -156,14 +153,7 @@ class productController {
             if (err) {
                 responseReturn(res, 400, { error: err.message })
             } else {
-                try {
-
-                    cloudinary.config({
-                        cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-                        api_key: process.env.CLOUDINARY_API_KEY,
-                        api_secret: process.env.CLOUDINARY_API_SECRET,
-                        secure: true
-                    })
+                try {
 
                     const result = await cloudinary.uploader.upload(newImage.filepath, { folder: 'products' })
 
@@ -190,7 +180,7 @@ class productController {
 
         })
     }
-    // End Method 
+    
 
 
     deleteProduct = async (req, res) => {
@@ -199,21 +189,20 @@ class productController {
         try {
             const product = await productModel.findById(productId);
             if (!product) {
-                return res.status(404).json({ message: 'Product not found' });
+                return responseReturn(res, 200, { message: 'Product not found' });
             }
             if (product.sellerId.toString() !== id && role !== 'admin') {
-                return res.status(403).json({ message: 'You are not authorized to delete this product' });
+                return responseReturn(res, 200, { message: 'You are not authorized to delete this product' });
             }
 
             await productModel.findByIdAndDelete(productId);
-            res.status(200).json({ message: 'Product deleted successfully' });
-        } catch (error) {
-            console.log(`Error delete product with id ${productId}:`, error);
-            res.status(500).json({ message: 'Internal Server Error' });
+            responseReturn(res, 200, { message: 'Product deleted successfully' });
+        } catch (error) {
+            responseReturn(res, 200, { message: 'Internal Server Error' });
         }
     }
 
-    // end method
+    
 
 
 

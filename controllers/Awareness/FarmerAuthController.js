@@ -4,6 +4,7 @@ const { createToken } = require('../../utiles/tokenCreate');
 const { responseReturn } = require('../../utiles/response');
 const formidable = require('formidable');
 const cloudinary = require('cloudinary').v2;
+const { checkAccountLock, recordFailedLogin, clearFailedLogins } = require('../../middlewares/authMiddleware');
 
 class FarmerAuthController {
     
@@ -40,16 +41,30 @@ class FarmerAuthController {
     // Login Farmer
     login = async (req, res) => {
         const { email, password } = req.body;
+        const ip = req.ip || req.connection.remoteAddress;
         try {
+            // Check account lockout
+            const lockStatus = await checkAccountLock(email);
+            if (lockStatus.locked) {
+                return responseReturn(res, 429, {
+                    error: `Account temporarily locked due to multiple failed attempts. Try again in ${lockStatus.remaining} minute(s).`
+                });
+            }
+
             const farmer = await Farmer.findOne({ email }).select('+password');
             if (!farmer) {
+                await recordFailedLogin(email, ip);
                 return responseReturn(res, 401, { error: 'Invalid credentials' });
             }
 
             const match = await bcrypt.compare(password, farmer.password);
             if (!match) {
+                await recordFailedLogin(email, ip);
                 return responseReturn(res, 401, { error: 'Invalid credentials' });
             }
+
+            // Clear failed login attempts on success
+            await clearFailedLogins(email);
 
             const token = await createToken({ id: farmer.id, role: farmer.role });
             

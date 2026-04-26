@@ -8,8 +8,6 @@ router.post('/create-order', authMiddleware, paymentController.createOrder)
 router.post('/create-credit-order', authMiddleware, paymentController.createCreditOrder)
 router.post('/verify', authMiddleware, paymentController.verifyPayment)
 router.get('/subscription', authMiddleware, paymentController.getSubscription)
-router.post('/phonepe-webhook', paymentController.phonepeWebhook)
-router.post('/razorpay-webhook', paymentController.razorpayWebhook)
 router.post('/cashfree-webhook', paymentController.cashfreeWebhook)
 
 // ==================== ADMIN PAYMENT ROUTES ====================

@@ -41,7 +41,6 @@ class configController {
             ];
 
             const paymentKeys = {
-                razorpayKeyId: process.env.RAZORPAY_KEY_ID,
                 cashfreeAppId: process.env.CASHFREE_APP_ID,
                 cashfreeEnvironment: process.env.CASHFREE_ENVIRONMENT || 'SANDBOX'
             };

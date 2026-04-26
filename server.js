@@ -18,9 +18,6 @@ const requiredEnvVars = [
   'SMTP_PORT',
   'EMAIL_USER',
   'EMAIL_PASSWORD',
-  'RAZORPAY_KEY_ID',
-  'RAZORPAY_KEY_SECRET',
-  'STRIPE_KEY',
   'DEEPSEEK_API_KEY'
 ];
 
@@ -39,9 +36,7 @@ if (missingVars.length > 0) {
 if (process.env.NODE_ENV === 'development') {
   const sensitiveDefaults = {
     'ADMIN_PASSWORD': 'Jeenora.12345',
-    'EMAIL_PASSWORD': 'Jeena.1234',
-    'RAZORPAY_KEY_ID': 'rzp_live_',
-    'STRIPE_KEY': 'sk_test_'
+    'EMAIL_PASSWORD': 'Jeena.1234'
   };
 
   for (const [varName, defaultValue] of Object.entries(sensitiveDefaults)) {
@@ -127,10 +122,10 @@ app.use(helmet({
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'"],
-      scriptSrc: ["'self'", "'unsafe-inline'", "https://checkout.razorpay.com"],
+      scriptSrc: ["'self'", "'unsafe-inline'"],
       styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
       imgSrc: ["'self'", "data:", "https://res.cloudinary.com", "https://*.jeenora.com"],
-      connectSrc: ["'self'", "https://api.razorpay.com", "wss://*.jeenora.com"],
+      connectSrc: ["'self'", "wss://*.jeenora.com"],
       fontSrc: ["'self'", "https://fonts.gstatic.com"],
       objectSrc: ["'none'"],
       upgradeInsecureRequests: [],

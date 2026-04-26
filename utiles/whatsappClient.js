@@ -12,12 +12,9 @@ class WhatsAppClient {
     }
 
     async initialize() {
-        if (this.status === 'connected' || this.status === 'initializing') {
-            console.log(`[WhatsApp] Already ${this.status}, skipping initialize.`);
+        if (this.status === 'connected' || this.status === 'initializing') {
             return;
-        }
-
-        console.log('[WhatsApp] Initializing WhatsApp Client...');
+        }
         this.status = 'initializing';
 
         this.client = new Client({
@@ -47,8 +44,7 @@ class WhatsAppClient {
             }
         });
 
-        this.client.on('qr', async (qr) => {
-            console.log('[WhatsApp] QR Received');
+        this.client.on('qr', async (qr) => {
             this.status = 'waiting_for_scan';
             try {
                 this.qrCode = await qrcode.toDataURL(qr);
@@ -59,16 +55,14 @@ class WhatsAppClient {
             }
         });
 
-        this.client.on('ready', () => {
-            console.log('[WhatsApp] Client is READY');
+        this.client.on('ready', () => {
             this.status = 'connected';
             this.qrCode = null;
             const io = socketHelper.getIo();
             io.emit('whatsapp_ready');
         });
 
-        this.client.on('authenticated', () => {
-            console.log('[WhatsApp] Authenticated successfully');
+        this.client.on('authenticated', () => {
         });
 
         this.client.on('auth_failure', (msg) => {
@@ -78,8 +72,7 @@ class WhatsAppClient {
             io.emit('whatsapp_auth_failed', { message: msg });
         });
 
-        this.client.on('disconnected', (reason) => {
-            console.log('[WhatsApp] Client was logged out:', reason);
+        this.client.on('disconnected', (reason) => {
             this.status = 'disconnected';
             const io = socketHelper.getIo();
             io.emit('whatsapp_disconnected', { reason });
@@ -104,17 +97,13 @@ class WhatsAppClient {
         let formattedTo = to.replace(/[^0-9]/g, '');
         
         // AUTO-PREPEND 91 if it's a 10-digit number (Standard for Indian users)
-        if (formattedTo.length === 10) {
-            console.log(`[WhatsApp] Auto-prepending 91 to 10-digit number: ${formattedTo}`);
+        if (formattedTo.length === 10) {
             formattedTo = '91' + formattedTo;
         }
 
-        const chatId = formattedTo.includes('@c.us') ? formattedTo : `${formattedTo}@c.us`;
-        
-        console.log(`[WhatsApp] Sending message to ${chatId}...`);
+        const chatId = formattedTo.includes('@c.us') ? formattedTo : `${formattedTo}@c.us`;
         try {
-            await this.client.sendMessage(chatId, message);
-            console.log(`[WhatsApp] Message successfully sent to ${chatId}`);
+            await this.client.sendMessage(chatId, message);
             return true;
         } catch (err) {
             console.error(`[WhatsApp] Send error to ${chatId}:`, err);
@@ -127,8 +116,7 @@ class WhatsAppClient {
             try {
                 await this.client.logout();
                 this.status = 'disconnected';
-                this.qrCode = null;
-                console.log('[WhatsApp] Logged out successfully');
+                this.qrCode = null;
             } catch (err) {
                 console.error('[WhatsApp] Logout error:', err);
             }

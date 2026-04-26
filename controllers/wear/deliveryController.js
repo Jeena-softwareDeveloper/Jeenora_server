@@ -1,6 +1,7 @@
 const axios = require('axios');
 const { responseReturn } = require("../../utiles/response");
-const productModel = require('../../models/wear/wearProductModel');
+const productModel = require('../../models/wear/productModel');
+const wearProductModel = require('../../models/wear/wearProductModel');
 const supplierModel = require('../../models/wear/supplierModel');
 const shiprocketService = require("../../utiles/shiprocketService");
 
@@ -58,8 +59,12 @@ class deliveryController {
         }
 
         try {
-            // 1. Get Product
-            const product = await productModel.findById(productId);
+            // 1. Get Product (Check both wear and legacy)
+            let product = await wearProductModel.findById(productId);
+            if (!product) {
+                product = await productModel.findById(productId);
+            }
+
             if (!product) {
                 return responseReturn(res, 404, { error: 'Product not found' });
             }

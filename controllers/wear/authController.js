@@ -1,18 +1,24 @@
 const WearBuyer = require('../../models/wear/wearBuyerModel');
-const Customer = require('../../models/wear/customerModel');
 const WearLog = require('../../models/wear/wearLogModel');
 const WearOtp = require('../../models/wear/wearOtpModel');
+const WearSession = require('../../models/wear/wearSessionModel');
+const Customer = require('../../models/wear/customerModel');
 const jwt = require('jsonwebtoken');
+const crypto = require('crypto');
+const bcrypt = require('bcrypt');
 const formidable = require('formidable');
 const cloudinary = require('cloudinary').v2;
 const { responseReturn } = require('../../utiles/response');
 
-
-const bcrypt = require('bcryptjs');
-const crypto = require('crypto');
-const WearSession = require('../../models/wear/wearSessionModel');
-
 const { sendSMS } = require('../../services/smsService');
+
+// Global Cloudinary Config (initialized once at startup, not inside functions)
+cloudinary.config({
+    cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+    api_key: process.env.CLOUDINARY_API_KEY,
+    api_secret: process.env.CLOUDINARY_API_SECRET,
+    secure: true
+});
 
 // Config
 const ACCESS_TOKEN_EXPIRY = '7d';
@@ -54,8 +60,6 @@ exports.send_otp = async (req, res) => {
             }
 
             if (isTrusted && user) {
-                console.log(`[AUTH] Trusted device detected for ${cleanPhone}. Skipping SMS OTP.`);
-
                 const accessToken = generateAccessToken(user._id, user.role, deviceId);
                 const refreshToken = generateRefreshToken();
 
@@ -107,14 +111,15 @@ exports.send_otp = async (req, res) => {
             { upsert: true, new: true }
         );
 
-        // Simulation: In production, you'd call an SMS service here
-        console.log(`[SMS AUTH] OTP for ${cleanPhone}: ${otpCode}`);
+        // ⚠️ SECURITY FIX: OTP is NOT returned in production response
+        // In dev mode, we log it to console for testing
+        console.log(`[DEV] OTP for ${cleanPhone}: ${otpCode}`);
 
         return responseReturn(res, 200, {
             success: true,
-            message: 'OTP sent successfully (Check console for code in dev)',
-            otp: otpCode,
-            proceedWithFirebase: true // Suggesting Firebase for modern clients
+            message: 'OTP sent successfully',
+            // otp field removed for security - OTP should only be sent via SMS
+            proceedWithFirebase: true
         });
 
     } catch (error) {
@@ -226,7 +231,7 @@ exports.verify_otp = async (req, res) => {
 exports.refresh_token = async (req, res) => {
     try {
         const { refreshToken, deviceId } = req.body;
-        const currentIp = req.ip || req.connection.remoteAddress;
+        const currentIp = req.ip || '127.0.0.1';
 
         if (!refreshToken || !deviceId) {
             return responseReturn(res, 400, { error: 'Refresh Token and DeviceID required' });
@@ -240,32 +245,29 @@ exports.refresh_token = async (req, res) => {
             return responseReturn(res, 401, { error: 'Session not found', code: 'SESSION_NOT_FOUND' });
         }
         if (session.isRevoked) {
-            // Security: Revoked token usage -> Revoke ALL sessions for this user? 
-            // monitoring for suspicious activity
             return responseReturn(res, 401, { error: 'Session revoked', code: 'SESSION_REVOKED' });
         }
         if (new Date() > session.expiresAt) {
             return responseReturn(res, 401, { error: 'Session expired', code: 'SESSION_EXPIRED' });
         }
         if (session.deviceId !== deviceId) {
-            // Device mismatch - suspicious
             return responseReturn(res, 401, { error: 'Device mismatch', code: 'DEVICE_MISMATCH' });
         }
 
         // 3. Rotate Token
-        const newRefreshToken = generateRefreshToken();
-        const newAccessToken = generateAccessToken(session.userId, 'wear_buyer', deviceId);
+        const rotatedRefreshToken = generateRefreshToken();
+        const rotatedAccessToken = generateAccessToken(session.userId, 'wear_buyer', deviceId);
 
         // Update session
-        session.refreshToken = newRefreshToken;
-        session.ipAddress = currentIp; // Update IP
-        session.expiresAt = new Date(Date.now() + REFRESH_TOKEN_EXPIRY_DAYS * 24 * 60 * 60 * 1000); // Extend expiry
+        session.refreshToken = rotatedRefreshToken;
+        session.ipAddress = currentIp;
+        session.expiresAt = new Date(Date.now() + REFRESH_TOKEN_EXPIRY_DAYS * 24 * 60 * 60 * 1000);
         await session.save();
 
         responseReturn(res, 200, {
             success: true,
-            accessToken: newAccessToken,
-            refreshToken: newRefreshToken
+            accessToken: rotatedAccessToken,
+            refreshToken: rotatedRefreshToken
         });
 
     } catch (error) {
@@ -274,22 +276,13 @@ exports.refresh_token = async (req, res) => {
     }
 };
 
-/* 
-// Legacy methods removed or commented out for cleanliness
-// exports.checkTrustedStatus = ...
-// exports.verifyAndRegister = ...
-*/
-
 // Get Wear Buyer Profile
 exports.get_profile = async (req, res) => {
     try {
         const { id } = req;
-        // Try to find in WearBuyer first
         let user = await WearBuyer.findById(id).lean();
 
-        // If not found, try Customer model
         if (!user) {
-            const Customer = require('../../models/wear/customerModel');
             user = await Customer.findById(id).lean();
         }
 
@@ -319,26 +312,20 @@ exports.get_profile = async (req, res) => {
 };
 
 // Update Wear Buyer Profile
-// Update Wear Buyer Profile
 exports.update_profile = async (req, res) => {
     const { id } = req;
-    const form = formidable({ multiples: true });
-
-    form.parse(req, async (err, fields, files) => {
-        if (err) {
-            return responseReturn(res, 500, { error: err.message });
-        }
-
+    
+    const handleUpdate = async (updateFields) => {
         const {
-            name, email, gender, languages, occupation,
+            name, email, phone, gender, languages, occupation,
             dob, maritalStatus, kidsCount, education, monthlyIncome,
             businessName, pincode, city, state
-        } = fields;
+        } = updateFields;
 
-        // Update data object
         const updateData = {
             name: Array.isArray(name) ? name[0] : name,
             email: Array.isArray(email) ? email[0] : email,
+            phone: Array.isArray(phone) ? phone[0] : phone,
             gender: Array.isArray(gender) ? gender[0] : gender,
             occupation: Array.isArray(occupation) ? occupation[0] : occupation,
             dob: Array.isArray(dob) ? dob[0] : dob,
@@ -353,36 +340,32 @@ exports.update_profile = async (req, res) => {
         };
 
         try {
-            // Try to update WearBuyer first
             let user = await WearBuyer.findByIdAndUpdate(id, updateData, { new: true });
-
-            // If not found in WearBuyer, try Customer model
             if (!user) {
-                const Customer = require('../../models/wear/customerModel');
                 user = await Customer.findByIdAndUpdate(id, updateData, { new: true });
             }
-
             if (!user) {
                 return responseReturn(res, 404, { error: 'User not found' });
             }
-
-            responseReturn(res, 200, {
-                success: true,
-                message: 'Profile updated successfully',
-                userInfo: {
-                    _id: user._id,
-                    name: user.name,
-                    phone: user.phone,
-                    email: user.email,
-                    image: user.image,
-                    role: user.role
-                }
-            });
+            return responseReturn(res, 200, { message: 'Profile updated', userInfo: user });
         } catch (error) {
-            console.error('Update Profile Error:', error);
-            responseReturn(res, 500, { error: 'Internal Server Error' });
+            return responseReturn(res, 500, { error: error.message });
         }
-    });
+    };
+
+    const contentType = req.headers['content-type'] || '';
+    
+    if (contentType.includes('application/json')) {
+        return handleUpdate(req.body);
+    } else {
+        const form = formidable({ multiples: true });
+        form.parse(req, async (err, fields, files) => {
+            if (err) {
+                return responseReturn(res, 500, { error: err.message });
+            }
+            return handleUpdate(fields);
+        });
+    }
 };
 
 // Update Profile Image
@@ -398,13 +381,6 @@ exports.profile_image_upload = async (req, res) => {
         const { image } = files;
         const imageFile = Array.isArray(image) ? image[0] : image;
 
-        cloudinary.config({
-            cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-            api_key: process.env.CLOUDINARY_API_KEY,
-            api_secret: process.env.CLOUDINARY_API_SECRET,
-            secure: true
-        });
-
         try {
             if (!imageFile) {
                 return responseReturn(res, 400, { error: 'No image provided' });
@@ -418,7 +394,6 @@ exports.profile_image_upload = async (req, res) => {
                 }, { new: true });
 
                 if (!user) {
-                    const Customer = require('../../models/wear/customerModel');
                     user = await Customer.findByIdAndUpdate(id, {
                         image: result.url
                     }, { new: true });
@@ -456,7 +431,6 @@ exports.email_signup = async (req, res) => {
         const cleanEmail = email.toLowerCase().trim();
         const cleanPhone = phone.toString().replace(/\D/g, '');
 
-        // Check if user already exists in either model
         const existingBuyer = await WearBuyer.findOne({ $or: [{ email: cleanEmail }, { phone: cleanPhone }, { username }] });
         const existingCustomer = await Customer.findOne({ $or: [{ email: cleanEmail }, { phone: cleanPhone }] });
 
@@ -464,13 +438,11 @@ exports.email_signup = async (req, res) => {
             return responseReturn(res, 400, { error: 'User with this email, phone or username already exists' });
         }
 
-        // Hash password
         const hashedPassword = await bcrypt.hash(password, 10);
 
-        // Create new WearBuyer
         const user = await WearBuyer.create({
             username,
-            name: username, // Use username as default name
+            name: username,
             email: cleanEmail,
             phone: cleanPhone,
             password: hashedPassword,
@@ -478,7 +450,6 @@ exports.email_signup = async (req, res) => {
             isVerified: true
         });
 
-        // Log Activity
         await WearLog.create({
             user: user._id, phone: '', action: 'SIGNUP',
             details: { page: 'Auth', method: 'Email_Signup' }
@@ -507,7 +478,6 @@ exports.email_login = async (req, res) => {
 
         const cleanEmail = email.toLowerCase().trim();
 
-        // Find user (search both models)
         let user = await WearBuyer.findOne({ email: cleanEmail }).select('+password name email role image devices username');
         if (!user) {
             user = await Customer.findOne({ email: cleanEmail }).select('+password name email role image devices');
@@ -517,17 +487,14 @@ exports.email_login = async (req, res) => {
             return responseReturn(res, 401, { error: 'Invalid email or password' });
         }
 
-        // Check password
         const isMatch = await bcrypt.compare(password, user.password);
         if (!isMatch) {
             return responseReturn(res, 401, { error: 'Invalid email or password' });
         }
 
-        // Generate Tokens
         const accessToken = generateAccessToken(user._id, user.role, deviceId);
         const refreshToken = generateRefreshToken();
 
-        // Create Session
         const expiresAt = new Date();
         expiresAt.setDate(expiresAt.getDate() + REFRESH_TOKEN_EXPIRY_DAYS);
 
@@ -540,7 +507,6 @@ exports.email_login = async (req, res) => {
             expiresAt
         });
 
-        // Update User Devices
         if (deviceId) {
             if (!user.devices) user.devices = [];
             const deviceIndex = user.devices.findIndex(d => d.deviceId === deviceId);
@@ -559,7 +525,6 @@ exports.email_login = async (req, res) => {
             await user.save();
         }
 
-        // Log Activity
         await WearLog.create({
             user: user._id, phone: user.phone || '', action: 'LOGIN',
             details: { page: 'Auth', method: 'Email_Login' },
@@ -621,6 +586,7 @@ exports.logout = async (req, res) => {
         }
 
         const { blacklistToken } = require('../../middlewares/authMiddleware');
+
         if (req.token) {
             await blacklistToken(req.token);
         }

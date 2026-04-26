@@ -8,7 +8,6 @@ router.get('/product-get/:productId', authMiddleware, productController.product_
 router.post('/product-update', authMiddleware, productController.product_update)
 router.post('/product-image-update', authMiddleware, productController.product_image_update)
 router.delete('/products/:id', (req, res, next) => {
-    console.log(`DELETE request for ID: ${req.params.id}`);
     next();
 }, productController.deleteProduct);
 

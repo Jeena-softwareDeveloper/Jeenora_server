@@ -1,9 +1,5 @@
 const router = require('express').Router();
 
-router.use((req, res, next) => {
-    console.log(`[DEBUG apiRoutes] ${req.method} ${req.originalUrl}`);
-    next();
-});
 
 const { authMiddleware, authOptional } = require('../middlewares/authMiddleware');
 const { otpSendLimiter, otpVerifyLimiter } = require('../middlewares/securityMiddleware');
@@ -59,6 +55,8 @@ router.post('/wear/auth/register', wearAuthController.email_signup);
 router.post('/wear/auth/login', wearAuthController.email_login);
 router.post('/wear/auth/refresh-token', wearAuthController.refresh_token);
 router.get('/wear/auth/profile', authMiddleware, wearAuthController.get_profile);
+router.put('/wear/auth/update-profile', authMiddleware, wearAuthController.update_profile);
+router.post('/wear/auth/profile-image-upload', authMiddleware, wearAuthController.profile_image_upload);
 router.post('/wear/auth/logout', authMiddleware, wearAuthController.logout);
 
 // 4. SHOPPING EXPERIENCE (Cart, Wishlist, Offers)

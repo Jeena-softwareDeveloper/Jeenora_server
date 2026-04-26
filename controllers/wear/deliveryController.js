@@ -1,9 +1,53 @@
+const axios = require('axios');
 const { responseReturn } = require("../../utiles/response");
 const productModel = require('../../models/wear/wearProductModel');
 const supplierModel = require('../../models/wear/supplierModel');
 const shiprocketService = require("../../utiles/shiprocketService");
 
 class deliveryController {
+    // 1. Get Pincode from Latitude and Longitude
+    get_pincode_from_location = async (req, res) => {
+        const { lat, lng } = req.query;
+
+        if (!lat || !lng) {
+            return responseReturn(res, 400, { error: 'Latitude and Longitude are required' });
+        }
+
+        try {
+            // Using OpenStreetMap Nominatim (Free)
+            const response = await axios.get(`https://nominatim.openstreetmap.org/reverse`, {
+                params: {
+                    format: 'jsonv2',
+                    lat: lat,
+                    lon: lng,
+                },
+                headers: {
+                    'User-Agent': 'Jeenora-App' // Nominatim requires a user agent
+                }
+            });
+
+            if (response.data && response.data.address) {
+                const { postcode, city, state, suburb, road } = response.data.address;
+                const display_name = response.data.display_name;
+
+                return responseReturn(res, 200, {
+                    pincode: postcode || '',
+                    city: city || suburb || '',
+                    state: state || '',
+                    address: display_name,
+                    success: true
+                });
+            }
+
+            return responseReturn(res, 404, { error: 'Location not found' });
+
+        } catch (error) {
+            console.error('❌ Reverse Geocoding Error:', error.message);
+            return responseReturn(res, 500, { error: 'Failed to fetch location details' });
+        }
+    }
+
+    // 2. Get EDD from Pincode (Existing)
     get_delivery_edd = async (req, res) => {
         const { productId, deliveryPincode } = req.query;
 

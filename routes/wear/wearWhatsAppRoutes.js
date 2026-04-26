@@ -12,7 +12,7 @@ router.post('/test-message', authMiddleware, whatsappController.testMessage);
 router.post('/test-wa-public', async (req, res) => {
     try {
         const { phoneNumber, message } = req.body;
-        const whatsappClient = require('./utiles/whatsappClient');
+        const whatsappClient = require('../../utiles/whatsappClient');
         await whatsappClient.sendMessage(phoneNumber, message || 'Public Test Message from Jeenora');
         res.json({ success: true, message: 'Message sent!' });
     } catch (error) {

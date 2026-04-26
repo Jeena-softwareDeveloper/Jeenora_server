@@ -105,6 +105,105 @@ class ShiprocketService {
             throw error;
         }
     }
+
+    async createOrder(orderData) {
+        try {
+            const token = await this.getToken();
+            const response = await axios.post('https://apiv2.shiprocket.in/v1/external/orders/create/adhoc', orderData, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            return response.data;
+        } catch (error) {
+            console.error('❌ Shiprocket Create Order Error:', error.response?.data || error.message);
+            throw error;
+        }
+    }
+
+    async generateLabel(shipmentIds) {
+        try {
+            const token = await this.getToken();
+            const response = await axios.post('https://apiv2.shiprocket.in/v1/external/courier/generate/label', {
+                shipment_id: shipmentIds
+            }, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            return response.data;
+        } catch (error) {
+            console.error('❌ Shiprocket Label Error:', error.response?.data || error.message);
+            throw error;
+        }
+    }
+
+    async getNDRList(params = {}) {
+        try {
+            const token = await this.getToken();
+            const response = await axios.get('https://apiv2.shiprocket.in/v1/external/ndr/all', {
+                params,
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            return response.data;
+        } catch (error) {
+            console.error('❌ Shiprocket NDR Fetch Error:', error.response?.data || error.message);
+            throw error;
+        }
+    }
+
+    async getRtoRisk(mobileNumber) {
+        try {
+            const token = await this.getToken();
+            // This is a specialized API, endpoint might vary based on plan, using standard track prediction if available
+            const response = await axios.get('https://apiv2.shiprocket.in/v1/external/courier/track/rto-prediction', {
+                params: { mobile: mobileNumber },
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            return response.data;
+        } catch (error) {
+            // If API not available on plan, return neutral risk
+            return { risk_score: 0, status: 'unknown' };
+        }
+    }
+
+    async trackAWB(awb) {
+        try {
+            const token = await this.getToken();
+            const response = await axios.get(`https://apiv2.shiprocket.in/v1/external/courier/track/awb/${awb}`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            return response.data;
+        } catch (error) {
+            console.error('❌ Shiprocket AWB Track Error:', error.response?.data || error.message);
+            throw error;
+        }
+    }
+
+    async getCouriers(shipmentId) {
+        try {
+            const token = await this.getToken();
+            const response = await axios.get(`https://apiv2.shiprocket.in/v1/external/courier/serviceability/?shipment_id=${shipmentId}`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            return response.data.data.available_courier_companies;
+        } catch (error) {
+            console.error('[SHIPROCKET] Courier fetch error:', error.message);
+            return [];
+        }
+    }
+
+    async assignCourier(shipmentId, courierId) {
+        try {
+            const token = await this.getToken();
+            const response = await axios.post('https://apiv2.shiprocket.in/v1/external/courier/assign/awb', {
+                shipment_id: shipmentId,
+                courier_id: courierId
+            }, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            return response.data;
+        } catch (error) {
+            console.error('[SHIPROCKET] Courier assign error:', error.message);
+            return null;
+        }
+    }
 }
 
 module.exports = new ShiprocketService();

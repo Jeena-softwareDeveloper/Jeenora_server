@@ -208,10 +208,20 @@ setInterval(() => {
 // ============================================================
 const cron = require('node-cron');
 const aiMasterController = require('./controllers/wear/aiMasterController');
+const orderController = require('./controllers/wear/orderController');
 const whatsappClient = require('./utiles/whatsappClient');
-
 // 🚀 Initialize WhatsApp Client on startup (attempts auto-reconnect if session exists)
 whatsappClient.initialize();
+
+// 📦 Smart Logistics AI Tracking — runs every 6 hours
+cron.schedule('0 */6 * * *', async () => {
+  try {
+    console.log('[CRON] 📦 Starting Automated AI Logistics Tracking...');
+    await orderController.automated_tracking_check();
+  } catch (error) {
+    console.error('[CRON] ❌ Logistics Tracking crashed:', error.message);
+  }
+});
 
 // 🔔 Predictive Restock Alert — runs every day at 9:00 AM IST
 cron.schedule('30 3 * * *', async () => {

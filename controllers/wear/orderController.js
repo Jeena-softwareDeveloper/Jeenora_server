@@ -14,9 +14,11 @@ const stripe = require('stripe')(process.env.STRIPE_KEY || 'sk_test_51Q5pOLF4md4
 const { ORDER_STATUS, isValidTransition } = require('../../utiles/orderValidators')
 const customerModel = require('../../models/wear/customerModel')
 const wearAuditLogModel = require('../../models/wear/wearAuditLogModel')
+const WearNotification = require('../../models/wear/wearNotificationModel');
+const shiprocketService = require('../../utiles/shiprocketService');
+const aiService = require('../../utiles/aiService');
 const Razorpay = require('razorpay');
 const crypto = require('crypto');
-const WearNotification = require('../../models/wear/wearNotificationModel');
 
 const razorpay = process.env.RAZORPAY_KEY_ID ? new Razorpay({
     key_id: process.env.RAZORPAY_KEY_ID,
@@ -111,7 +113,8 @@ class orderController {
                         name: customer.name,
                         orderId: orderIdShort,
                         price: order.price,
-                        status: order.delivery_status
+                        status: order.delivery_status,
+                        trackingUrl: order.awb_number ? `https://shiprocket.co/tracking/${order.awb_number}` : null
                     });
 
                     await whatsappClient.sendMessage(customer.phone, waMessage);
@@ -188,6 +191,105 @@ class orderController {
             }
         } catch (err) {
             console.log('Notification Error:', err.message);
+        }
+    }
+
+    push_to_shiprocket = async (orderId, isSubOrder = false) => {
+        try {
+            const model = isSubOrder ? authOrderModel : customerOrder;
+            const order = await model.findById(orderId);
+            if (!order) return;
+
+            let mainOrder = order;
+            if (isSubOrder) {
+                mainOrder = await customerOrder.findById(order.orderId);
+                if (!mainOrder) return;
+            }
+
+            const customer = await customerModel.findById(mainOrder.customerId);
+            
+            // For Shiprocket, we need a unique Order ID. 
+            // If it's a sub-order, we append a suffix.
+            const uniqueOrderId = isSubOrder ? `${order._id}_S` : order._id.toString();
+
+            // Format data for Shiprocket
+            const shipData = {
+                order_id: uniqueOrderId,
+                order_date: moment(order.createdAt).format('YYYY-MM-DD HH:mm'),
+                pickup_location: "Primary", 
+                billing_customer_name: mainOrder.shippingInfo?.name || customer?.name || 'Customer',
+                billing_last_name: "",
+                billing_address: mainOrder.shippingInfo?.address || mainOrder.shippingInfo?.houseNo || 'N/A',
+                billing_city: mainOrder.shippingInfo?.city || 'N/A',
+                billing_pincode: mainOrder.shippingInfo?.pincode || '000000',
+                billing_state: mainOrder.shippingInfo?.state || "Tamil Nadu",
+                billing_country: "India",
+                billing_email: customer?.email || "info@jeenora.com",
+                billing_phone: mainOrder.shippingInfo?.phone || customer?.phone || '0000000000',
+                shipping_is_billing: true,
+                order_items: order.products.map(p => ({
+                    name: p.productName || p.name,
+                    sku: p._id?.toString() || 'SKU',
+                    units: p.quantity || 1,
+                    selling_price: p.price || 0
+                })),
+                payment_method: mainOrder.payment_method === 'COD' ? 'Postpaid' : 'Prepaid',
+                sub_total: order.price,
+                length: 10, width: 10, height: 10, weight: 0.5
+            };
+
+            // --- AI ADDRESS SCRUBBING ---
+            try {
+                const cleanAddress = await aiService.scrubAddress({
+                    houseNo: mainOrder.shippingInfo?.houseNo,
+                    area: mainOrder.shippingInfo?.area,
+                    city: mainOrder.shippingInfo?.city,
+                    state: mainOrder.shippingInfo?.state,
+                    pincode: mainOrder.shippingInfo?.pincode
+                });
+                
+                if (cleanAddress && cleanAddress.pincode) {
+                    shipData.billing_address = `${cleanAddress.houseNo || ''} ${cleanAddress.area || ''}`.trim();
+                    shipData.billing_city = cleanAddress.city;
+                    shipData.billing_state = cleanAddress.state;
+                    shipData.billing_pincode = cleanAddress.pincode;
+                }
+            } catch (err) {
+                console.log('AI Scrubbing skipped:', err.message);
+            }
+
+            const srResponse = await shiprocketService.createOrder(shipData);
+            if (srResponse && srResponse.order_id) {
+                // --- AI SMART COURIER SELECTION ---
+                let finalAwb = srResponse.awb_number;
+                try {
+                    const couriers = await shiprocketService.getCouriers(srResponse.shipment_id);
+                    if (couriers && couriers.length > 0) {
+                        const bestCourierId = await aiService.pickBestCourier(couriers, { city: shipData.billing_city });
+                        if (bestCourierId) {
+                            const assignRes = await shiprocketService.assignCourier(srResponse.shipment_id, bestCourierId);
+                            if (assignRes && assignRes.response?.data?.awb_code) {
+                                finalAwb = assignRes.response.data.awb_code;
+                            }
+                        }
+                    }
+                } catch (err) {
+                    console.log('AI Courier Selection failed, using default:', err.message);
+                }
+
+                await model.findByIdAndUpdate(orderId, {
+                    shiprocket_order_id: srResponse.order_id,
+                    shiprocket_shipment_id: srResponse.shipment_id,
+                    awb_number: finalAwb || srResponse.awb_number,
+                    label_url: srResponse.label_url,
+                    is_high_risk: false,
+                    risk_score: 0
+                });
+                console.log(`[SHIPROCKET] ${isSubOrder ? 'Sub-Order' : 'Main-Order'} ${orderId} synced with AI Courier Selection.`);
+                return srResponse;
+            }
+        } catch (err) {
+            console.error(`[SHIPROCKET] Sync failed for ${orderId}:`, err.message);
         }
     }
 
@@ -352,10 +454,28 @@ class orderController {
                 for (let k = 0; k < cardId.length; k++) {
                     await cardModel.findByIdAndDelete(cardId[k])
                 }
+                
+                // --- RTO RISK CHECK ---
+                try {
+                    const risk = await shiprocketService.getRtoRisk(shippingInfo.phone);
+                    if (risk && (risk.risk_score > 70 || risk.status === 'high_risk')) {
+                        await customerOrder.findByIdAndUpdate(order._id, { 
+                            is_high_risk: true, 
+                            risk_score: risk.risk_score || 80 
+                        });
+                        console.log(`[RISK] High RTO risk detected for ${shippingInfo.phone}`);
+                    }
+                } catch (riskErr) {
+                    console.log('Risk check failed, continuing...');
+                }
             }
             
-            // Start Notification (Async)
+            // Start Notification & Shiprocket Sync (Async)
             this.send_order_notifications(order, order.payment_status === 'paid' ? 'paid' : 'placed');
+            
+            if (payment_method === 'COD') {
+                this.push_to_shiprocket(order._id);
+            }
 
             const successMsg = payment_method === 'ONLINE' ? "Order initiated! Redirecting to payment..." : "Order placed successfully";
             responseReturn(res, 201, { message: successMsg, orderId: order._id });
@@ -711,11 +831,24 @@ class orderController {
             await order.save();
 
             // Trigger notification if status is relevant for customer
-            if (['confirmed', 'shipped', 'delivered'].includes(status)) {
+            if (['confirmed', 'shipped', 'delivered', 'cancelled'].includes(status)) {
                 const mainOrder = await customerOrder.findById(order.orderId);
                 if (mainOrder) {
                     mainOrder.delivery_status = status; // Mock update for template
                     this.send_order_notifications(mainOrder, 'status_update');
+                }
+            } else if (['delayed', 'failed', 'ndr'].includes(status.toLowerCase())) {
+                // --- AI SMART LOGISTICS SUPPORT ---
+                const mainOrder = await customerOrder.findById(order.orderId);
+                const customer = await customerModel.findById(mainOrder.customerId);
+                if (customer && customer.phone) {
+                    const aiMsg = await aiService.generateLogisticsSupportMessage(status === 'delayed' ? 'delay' : 'ndr', {
+                        name: customer.name,
+                        orderId: mainOrder._id.toString().slice(-8).toUpperCase(),
+                        status: status,
+                        itemName: mainOrder.products[0]?.name || 'Item'
+                    });
+                    await whatsappClient.sendMessage(customer.phone, aiMsg);
                 }
             }
 
@@ -775,6 +908,9 @@ class orderController {
                 })
             }
             responseReturn(res, 200, { message: 'success' })
+
+            // Post-payment sync
+            this.push_to_shiprocket(orderId);
 
 
         } catch (error) {
@@ -1198,5 +1334,69 @@ class orderController {
             responseReturn(res, 500, { message: 'Verification failed', error: error.response ? error.response.data : error.message });
         }
     }
+    // ============================================================
+    // 🤖 AI LOGISTICS AUTOMATION (CRON JOB)
+    // ============================================================
+    automated_tracking_check = async () => {
+        console.log('[AI LOGISTICS] 🚀 Starting automated tracking check...');
+        try {
+            // Find orders that are shipped but not delivered
+            const activeOrders = await customerOrder.find({
+                delivery_status: { $in: ['shipped', 'out_for_delivery'] },
+                awb_number: { $exists: true, $ne: null }
+            });
+
+            for (const order of activeOrders) {
+                try {
+                    const tracking = await shiprocketService.trackAWB(order.awb_number);
+                    const statusData = tracking.tracking_data?.shipment_track?.[0];
+                    if (!statusData) continue;
+
+                    const currentStatus = statusData.current_status.toLowerCase();
+                    const scanData = statusData.shipment_track_activities || [];
+
+                    // 1. Check for Smart Delay Prediction (Rain, Hub, Weather)
+                    const lastActivity = scanData[0]?.activity || '';
+                    const isDelayed = ['delayed', 'stuck', 'held', 'rain', 'weather', 'hub issue'].some(kw => 
+                        lastActivity.toLowerCase().includes(kw) || currentStatus.includes(kw)
+                    );
+
+                    if (isDelayed) {
+                        const customer = await customerModel.findById(order.customerId);
+                        if (customer && customer.phone) {
+                            const aiMsg = await aiService.generateLogisticsSupportMessage('delay', {
+                                name: customer.name,
+                                orderId: order._id.toString().slice(-8).toUpperCase(),
+                                status: lastActivity || currentStatus,
+                                itemName: order.products[0]?.name || 'Item'
+                            });
+                            await whatsappClient.sendMessage(customer.phone, aiMsg);
+                            console.log(`[AI LOGISTICS] Delay alert sent to ${customer.name} for Order #${order._id}`);
+                        }
+                    }
+
+                    // 2. Check for Proactive NDR Resolution
+                    if (currentStatus.includes('undelivered') || currentStatus.includes('failed')) {
+                        const customer = await customerModel.findById(order.customerId);
+                        if (customer && customer.phone) {
+                            const aiMsg = await aiService.generateLogisticsSupportMessage('ndr', {
+                                name: customer.name,
+                                orderId: order._id.toString().slice(-8).toUpperCase(),
+                                status: currentStatus,
+                                itemName: order.products[0]?.name || 'Item'
+                            });
+                            await whatsappClient.sendMessage(customer.phone, aiMsg);
+                            console.log(`[AI LOGISTICS] NDR resolution message sent to ${customer.name}`);
+                        }
+                    }
+                } catch (err) {
+                    console.error(`[AI LOGISTICS] Tracking failed for ${order._id}:`, err.message);
+                }
+            }
+        } catch (error) {
+            console.error('[AI LOGISTICS] Cron error:', error.message);
+        }
+    }
 }
-module.exports = new orderController() 
+
+module.exports = new orderController()

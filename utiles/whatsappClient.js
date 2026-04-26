@@ -24,6 +24,10 @@ class WhatsAppClient {
             authStrategy: new LocalAuth({
                 dataPath: path.join(process.cwd(), '.wwebjs_auth')
             }),
+            webVersionCache: {
+                type: 'remote',
+                remotePath: 'https://raw.githubusercontent.com/wppconnect-team/wa-js/main/dist/wppconnect-wa.js' 
+            },
             puppeteer: {
                 headless: true,
                 args: [
@@ -36,7 +40,9 @@ class WhatsAppClient {
                     '--disable-gpu',
                     '--hide-scrollbars',
                     '--disable-extensions',
-                    '--disable-notifications'
+                    '--disable-notifications',
+                    '--disable-setuid-sandbox',
+                    '--force-device-scale-factor=1'
                 ]
             }
         });

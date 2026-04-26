@@ -55,7 +55,13 @@ const customerOrder = new Schema({
     cartItemIds: {
         type: [Schema.ObjectId],
         default: []
-    }
+    },
+    shiprocket_order_id: { type: String },
+    shiprocket_shipment_id: { type: String },
+    awb_number: { type: String },
+    label_url: { type: String },
+    is_high_risk: { type: Boolean, default: false },
+    risk_score: { type: Number, default: 0 }
 }, { timestamps: true })
 
 module.exports = model('customerOrders', customerOrder)

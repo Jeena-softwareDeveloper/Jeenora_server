@@ -33,6 +33,45 @@ class shiprocketAdminController {
             return responseReturn(res, 500, { error: 'Failed to fetch tracking logs' });
         }
     }
+
+    get_ndr_reports = async (req, res) => {
+        try {
+            const reports = await shiprocketService.getNDRList(req.query);
+            return responseReturn(res, 200, reports);
+        } catch (error) {
+            return responseReturn(res, 500, { error: 'Failed to fetch NDR reports' });
+        }
+    }
+
+    get_rto_risk = async (req, res) => {
+        const { mobile } = req.params;
+        try {
+            const risk = await shiprocketService.getRtoRisk(mobile);
+            return responseReturn(res, 200, risk);
+        } catch (error) {
+            return responseReturn(res, 500, { error: 'Failed to assess RTO risk' });
+        }
+    }
+
+    generate_label = async (req, res) => {
+        const { shipmentIds } = req.body;
+        try {
+            const label = await shiprocketService.generateLabel(shipmentIds);
+            return responseReturn(res, 200, label);
+        } catch (error) {
+            return responseReturn(res, 500, { error: 'Failed to generate label' });
+        }
+    }
+
+    track_awb = async (req, res) => {
+        const { awb } = req.params;
+        try {
+            const tracking = await shiprocketService.trackAWB(awb);
+            return responseReturn(res, 200, tracking);
+        } catch (error) {
+            return responseReturn(res, 500, { error: 'Failed to track AWB' });
+        }
+    }
 }
 
 module.exports = new shiprocketAdminController();

@@ -65,6 +65,42 @@ class ShiprocketService {
         }
     }
 
+    async getShippingRate(pickup_pincode, delivery_pincode, weight = 0.5, cod = 0, declared_value = 500) {
+        try {
+            const token = await this.getToken();
+            const response = await axios.get('https://apiv2.shiprocket.in/v1/external/courier/serviceability/', {
+                params: {
+                    pickup_postcode: pickup_pincode,
+                    delivery_postcode: delivery_pincode,
+                    weight: weight,
+                    cod: cod,
+                    declared_value: declared_value
+                },
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
+            });
+
+            if (response.data && response.data.status === 200) {
+                const couriers = response.data.data.available_courier_companies;
+                if (couriers && couriers.length > 0) {
+                    // Get the cheapest courier rate
+                    const bestCourier = couriers.sort((a, b) => a.freight_charge - b.freight_charge)[0];
+                    return {
+                        rate: bestCourier.freight_charge,
+                        courier: bestCourier.courier_name,
+                        edd: bestCourier.estimated_delivery_date,
+                        cod_charges: bestCourier.cod_charges || 0
+                    };
+                }
+            }
+            return null;
+        } catch (error) {
+            console.error('❌ Shiprocket Rate Error:', error.response?.data || error.message);
+            return null;
+        }
+    }
+
     async getWalletBalance() {
         try {
             const token = await this.getToken();

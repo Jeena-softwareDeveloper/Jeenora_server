@@ -5,6 +5,7 @@ const { authMiddleware } = require('../../middlewares/authMiddleware');
 
 router.get('/edd', deliveryController.get_delivery_edd);
 router.get('/pincode', deliveryController.get_pincode_from_location);
+router.post('/shipping-rate', deliveryController.get_shipping_rates);
 
 // Admin Shiprocket Management
 router.get('/admin/shiprocket/wallet', authMiddleware, shiprocketAdminController.get_wallet_balance);

@@ -113,6 +113,63 @@ class deliveryController {
             });
         }
     }
-}
++
++    // 3. Get Shipping Rates
++    get_shipping_rates = async (req, res) => {
++        const { productId, deliveryPincode, weight, isCod, orderValue } = req.body;
++
++        if (!deliveryPincode) {
++            return responseReturn(res, 400, { error: 'Delivery Pincode is required' });
++        }
++
++        try {
++            let pickupPincode = process.env.SHIPROCKET_DEFAULT_PICKUP_PINCODE || '624001';
++            
++            if (productId) {
++                let product = await wearProductModel.findById(productId);
++                if (!product) product = await productModel.findById(productId);
++                
++                if (product) {
++                    const supplier = await supplierModel.findById(product.sellerId);
++                    if (supplier?.addressDetails?.pincode) {
++                        pickupPincode = supplier.addressDetails.pincode;
++                    }
++                }
++            }
++
++            const shippingInfo = await shiprocketService.getShippingRate(
++                pickupPincode,
++                deliveryPincode,
++                weight || 0.5,
++                isCod ? 1 : 0,
++                orderValue || 500
++            );
++
++            if (shippingInfo) {
++                return responseReturn(res, 200, { 
++                    shippingRate: shippingInfo.rate,
++                    codCharges: shippingInfo.cod_charges,
++                    totalShipping: shippingInfo.rate + (isCod ? shippingInfo.cod_charges : 0),
++                    courier: shippingInfo.courier,
++                    edd: shippingInfo.edd,
++                    success: true 
++                });
++            } else {
++                // Fallback rates if Shiprocket fails
++                return responseReturn(res, 200, { 
++                    shippingRate: 50,
++                    codCharges: isCod ? 50 : 0,
++                    totalShipping: isCod ? 100 : 50,
++                    courier: 'Standard Shipping',
++                    isFallback: true,
++                    success: true 
++                });
++            }
++        } catch (error) {
++            console.error('❌ Shipping Rate Controller Error:', error.message);
++            return responseReturn(res, 500, { error: 'Failed to calculate shipping rate' });
++        }
++    }
+ }
 
 module.exports = new deliveryController();

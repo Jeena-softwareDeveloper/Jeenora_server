@@ -136,7 +136,7 @@ class homeControllers {
             else if (sort === 'top-rated') wearSort = { avgRating: -1, createdAt: -1 };
 
             const wearProductsRaw = await wearProductModel.find(wearMatch).sort(wearSort).lean();
-            const wearResult = wearProductsRaw.map(p => ({
+            const products = wearProductsRaw.map(p => ({
                 ...p,
                 name: p.productName,
                 price: p.variants?.[0]?.listingPrice || 0,
@@ -145,33 +145,12 @@ class homeControllers {
                 type: 'wear'
             }));
 
-            // Legacy Products
-            let legacyQuery = {};
-            if (category && categoryNames.length > 0) legacyQuery.category = { $in: categoryNames };
-            if (searchValue) legacyQuery.name = { $regex: searchValue, $options: 'i' };
-            if (gender) legacyQuery.gender = { $regex: new RegExp(`^${gender}$`, 'i') };
-
-            let legacySort = { createdAt: -1 };
-            if (sort === 'low-to-high') legacySort = { price: 1 };
-            else if (sort === 'high-to-low') legacySort = { price: -1 };
-            else if (sort === 'top-rated') legacySort = { rating: -1 };
-
-            const legacyResult = await productModel.find(legacyQuery).sort(legacySort).lean();
-
-            // Combine & De-duplicate
-            const combinedMap = new Map();
-            [...legacyResult, ...wearResult].forEach(p => {
-                const key = p.slug || p._id.toString();
-                if (!combinedMap.has(key)) combinedMap.set(key, p);
-            });
-            const allCombined = Array.from(combinedMap.values());
-
             // Pagination
-            const totalProducts = allCombined.length;
+            const totalProducts = products.length;
             const skip = (parseInt(pageNumber || 1) - 1) * parPage;
-            const products = allCombined.slice(skip, skip + parPage);
+            const paginatedProducts = products.slice(skip, skip + parPage);
 
-            responseReturn(res, 200, { products, totalProducts, parPage });
+            responseReturn(res, 200, { products: paginatedProducts, totalProducts, parPage });
 
         } catch (error) {
             console.log('[API] Get Products Error:', error.message);
@@ -254,69 +233,8 @@ class homeControllers {
                 }
             }
 
-            // 1. Search Legacy Products
-            const legacyProducts = await productModel.find({}).sort({ createdAt: -1 }).lean();
-            
-            // Custom filtering for legacy since categoryQuery in utility is basic
-            let filteredLegacy = legacyProducts;
-            if (category && categoryNames.length > 0) {
-                filteredLegacy = legacyProducts.filter(p => 
-                    categoryNames.some(cn => p.category && p.category.toLowerCase() === cn.toLowerCase())
-                );
-            }
-
-            const legacyResult = new queryProducts(filteredLegacy, req.query)
-                .ratingQuery()
-                .searchQuery()
-                .priceQuery()
-                .sizeQuery()
-                .colorQuery()
-                .genderQuery()
-                .sortByPrice()
-                .getProducts();
-
-            // 2. Search Wear Products (New Catalog Style)
-            let wearMatch = { status: 'active' };
-            const andConditions = [{ status: 'active' }];
-
-            if (category) {
-                if (categoryRegexes.length > 0) {
-                    andConditions.push({
-                        $or: [
-                            { category: { $in: categoryRegexes } },
-                            { subCategory: { $in: categoryRegexes } }
-                        ]
-                    });
-                } else {
-                    andConditions.push({ category: { $regex: new RegExp(`^${category}$`, 'i') } });
-                }
-            }
-
-            if (searchValue) {
-                andConditions.push({
-                    $or: [
-                        { productName: { $regex: searchValue, $options: 'i' } },
-                        { category: { $regex: searchValue, $options: 'i' } }
-                    ]
-                });
-            }
-
-            if (req.query.size) {
-                const sizes = Array.isArray(req.query.size) ? req.query.size : req.query.size.split(',');
-                const sizeRegexes = sizes.map(s => new RegExp(`^${s}$`, 'i'));
-                andConditions.push({ 'variants.size': { $in: sizeRegexes } });
-            }
-
-            if (req.query.color) {
-                const colors = Array.isArray(req.query.color) ? req.query.color : req.query.color.split(',');
-                const colorRegexes = colors.map(c => new RegExp(`^${c}$`, 'i'));
-                andConditions.push({ 'variants.color': { $in: colorRegexes } });
-            }
-
-            wearMatch = andConditions.length > 1 ? { $and: andConditions } : andConditions[0];
-
             const wearProductsRaw = await wearProductModel.find(wearMatch).sort({ createdAt: -1 }).lean();
-            const wearResult = wearProductsRaw.map(p => ({
+            const products = wearProductsRaw.map(p => ({
                 ...p,
                 name: p.productName, // compatibility
                 price: p.variants?.[0]?.listingPrice || 0, // compatibility
@@ -325,20 +243,10 @@ class homeControllers {
                 type: 'wear'
             }));
 
-            // Combine and De-duplicate by slug or name
-            const combinedMap = new Map();
-            [...legacyResult, ...wearResult].forEach(p => {
-                const key = p.slug || p._id.toString();
-                if (!combinedMap.has(key)) {
-                    combinedMap.set(key, p);
-                }
-            });
-            const allCombined = Array.from(combinedMap.values());
-
-            // Manual pagination for combined results
-            const totalProduct = allCombined.length;
+            // Manual pagination for results
+            const totalProduct = products.length;
             const skip = (parseInt(req.query.pageNumber || 1) - 1) * parPage;
-            const paginatedResult = allCombined.slice(skip, skip + parPage);
+            const paginatedResult = products.slice(skip, skip + parPage);
 
             responseReturn(res, 200, {
                 products: paginatedResult,
@@ -355,10 +263,7 @@ class homeControllers {
     // END METHOD
     get_top_rated_products = async (req, res) => {
         try {
-            // Find top rated products from legacy
-            const legacyTopRated = await productModel.find({}).sort({ rating: -1 }).limit(10).lean();
-
-            // Find top rated products from Wear
+            // Find top rated products ONLY from Wear
             const wearTopRatedRaw = await wearProductModel.find({ status: 'active' }).limit(10).lean();
             const wearTopRated = wearTopRatedRaw.map(p => ({
                 ...p,
@@ -369,10 +274,8 @@ class homeControllers {
                 type: 'wear'
             }));
 
-            const combined = [...legacyTopRated, ...wearTopRated].sort((a, b) => b.rating - a.rating).slice(0, 10);
-
             responseReturn(res, 200, {
-                products: combined
+                products: wearTopRated
             });
         } catch (error) {
             console.log('[API] Get Top Rated Error:', error.message);

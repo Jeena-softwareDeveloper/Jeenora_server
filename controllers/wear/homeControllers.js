@@ -161,14 +161,22 @@ class homeControllers {
 
     get_top_rated_products = async (req, res) => {
         try {
-            // Fetch products with rating >= 4, sorted by rating desc, limit to 12
-            const products = await productModel.find({ 
-                rating: { $gte: 4 },
+            // Fetch products from Wear model with status active, sorted by rating
+            const productsRaw = await wearProductModel.find({ 
                 status: 'active'
             }).sort({
-                rating: -1,
+                avgRating: -1,
                 createdAt: -1
-            }).limit(4);
+            }).limit(12).lean();
+
+            const products = productsRaw.map(p => ({
+                ...p,
+                name: p.productName,
+                price: p.variants?.[0]?.listingPrice || 0,
+                discount: 0,
+                rating: p.avgRating || 5,
+                type: 'wear'
+            }));
 
             responseReturn(res, 200, {
                 products

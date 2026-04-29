@@ -108,30 +108,68 @@ app.use(cors({
   origin: (origin, callback) => {
     // In development, allow ALL origins to prevent local testing friction
     if (process.env.NODE_ENV === 'development') return callback(null, true);
-    
-    if (!origin) return callback(null, true);
+
+    // In production: block requests with no origin (e.g. direct curl/server abuse)
+    // Exception: allow same-server health-checks from loopback
+    if (!origin) {
+      return callback(new Error('CORS: direct server requests not allowed'));
+    }
     if (allowedOrigins.includes(origin)) return callback(null, true);
     return callback(new Error('CORS: origin not allowed'));
   },
   credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+  exposedHeaders: ['X-RateLimit-Limit', 'X-RateLimit-Remaining'],
+  maxAge: 86400, // Cache preflight for 24h
 }));
 
 // 2. HELMET (Hardened)
 app.use(helmet({
-  crossOriginResourcePolicy: { policy: 'cross-origin' },
+  crossOriginResourcePolicy: { policy: 'same-site' },
+  // CSP for API server (no scripts served from here — strict)
   contentSecurityPolicy: {
     directives: {
-      defaultSrc: ["'self'"],
-      scriptSrc: ["'self'", "'unsafe-inline'"],
-      styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
-      imgSrc: ["'self'", "data:", "https://res.cloudinary.com", "https://*.jeenora.com"],
-      connectSrc: ["'self'", "wss://*.jeenora.com"],
-      fontSrc: ["'self'", "https://fonts.gstatic.com"],
+      defaultSrc: ["'none'"],           // Block everything by default
+      scriptSrc: ["'none'"],            // API server serves no scripts
+      styleSrc: ["'none'"],
+      imgSrc: ["'self'"],
+      connectSrc: ["'self'"],
+      fontSrc: ["'none'"],
       objectSrc: ["'none'"],
+      frameSrc: ["'none'"],
+      frameAncestors: ["'none'"],       // 🔴 Block clickjacking at API level
+      formAction: ["'self'"],
+      baseUri: ["'self'"],
       upgradeInsecureRequests: [],
     },
   },
+  // 🔴 Clickjacking protection
+  frameguard: { action: 'deny' },
+  // 🟠 MIME sniffing protection
+  noSniff: true,
+  // 🟠 Referrer Policy
+  referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
+  // XSS Filter (legacy browsers)
+  xssFilter: true,
+  // HSTS (2 years, preload)
+  hsts: {
+    maxAge: 63072000,
+    includeSubDomains: true,
+    preload: true,
+  },
+  // Hide X-Powered-By
+  hidePoweredBy: true,
 }));
+
+// Permissions-Policy header (helmet doesn't add this natively)
+app.use((req, res, next) => {
+  res.setHeader(
+    'Permissions-Policy',
+    'camera=(), microphone=(), geolocation=(), payment=(), usb=(), interest-cohort=()'
+  );
+  next();
+});
 
 // 3. Size Limits
 app.use(express.json({ limit: '50mb' }));

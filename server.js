@@ -106,22 +106,23 @@ app.set('trust proxy', 1);
 // 1. CORS
 app.use(cors({
   origin: (origin, callback) => {
-    // In development, allow ALL origins to prevent local testing friction
+    // In development, allow ALL origins
     if (process.env.NODE_ENV === 'development') return callback(null, true);
 
-    // In production: block requests with no origin (e.g. direct curl/server abuse)
-    // Exception: allow same-server health-checks from loopback
-    if (!origin) {
-      return callback(new Error('CORS: direct server requests not allowed'));
-    }
+    // Allow requests with no origin (mobile apps, server-to-server, curl health checks)
+    // Security is enforced by the allowedOrigins list for browser requests that DO send origin
+    if (!origin) return callback(null, true);
+
     if (allowedOrigins.includes(origin)) return callback(null, true);
     return callback(new Error('CORS: origin not allowed'));
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+  // Don't whitelist allowedHeaders — let browser send what it needs for preflight
+  // Restricting this caused OPTIONS preflight to fail on admin-login
+  allowedHeaders: '*',
   exposedHeaders: ['X-RateLimit-Limit', 'X-RateLimit-Remaining'],
-  maxAge: 86400, // Cache preflight for 24h
+  maxAge: 86400, // Cache preflight 24h
 }));
 
 // 2. HELMET (Hardened)

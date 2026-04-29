@@ -122,9 +122,9 @@ app.use(cors({
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  // Don't whitelist allowedHeaders — let browser send what it needs for preflight
-  // Restricting this caused OPTIONS preflight to fail on admin-login
-  allowedHeaders: '*',
+  // Explicitly allow headers required by the dashboard and ecommerce apps.
+  // Wildcard '*' DOES NOT work with credentials: true in most strict browsers.
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin', 'x-website-type'],
   exposedHeaders: ['X-RateLimit-Limit', 'X-RateLimit-Remaining'],
   maxAge: 86400, // Cache preflight 24h
 }));

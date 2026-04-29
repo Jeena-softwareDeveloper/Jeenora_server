@@ -113,7 +113,11 @@ app.use(cors({
     // Security is enforced by the allowedOrigins list for browser requests that DO send origin
     if (!origin) return callback(null, true);
 
-    if (allowedOrigins.includes(origin)) return callback(null, true);
+    const isAllowed = allowedOrigins.includes(origin) || 
+                      (typeof origin === 'string' && origin.endsWith('.vercel.app')) || 
+                      (typeof origin === 'string' && origin.endsWith('.jeenora.com')) || 
+                      origin === 'https://jeenora.com';
+    if (isAllowed) return callback(null, true);
     return callback(new Error('CORS: origin not allowed'));
   },
   credentials: true,
@@ -214,12 +218,15 @@ if (process.env.NODE_ENV === 'development') {
 
 const io = socket(server, {
   cors: { 
-    origin: [
-      ...allowedOrigins,
-      "http://localhost:3000",
-      "http://localhost:3001",
-      "http://localhost:3002"
-    ], 
+    origin: (origin, callback) => {
+      if (process.env.NODE_ENV === 'development' || !origin) return callback(null, true);
+      const isAllowed = allowedOrigins.includes(origin) || 
+                        (typeof origin === 'string' && origin.endsWith('.vercel.app')) || 
+                        (typeof origin === 'string' && origin.endsWith('.jeenora.com')) || 
+                        origin === 'https://jeenora.com';
+      if (isAllowed) return callback(null, true);
+      return callback(new Error('CORS: origin not allowed'));
+    },
     credentials: true, 
     methods: ["GET", "POST"] 
   },

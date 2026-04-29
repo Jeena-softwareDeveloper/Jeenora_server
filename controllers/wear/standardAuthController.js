@@ -460,15 +460,19 @@ class authControllers {
     }
 
     admin_create_seller = async (req, res) => {
-        const { email, name, password, permissions } = req.body
+        const { email, name, password, phoneNumber, permissions } = req.body
         try {
-            const getUser = await sellerModel.findOne({ email })
+            if (!email || !name || !password || !phoneNumber) {
+                return responseReturn(res, 400, { error: 'Name, Email, Password and Phone Number are required' })
+            }
+            const getUser = await sellerModel.findOne({ $or: [{ email }, { phoneNumber }] })
             if (getUser) {
-                responseReturn(res, 404, { error: 'Email Already Exit' })
+                responseReturn(res, 404, { error: 'Email or Phone Number Already Exists' })
             } else {
                 const seller = await sellerModel.create({
                     name,
                     email,
+                    phoneNumber,
                     password: await bcrypt.hash(password, 10),
                     method: 'menualy',
                     shopInfo: {},

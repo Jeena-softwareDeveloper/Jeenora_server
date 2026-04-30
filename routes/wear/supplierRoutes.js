@@ -120,6 +120,7 @@ router.patch('/catalog/status/:productId', authMiddleware, wearCatalogController
 router.delete('/catalog/delete/:productId', authMiddleware, wearCatalogController.delete_catalog);
 
 router.get('/list', authMiddleware, supplierController.get_suppliers);
+router.get('/detail/:supplierId', authMiddleware, supplierController.get_supplier_by_id);
 router.get('/catalog/all', authMiddleware, wearCatalogController.get_all_catalogs);
 router.put('/update-status/:supplierId', authMiddleware, supplierController.update_status);
 router.put('/update/:supplierId', authMiddleware, supplierController.update_supplier);

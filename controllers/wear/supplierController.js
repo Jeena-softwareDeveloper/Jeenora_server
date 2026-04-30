@@ -608,6 +608,50 @@ class supplierController {
             responseReturn(res, 500, { error: error.message });
         }
     }
+
+    // 5.1 Admin - Get full supplier details by ID (including all select:false fields)
+    get_supplier_by_id = async (req, res) => {
+        const { supplierId } = req.params;
+        try {
+            // Use .select('+fieldName') to force-include fields marked select:false
+            const supplier = await Supplier.findById(supplierId)
+                .populate('user', 'name phone email')
+                .select('+businessDetails.gstNumber +businessDetails.panNumber +businessDetails.panName +businessDetails.enrolmentId +addressDetails.state +addressDetails.pincode +addressDetails.district +addressDetails.city +addressDetails.addressLine +addressDetails.street +addressDetails.landmark +bankDetails.accountNumber +bankDetails.ifscCode +bankDetails.bankName +bankDetails.branchName +bankDetails.address +bankDetails.city +bankDetails.state +bankDetails.micr')
+                .lean();
+
+            if (!supplier) {
+                return responseReturn(res, 404, { error: 'Supplier not found' });
+            }
+
+            // Attach product stats
+            const WearProduct = require('../../models/wear/wearProductModel');
+            const legacyProductModel = require('../../models/wear/productModel');
+            const mongoose = require('mongoose');
+            const sellerObjId = new mongoose.Types.ObjectId(supplierId);
+
+            const [totalCatalogs, activeCatalogs, pendingCatalogs, legacyCount] = await Promise.all([
+                WearProduct.countDocuments({ sellerId: sellerObjId }),
+                WearProduct.countDocuments({ sellerId: sellerObjId, status: 'active' }),
+                WearProduct.countDocuments({ sellerId: sellerObjId, status: 'pending' }),
+                legacyProductModel.countDocuments({ sellerId: sellerObjId }),
+            ]);
+
+            responseReturn(res, 200, {
+                success: true,
+                supplier: {
+                    ...supplier,
+                    stats: {
+                        totalCatalogs: totalCatalogs + legacyCount,
+                        activeCatalogs,
+                        pendingCatalogs,
+                    }
+                }
+            });
+        } catch (error) {
+            console.error('Get Supplier By ID Error:', error);
+            responseReturn(res, 500, { error: error.message });
+        }
+    }
     // 2.9 Mobile App - Send Email Verification OTP
     send_verification_email = async (req, res) => {
         const { email } = req.body;

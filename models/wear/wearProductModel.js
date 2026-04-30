@@ -41,6 +41,11 @@ const wearProductSchema = new mongoose.Schema({
     images: [{
         type: String // URLs or base64 for now
     }],
+    supplierType: {
+        type: String,
+        enum: ['Manufacturer', 'Wholesaler', 'Retailer', 'Brand', ''],
+        default: ''
+    },
 
     // Meesho-style Pricing & Tax
     hsnCode: { type: String },

@@ -302,7 +302,8 @@ exports.get_profile = async (req, res) => {
                 gender: user.gender,
                 dob: user.dob,
                 city: user.city,
-                state: user.state
+                state: user.state,
+                emailVerified: user.emailVerified ?? true  // OTP users are implicitly verified
             }
         });
     } catch (error) {
@@ -440,6 +441,9 @@ exports.email_signup = async (req, res) => {
 
         const hashedPassword = await bcrypt.hash(password, 10);
 
+        // Generate email verification token
+        const verifyToken = crypto.randomBytes(32).toString('hex');
+
         const user = await WearBuyer.create({
             username,
             name: username,
@@ -447,8 +451,37 @@ exports.email_signup = async (req, res) => {
             phone: cleanPhone,
             password: hashedPassword,
             role: 'wear_buyer',
-            isVerified: true
+            isVerified: true,
+            emailVerified: false,
+            emailVerifyToken: verifyToken
         });
+
+        // Send verification email (non-blocking)
+        try {
+            const { sendEmail } = require('../utiles/emailSender');
+            const frontendUrl = process.env.FRONTEND_URL || 'https://www.jeenora.com';
+            const verifyUrl = `${frontendUrl}/verify-email?token=${verifyToken}&id=${user._id}`;
+            const html = `
+                <div style="font-family:'Segoe UI',Arial,sans-serif;max-width:600px;margin:0 auto;border:1px solid #e5e7eb;border-radius:16px;overflow:hidden;">
+                  <div style="background:linear-gradient(135deg,#e11955 0%,#f97316 100%);padding:36px;text-align:center;">
+                    <h1 style="color:white;margin:0;font-size:26px;letter-spacing:3px;font-weight:900;">JEENORA</h1>
+                    <p style="color:rgba(255,255,255,0.8);margin:8px 0 0;font-size:13px;letter-spacing:1px;">FASHION MARKETPLACE</p>
+                  </div>
+                  <div style="padding:40px;background:#ffffff;text-align:center;">
+                    <div style="width:64px;height:64px;background:#fef2f2;border-radius:50%;margin:0 auto 20px;display:flex;align-items:center;justify-content:center;font-size:28px;">✉️</div>
+                    <h2 style="color:#111827;margin:0 0 12px;font-size:22px;font-weight:800;">Verify Your Email</h2>
+                    <p style="font-size:15px;line-height:1.7;color:#6b7280;margin:0 0 32px;">Hi <strong style="color:#111827;">${username}</strong>, welcome to Jeenora! Please verify your email address to unlock all features of your account.</p>
+                    <a href="${verifyUrl}" style="display:inline-block;background:linear-gradient(135deg,#e11955,#f97316);color:white;padding:16px 40px;border-radius:50px;text-decoration:none;font-weight:900;font-size:14px;letter-spacing:2px;text-transform:uppercase;box-shadow:0 8px 24px rgba(225,25,85,0.3);">Verify My Email</a>
+                    <p style="font-size:12px;color:#9ca3af;margin:24px 0 0;">This link expires in <strong>24 hours</strong>. If you didn't register on Jeenora, you can safely ignore this email.</p>
+                  </div>
+                  <div style="background:#f9fafb;padding:20px;text-align:center;font-size:12px;color:#9ca3af;border-top:1px solid #f3f4f6;">
+                    © ${new Date().getFullYear()} Jeenora Enterprise. All rights reserved.
+                  </div>
+                </div>`;
+            await sendEmail(cleanEmail, 'Verify your Jeenora account', `Click this link to verify your email: ${verifyUrl}`, html);
+        } catch (mailErr) {
+            console.error('[Email Verification Send Error]', mailErr.message);
+        }
 
         await WearLog.create({
             user: user._id, phone: '', action: 'SIGNUP',
@@ -457,11 +490,148 @@ exports.email_signup = async (req, res) => {
 
         responseReturn(res, 201, {
             success: true,
-            message: 'Account created successfully. Please login.'
+            message: 'Account created! Check your email to verify your account.'
         });
 
     } catch (error) {
         console.error('Email Signup Error:', error);
+        responseReturn(res, 500, { error: error.message });
+    }
+};
+
+// 4.1 — Resend Verification Email
+exports.resend_verification_email = async (req, res) => {
+    try {
+        const { id } = req; // from authMiddleware
+        const user = await WearBuyer.findById(id).select('+emailVerifyToken +emailVerified');
+        if (!user) return responseReturn(res, 404, { error: 'User not found' });
+        if (user.emailVerified) return responseReturn(res, 400, { error: 'Email already verified' });
+        if (!user.email) return responseReturn(res, 400, { error: 'No email address on account' });
+
+        const verifyToken = crypto.randomBytes(32).toString('hex');
+        user.emailVerifyToken = verifyToken;
+        await user.save();
+
+        const { sendEmail } = require('../utiles/emailSender');
+        const frontendUrl = process.env.FRONTEND_URL || 'https://www.jeenora.com';
+        const verifyUrl = `${frontendUrl}/verify-email?token=${verifyToken}&id=${user._id}`;
+        const html = `
+            <div style="font-family:'Segoe UI',Arial,sans-serif;max-width:600px;margin:0 auto;border:1px solid #e5e7eb;border-radius:16px;overflow:hidden;">
+              <div style="background:linear-gradient(135deg,#e11955 0%,#f97316 100%);padding:36px;text-align:center;">
+                <h1 style="color:white;margin:0;font-size:26px;letter-spacing:3px;font-weight:900;">JEENORA</h1>
+              </div>
+              <div style="padding:40px;background:#ffffff;text-align:center;">
+                <h2 style="color:#111827;margin:0 0 12px;font-size:22px;font-weight:800;">Verify Your Email</h2>
+                <p style="font-size:15px;line-height:1.7;color:#6b7280;margin:0 0 32px;">Click the button below to verify your email address.</p>
+                <a href="${verifyUrl}" style="display:inline-block;background:linear-gradient(135deg,#e11955,#f97316);color:white;padding:16px 40px;border-radius:50px;text-decoration:none;font-weight:900;font-size:14px;letter-spacing:2px;text-transform:uppercase;box-shadow:0 8px 24px rgba(225,25,85,0.3);">Verify My Email</a>
+                <p style="font-size:12px;color:#9ca3af;margin:24px 0 0;">This link expires in <strong>24 hours</strong>.</p>
+              </div>
+              <div style="background:#f9fafb;padding:20px;text-align:center;font-size:12px;color:#9ca3af;">© ${new Date().getFullYear()} Jeenora Enterprise.</div>
+            </div>`;
+        await sendEmail(user.email, 'Verify your Jeenora account', `Verify your email: ${verifyUrl}`, html);
+
+        responseReturn(res, 200, { success: true, message: 'Verification email sent!' });
+    } catch (error) {
+        console.error('Resend Verification Error:', error);
+        responseReturn(res, 500, { error: error.message });
+    }
+};
+
+// 4.2 — Verify Email via Token Link
+exports.verify_email_token = async (req, res) => {
+    try {
+        const { token, id } = req.query;
+        if (!token || !id) return responseReturn(res, 400, { error: 'Invalid verification link' });
+
+        const user = await WearBuyer.findById(id).select('+emailVerifyToken +emailVerified');
+        if (!user) return responseReturn(res, 404, { error: 'User not found' });
+        if (user.emailVerified) return responseReturn(res, 200, { success: true, message: 'Email already verified', alreadyVerified: true });
+        if (user.emailVerifyToken !== token) return responseReturn(res, 400, { error: 'Invalid or expired verification link' });
+
+        user.emailVerified = true;
+        user.emailVerifyToken = undefined;
+        await user.save();
+
+        responseReturn(res, 200, { success: true, message: 'Email verified successfully!' });
+    } catch (error) {
+        console.error('Verify Email Token Error:', error);
+        responseReturn(res, 500, { error: error.message });
+    }
+};
+
+// 4.3 — Forgot Password (send reset link)
+exports.forgot_password = async (req, res) => {
+    try {
+        const { email } = req.body;
+        if (!email) return responseReturn(res, 400, { error: 'Email is required' });
+
+        const cleanEmail = email.toLowerCase().trim();
+        let user = await WearBuyer.findOne({ email: cleanEmail }).select('+resetPasswordToken +resetPasswordExpiry');
+        if (!user) user = await Customer.findOne({ email: cleanEmail }).select('+resetPasswordToken +resetPasswordExpiry');
+
+        // Always respond success to prevent email enumeration
+        if (!user) {
+            return responseReturn(res, 200, { success: true, message: 'If that email exists, a reset link has been sent.' });
+        }
+
+        const resetToken = crypto.randomBytes(32).toString('hex');
+        user.resetPasswordToken = resetToken;
+        user.resetPasswordExpiry = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+        await user.save();
+
+        const { sendEmail } = require('../utiles/emailSender');
+        const frontendUrl = process.env.FRONTEND_URL || 'https://www.jeenora.com';
+        const resetUrl = `${frontendUrl}/reset-password?token=${resetToken}&id=${user._id}`;
+
+        const html = `
+            <div style="font-family:'Segoe UI',Arial,sans-serif;max-width:600px;margin:0 auto;border:1px solid #e5e7eb;border-radius:16px;overflow:hidden;">
+              <div style="background:linear-gradient(135deg,#e11955 0%,#f97316 100%);padding:36px;text-align:center;">
+                <h1 style="color:white;margin:0;font-size:26px;letter-spacing:3px;font-weight:900;">JEENORA</h1>
+                <p style="color:rgba(255,255,255,0.8);margin:8px 0 0;font-size:13px;">Password Reset Request</p>
+              </div>
+              <div style="padding:40px;background:#ffffff;text-align:center;">
+                <div style="width:64px;height:64px;background:#fff7ed;border-radius:50%;margin:0 auto 20px;font-size:28px;line-height:64px;">🔑</div>
+                <h2 style="color:#111827;margin:0 0 12px;font-size:22px;font-weight:800;">Reset Your Password</h2>
+                <p style="font-size:15px;line-height:1.7;color:#6b7280;margin:0 0 32px;">We received a request to reset the password for your Jeenora account. Click the button below to set a new password.</p>
+                <a href="${resetUrl}" style="display:inline-block;background:linear-gradient(135deg,#e11955,#f97316);color:white;padding:16px 40px;border-radius:50px;text-decoration:none;font-weight:900;font-size:14px;letter-spacing:2px;text-transform:uppercase;box-shadow:0 8px 24px rgba(225,25,85,0.3);">Reset Password</a>
+                <p style="font-size:12px;color:#9ca3af;margin:24px 0 0;">This link expires in <strong>1 hour</strong>. If you didn't request a password reset, you can safely ignore this email.</p>
+              </div>
+              <div style="background:#f9fafb;padding:20px;text-align:center;font-size:12px;color:#9ca3af;border-top:1px solid #f3f4f6;">
+                © ${new Date().getFullYear()} Jeenora Enterprise. All rights reserved.
+              </div>
+            </div>`;
+
+        await sendEmail(cleanEmail, 'Reset your Jeenora password', `Reset your password: ${resetUrl}`, html);
+        responseReturn(res, 200, { success: true, message: 'If that email exists, a reset link has been sent.' });
+
+    } catch (error) {
+        console.error('Forgot Password Error:', error);
+        responseReturn(res, 500, { error: error.message });
+    }
+};
+
+// 4.4 — Reset Password (consume token)
+exports.reset_password = async (req, res) => {
+    try {
+        const { token, id, newPassword } = req.body;
+        if (!token || !id || !newPassword) return responseReturn(res, 400, { error: 'Token, ID, and new password are required' });
+        if (newPassword.length < 8) return responseReturn(res, 400, { error: 'Password must be at least 8 characters' });
+
+        let user = await WearBuyer.findById(id).select('+password +resetPasswordToken +resetPasswordExpiry');
+        if (!user) user = await Customer.findById(id).select('+password +resetPasswordToken +resetPasswordExpiry');
+
+        if (!user) return responseReturn(res, 404, { error: 'Invalid reset link' });
+        if (user.resetPasswordToken !== token) return responseReturn(res, 400, { error: 'Invalid or expired reset link' });
+        if (!user.resetPasswordExpiry || new Date() > user.resetPasswordExpiry) return responseReturn(res, 400, { error: 'Reset link has expired. Please request a new one.' });
+
+        user.password = await bcrypt.hash(newPassword, 10);
+        user.resetPasswordToken = undefined;
+        user.resetPasswordExpiry = undefined;
+        await user.save();
+
+        responseReturn(res, 200, { success: true, message: 'Password reset successfully! You can now login.' });
+    } catch (error) {
+        console.error('Reset Password Error:', error);
         responseReturn(res, 500, { error: error.message });
     }
 };

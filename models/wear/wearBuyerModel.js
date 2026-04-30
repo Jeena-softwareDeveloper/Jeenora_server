@@ -40,6 +40,22 @@ const wearBuyerSchema = new mongoose.Schema({
         type: Boolean,
         default: false
     },
+    emailVerified: {
+        type: Boolean,
+        default: false
+    },
+    emailVerifyToken: {
+        type: String,
+        select: false
+    },
+    resetPasswordToken: {
+        type: String,
+        select: false
+    },
+    resetPasswordExpiry: {
+        type: Date,
+        select: false
+    },
     role: {
         type: String,
         default: 'wear_buyer'

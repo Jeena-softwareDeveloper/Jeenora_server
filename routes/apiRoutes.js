@@ -58,6 +58,12 @@ router.get('/wear/auth/profile', authMiddleware, wearAuthController.get_profile)
 router.put('/wear/auth/update-profile', authMiddleware, wearAuthController.update_profile);
 router.post('/wear/auth/profile-image-upload', authMiddleware, wearAuthController.profile_image_upload);
 router.post('/wear/auth/logout', authMiddleware, wearAuthController.logout);
+// Email verification
+router.post('/wear/auth/resend-verification', authMiddleware, wearAuthController.resend_verification_email);
+router.get('/wear/auth/verify-email', wearAuthController.verify_email_token);
+// Password reset
+router.post('/wear/auth/forgot-password', wearAuthController.forgot_password);
+router.post('/wear/auth/reset-password', wearAuthController.reset_password);
 
 // 4. SHOPPING EXPERIENCE (Cart, Wishlist, Offers)
 router.use('/wear/cart', require('./wear/wearCartRoutes'));

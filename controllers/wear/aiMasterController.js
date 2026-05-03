@@ -545,7 +545,7 @@ class AIMasterController {
 
             if (viewedCategories.length === 0) {
                 // Return top products if no history
-                const products = await wearProductModel.find({}).limit(8);
+                const products = await wearProductModel.find({ status: 'active' }).limit(8);
                 return responseReturn(res, 200, { products });
             }
 
@@ -560,7 +560,8 @@ class AIMasterController {
 
             // 3. Fetch products from these categories
             const products = await wearProductModel.find({
-                category: { $in: allInterests }
+                category: { $in: allInterests },
+                status: 'active'
             }).limit(12);
 
             return responseReturn(res, 200, { 

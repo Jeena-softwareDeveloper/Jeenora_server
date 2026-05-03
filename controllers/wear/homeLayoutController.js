@@ -21,7 +21,7 @@ class homeLayoutController {
                 sections.push({
                     title: 'New Arrivals',
                     type: 'horizontal_list',
-                    products: products.length > 0 ? products : await productModel.find({}).sort({ createdAt: -1 }).limit(10).lean()
+                    products: products.length > 0 ? products : await productModel.find({ status: 'active' }).sort({ createdAt: -1 }).limit(10).lean()
                 });
             }
 
@@ -30,7 +30,7 @@ class homeLayoutController {
                 sections.push({
                     title: 'Flash Sale',
                     type: 'grid',
-                    products: products.length > 0 ? products : await productModel.find({ discount: { $gt: 0 } }).limit(4).lean()
+                    products: products.length > 0 ? products : await productModel.find({ status: 'active', discount: { $gt: 0 } }).limit(4).lean()
                 });
             }
 
@@ -39,7 +39,7 @@ class homeLayoutController {
                 sections.push({
                     title: 'Recommended for You',
                     type: 'vertical_list',
-                    products: products.length > 0 ? products : await productModel.find({ rating: { $gt: 4 } }).limit(10).lean()
+                    products: products.length > 0 ? products : await productModel.find({ status: 'active', rating: { $gt: 4 } }).limit(10).lean()
                 });
             }
 
@@ -97,8 +97,8 @@ class homeLayoutController {
 
             // Run queries in parallel for maximum speed
             const [products, wearProducts] = await Promise.all([
-                productModel.find({
-                    name: { $regex: q, $options: 'i' }
+                    name: { $regex: q, $options: 'i' },
+                    status: 'active'
                 }).limit(5).select('name images price discount slug').lean(),
 
                 wearProductModel.find({

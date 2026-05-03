@@ -147,7 +147,7 @@ exports.verify_otp = async (req, res) => {
         }
 
         // 2. Find or Create User (Strict Selection)
-        const userSelection = 'name phone role image devices';
+        const userSelection = 'name phone role image devices isDeleted';
         let user = await WearBuyer.findOne({ phone: cleanPhone }).select(userSelection);
         if (!user) {
             user = await Customer.findOne({ phone: cleanPhone }).select(userSelection);
@@ -161,6 +161,11 @@ exports.verify_otp = async (req, res) => {
                 name: 'Wear Buyer',
                 isVerified: true
             });
+        }
+
+        // Reactivate account if it was deleted
+        if (user.isDeleted) {
+            user.isDeleted = false;
         }
 
         // 3. Generate Tokens
@@ -289,6 +294,7 @@ exports.get_profile = async (req, res) => {
         if (!user) {
             return responseReturn(res, 404, { error: 'User not found' });
         }
+        console.log(`[DEBUG_PROFILE] ${user.email} -> emailVerified: ${user.emailVerified}`);
 
         responseReturn(res, 200, {
             success: true,
@@ -432,12 +438,11 @@ exports.email_signup = async (req, res) => {
         const cleanEmail = email.toLowerCase().trim();
         const cleanPhone = phone.toString().replace(/\D/g, '');
 
-        const existingBuyer = await WearBuyer.findOne({ $or: [{ email: cleanEmail }, { phone: cleanPhone }, { username }] });
-        const existingCustomer = await Customer.findOne({ $or: [{ email: cleanEmail }, { phone: cleanPhone }] });
+        const existingEmail = await WearBuyer.findOne({ email: cleanEmail }) || await Customer.findOne({ email: cleanEmail });
+        if (existingEmail) return responseReturn(res, 400, { error: 'This email address is already in use' });
 
-        if (existingBuyer || existingCustomer) {
-            return responseReturn(res, 400, { error: 'User with this email, phone or username already exists' });
-        }
+        const existingPhone = await WearBuyer.findOne({ phone: cleanPhone }) || await Customer.findOne({ phone: cleanPhone });
+        if (existingPhone) return responseReturn(res, 400, { error: 'This phone number is already in use' });
 
         const hashedPassword = await bcrypt.hash(password, 10);
 
@@ -458,7 +463,7 @@ exports.email_signup = async (req, res) => {
 
         // Send verification email (non-blocking)
         try {
-            const { sendEmail } = require('../utiles/emailSender');
+            const { sendEmail } = require('../../utiles/emailSender');
             const frontendUrl = process.env.FRONTEND_URL || 'https://www.jeenora.com';
             const verifyUrl = `${frontendUrl}/verify-email?token=${verifyToken}&id=${user._id}`;
             const html = `
@@ -512,7 +517,7 @@ exports.resend_verification_email = async (req, res) => {
         user.emailVerifyToken = verifyToken;
         await user.save();
 
-        const { sendEmail } = require('../utiles/emailSender');
+        const { sendEmail } = require('../../utiles/emailSender');
         const frontendUrl = process.env.FRONTEND_URL || 'https://www.jeenora.com';
         const verifyUrl = `${frontendUrl}/verify-email?token=${verifyToken}&id=${user._id}`;
         const html = `
@@ -539,23 +544,36 @@ exports.resend_verification_email = async (req, res) => {
 
 // 4.2 — Verify Email via Token Link
 exports.verify_email_token = async (req, res) => {
+    let { token, id } = req.query;
     try {
-        const { token, id } = req.query;
         if (!token || !id) return responseReturn(res, 400, { error: 'Invalid verification link' });
+        
+        token = token.trim();
+        id = id.trim();
 
-        const user = await WearBuyer.findById(id).select('+emailVerifyToken +emailVerified');
+        // 1. Try to find in WearBuyer
+        let user = await WearBuyer.findById(id).select('+emailVerifyToken +emailVerified');
+
+        // 2. If not found, try Customer
+        if (!user) {
+            user = await Customer.findById(id).select('+emailVerifyToken +emailVerified');
+        }
+
         if (!user) return responseReturn(res, 404, { error: 'User not found' });
+        
         if (user.emailVerified) return responseReturn(res, 200, { success: true, message: 'Email already verified', alreadyVerified: true });
+        
         if (user.emailVerifyToken !== token) return responseReturn(res, 400, { error: 'Invalid or expired verification link' });
 
         user.emailVerified = true;
+        user.isVerified = true; // Also set isVerified to true
         user.emailVerifyToken = undefined;
         await user.save();
 
         responseReturn(res, 200, { success: true, message: 'Email verified successfully!' });
     } catch (error) {
         console.error('Verify Email Token Error:', error);
-        responseReturn(res, 500, { error: error.message });
+        responseReturn(res, 500, { error: 'Internal Server Error' });
     }
 };
 
@@ -579,7 +597,7 @@ exports.forgot_password = async (req, res) => {
         user.resetPasswordExpiry = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
         await user.save();
 
-        const { sendEmail } = require('../utiles/emailSender');
+        const { sendEmail } = require('../../utiles/emailSender');
         const frontendUrl = process.env.FRONTEND_URL || 'https://www.jeenora.com';
         const resetUrl = `${frontendUrl}/reset-password?token=${resetToken}&id=${user._id}`;
 
@@ -617,8 +635,8 @@ exports.reset_password = async (req, res) => {
         if (!token || !id || !newPassword) return responseReturn(res, 400, { error: 'Token, ID, and new password are required' });
         if (newPassword.length < 8) return responseReturn(res, 400, { error: 'Password must be at least 8 characters' });
 
-        let user = await WearBuyer.findById(id).select('+password +resetPasswordToken +resetPasswordExpiry');
-        if (!user) user = await Customer.findById(id).select('+password +resetPasswordToken +resetPasswordExpiry');
+        let user = await WearBuyer.findById(id).select('+password +resetPasswordToken +resetPasswordExpiry +isDeleted');
+        if (!user) user = await Customer.findById(id).select('+password +resetPasswordToken +resetPasswordExpiry +isDeleted');
 
         if (!user) return responseReturn(res, 404, { error: 'Invalid reset link' });
         if (user.resetPasswordToken !== token) return responseReturn(res, 400, { error: 'Invalid or expired reset link' });
@@ -627,6 +645,7 @@ exports.reset_password = async (req, res) => {
         user.password = await bcrypt.hash(newPassword, 10);
         user.resetPasswordToken = undefined;
         user.resetPasswordExpiry = undefined;
+        user.isDeleted = false;
         await user.save();
 
         responseReturn(res, 200, { success: true, message: 'Password reset successfully! You can now login.' });
@@ -646,15 +665,23 @@ exports.email_login = async (req, res) => {
             return responseReturn(res, 400, { error: 'Email and password are required' });
         }
 
-        const cleanEmail = email.toLowerCase().trim();
+        const input = email.toLowerCase().trim();
+        const isEmail = input.includes('@');
+        const cleanInput = isEmail ? input : input.replace(/\D/g, '');
 
-        let user = await WearBuyer.findOne({ email: cleanEmail }).select('+password name email role image devices username');
+        let query = isEmail ? { email: input } : { phone: cleanInput };
+
+        let user = await WearBuyer.findOne(query).select('+password name email role image devices username phone isDeleted');
         if (!user) {
-            user = await Customer.findOne({ email: cleanEmail }).select('+password name email role image devices');
+            user = await Customer.findOne(query).select('+password name email role image devices phone isDeleted');
+        }
+
+        if (user && user.isDeleted) {
+            return responseReturn(res, 403, { error: 'Your account has been deleted. Please contact support to reactivate.' });
         }
 
         if (!user) {
-            return responseReturn(res, 401, { error: 'Invalid email or password' });
+            return responseReturn(res, 401, { error: 'Invalid credentials or account not found' });
         }
 
         const isMatch = await bcrypt.compare(password, user.password);
@@ -764,6 +791,37 @@ exports.logout = async (req, res) => {
         responseReturn(res, 200, { success: true, message: 'Logged out successfully' });
     } catch (error) {
         console.error('Logout Error:', error);
+        responseReturn(res, 500, { error: error.message });
+    }
+};
+// 10. Delete Account (Soft Delete)
+exports.delete_account = async (req, res) => {
+    try {
+        const { password } = req.body;
+        const { id } = req; // from authMiddleware
+
+        if (!password) {
+            return responseReturn(res, 400, { error: 'Password is required to delete account' });
+        }
+
+        const user = await WearBuyer.findById(id).select('+password');
+        if (!user) return responseReturn(res, 404, { error: 'User not found' });
+
+        const isMatch = await bcrypt.compare(password, user.password);
+        if (!isMatch) {
+            return responseReturn(res, 401, { error: 'Incorrect password' });
+        }
+
+        // Soft Delete
+        user.isDeleted = true;
+        await user.save();
+
+        // Revoke all sessions
+        await WearSession.deleteMany({ userId: id });
+
+        responseReturn(res, 200, { success: true, message: 'Account deleted successfully' });
+    } catch (error) {
+        console.error('Delete Account Error:', error);
         responseReturn(res, 500, { error: error.message });
     }
 };

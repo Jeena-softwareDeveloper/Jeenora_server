@@ -8,7 +8,7 @@ const wearBuyerSchema = new mongoose.Schema({
     username: {
         type: String,
         required: true,
-        unique: true
+        unique: false
     },
     email: { 
         type: String,
@@ -22,6 +22,8 @@ const wearBuyerSchema = new mongoose.Schema({
     },
     phone: {
         type: String,
+        required: true,
+        unique: true
     },
     image: { type: String },
     gender: { type: String },
@@ -102,6 +104,11 @@ const wearBuyerSchema = new mongoose.Schema({
         bankName: { type: String, select: false },
         branchName: { type: String, select: false },
         isVerified: { type: Boolean, default: false, select: false }
+    },
+    isDeleted: {
+        type: Boolean,
+        default: false,
+        select: false
     }
 }, { timestamps: true });
 

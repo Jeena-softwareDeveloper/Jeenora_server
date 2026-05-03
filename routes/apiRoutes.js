@@ -58,6 +58,7 @@ router.get('/wear/auth/profile', authMiddleware, wearAuthController.get_profile)
 router.put('/wear/auth/update-profile', authMiddleware, wearAuthController.update_profile);
 router.post('/wear/auth/profile-image-upload', authMiddleware, wearAuthController.profile_image_upload);
 router.post('/wear/auth/logout', authMiddleware, wearAuthController.logout);
+router.post('/wear/auth/delete-account', authMiddleware, wearAuthController.delete_account);
 // Email verification
 router.post('/wear/auth/resend-verification', authMiddleware, wearAuthController.resend_verification_email);
 router.get('/wear/auth/verify-email', wearAuthController.verify_email_token);

@@ -294,6 +294,18 @@ cron.schedule('30 4 * * 1', async () => {
   }
 }, { timezone: 'Asia/Kolkata' });
 
+// 📊 Supplier Daily Performance Pulse — Scheduled from .env
+const supplierReportTime = process.env.SUPPLIER_REPORT_TIME || '20:00';
+const [reportHour, reportMinute] = supplierReportTime.split(':');
+cron.schedule(`${reportMinute} ${reportHour} * * *`, async () => {
+  try {
+    console.log(`[CRON] ⏰ ${supplierReportTime} — Starting Daily Supplier Performance Pulse...`);
+    await aiMasterController.generate_supplier_daily_report();
+  } catch (error) {
+    console.error('[CRON] ❌ Daily Supplier Report cron crashed:', error.message);
+  }
+}, { timezone: 'Asia/Kolkata' });
+
 console.log('[CRON] ✅ AI Predictive & Performance Crons registered.');
 
 // --- API ROUTES ---

@@ -1,4 +1,16 @@
 const router = require('express').Router();
+const aiMasterController = require('../controllers/wear/aiMasterController');
+
+// TEMPORARY TEST ROUTE (DELETE AFTER USE)
+router.get('/temp-test-report', async (req, res) => {
+    try {
+        console.log('📊 Manually Triggering Supplier Daily Report via API...');
+        await aiMasterController.generate_supplier_daily_report();
+        res.send('✅ Report triggered. Check WhatsApp/Email.');
+    } catch (err) {
+        res.status(500).send(err.message);
+    }
+});
 
 
 const { authMiddleware, authOptional } = require('../middlewares/authMiddleware');

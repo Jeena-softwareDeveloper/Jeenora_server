@@ -1,4 +1,5 @@
 const Supplier = require('../../models/wear/supplierModel');
+const axios = require('axios');
 const Seller = require('../../models/wear/sellerModel');
 const WearProduct = require('../../models/wear/wearProductModel');
 const authOrderModel = require('../../models/wear/authOrder');

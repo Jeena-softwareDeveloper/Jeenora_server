@@ -888,6 +888,86 @@ RETURN ONLY JSON:
     }
 
     /**
+     * Generates a Daily Performance Pulse for each supplier.
+     * Summarizes products added, orders, revenue, and payments for the day.
+     */
+    generate_supplier_daily_report = async () => {
+        console.log('[AI_AUTO] 🤖 Generating Supplier Daily Performance Reports...');
+        try {
+            const startOfToday = moment().startOf('day');
+            const endOfToday = moment().endOf('day');
+
+            // Find all active suppliers
+            const suppliers = await sellerModel.find({ status: 'active' });
+
+            for (const supplier of suppliers) {
+                // 1. Stats: Products added today
+                const newProducts = await wearProductModel.find({
+                    sellerId: supplier._id,
+                    createdAt: { $gte: startOfToday.toDate(), $lte: endOfToday.toDate() }
+                });
+
+                // 2. Stats: Orders received today
+                const dailyOrders = await customerOrder.find({
+                    'products.sellerId': supplier._id,
+                    createdAt: { $gte: startOfToday.toDate(), $lte: endOfToday.toDate() }
+                });
+
+                // 3. Stats: Revenue today
+                const revenue = dailyOrders.reduce((sum, o) => {
+                    const sellerProds = o.products.filter(p => p.sellerId.toString() === supplier._id.toString());
+                    return sum + sellerProds.reduce((pSum, sp) => pSum + (sp.price * sp.quantity), 0);
+                }, 0);
+
+                // 4. Stats: Payment Status
+                const paidCount = dailyOrders.filter(o => o.payment_status === 'paid').length;
+                const pendingCount = dailyOrders.length - paidCount;
+
+                // Skip if no activity at all to avoid spam, or send anyway as a "Quiet day" briefing
+                // if (newProducts.length === 0 && dailyOrders.length === 0) continue;
+
+                const dataSummary = `Supplier: ${supplier.name}
+                Report Date: ${startOfToday.format('DD MMM YYYY')}
+                Products Added Today: ${newProducts.length}
+                Total Orders Today: ${dailyOrders.length}
+                Revenue Today: ₹${revenue}
+                Payment Status: ${paidCount} Paid, ${pendingCount} Pending.`;
+
+                const prompt = `TASK: You are the Jeenora Supplier Success AI.
+                Analyze today's performance for ${supplier.name}:
+                "${dataSummary}"
+                
+                Generate a "Daily Business Pulse" report. 
+                Include: 1 sentence summarizing the day, 1 specific observation, and 1 encouragement for tomorrow.
+                Keep it concise and professional. Use emojis for WhatsApp version.
+                
+                RETURN ONLY JSON:
+                {
+                  "subject": "Jeenora Daily Pulse: ${startOfToday.format('DD MMM')} 📊",
+                  "summary": "Your detailed daily summary here...",
+                  "whatsappMsg": "Short emoji-rich version for WhatsApp including today's total revenue"
+                }`;
+
+                const aiResponse = await this.call_deepseek_with_guardrail(prompt);
+
+                // Deliver to Supplier
+                if (supplier.email) {
+                    await sendEmail(supplier.email, aiResponse.subject, aiResponse.summary);
+                }
+
+                if (supplier.phoneNumber && whatsappClient.status === 'connected') {
+                    await whatsappClient.sendMessage(supplier.phoneNumber, `📊 *${aiResponse.subject}*\n\n${aiResponse.whatsappMsg}`);
+                }
+
+                await this.log_ai_action(supplier._id, 'supplier', 'Daily Performance Report', dataSummary, aiResponse);
+            }
+            console.log(`[AI_AUTO] ✅ Daily reports processed for ${suppliers.length} suppliers.`);
+        } catch (error) {
+            console.error('[AI_AUTO] ❌ Daily Supplier Reports failed:', error.message);
+        }
+    }
+
+    /**
      * Handle incoming WhatsApp messages
      * @param {Object} msg - The message object from whatsapp-web.js
      */

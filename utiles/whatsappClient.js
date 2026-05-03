@@ -11,79 +11,120 @@ class WhatsAppClient {
         this.qrCode = null;
     }
 
-    async initialize() {
-        if (this.status === 'connected' || this.status === 'initializing') {
+    async initialize(force = false) {
+        if (!force && (this.status === 'connected' || this.status === 'initializing')) {
+            console.log(`[WhatsApp] Already ${this.status}, skipping initialization.`);
             return;
-        }
+        }
+
+        if (force && this.client) {
+            console.log('[WhatsApp] Force initialization requested. Destroying old client...');
+            await this.destroy();
+        }
+
+        console.log('[WhatsApp] Starting initialization...');
         this.status = 'initializing';
 
-        this.client = new Client({
-            authStrategy: new LocalAuth({
-                dataPath: path.join(process.cwd(), '.wwebjs_auth')
-            }),
-            webVersionCache: {
-                type: 'remote',
-                remotePath: 'https://raw.githubusercontent.com/wppconnect-team/wa-js/main/dist/wppconnect-wa.js' 
-            },
-            puppeteer: {
-                headless: true,
-                args: [
-                    '--no-sandbox',
-                    '--disable-setuid-sandbox',
-                    '--disable-dev-shm-usage',
-                    '--disable-accelerated-2d-canvas',
-                    '--no-first-run',
-                    '--no-zygote',
-                    '--disable-gpu',
-                    '--hide-scrollbars',
-                    '--disable-extensions',
-                    '--disable-notifications',
-                    '--disable-setuid-sandbox',
-                    '--force-device-scale-factor=1'
-                ]
-            }
-        });
-
-        this.client.on('qr', async (qr) => {
-            this.status = 'waiting_for_scan';
-            try {
-                this.qrCode = await qrcode.toDataURL(qr);
-                const io = socketHelper.getIo();
-                io.emit('whatsapp_qr', { qr: this.qrCode });
-            } catch (err) {
-                console.error('[WhatsApp] QR Generation Error:', err);
-            }
-        });
-
-        this.client.on('ready', () => {
-            this.status = 'connected';
-            this.qrCode = null;
-            const io = socketHelper.getIo();
-            io.emit('whatsapp_ready');
-        });
-
-        this.client.on('authenticated', () => {
-        });
-
-        this.client.on('auth_failure', (msg) => {
-            console.error('[WhatsApp] Authentication failure:', msg);
-            this.status = 'disconnected';
-            const io = socketHelper.getIo();
-            io.emit('whatsapp_auth_failed', { message: msg });
-        });
-
-        this.client.on('disconnected', (reason) => {
-            this.status = 'disconnected';
-            const io = socketHelper.getIo();
-            io.emit('whatsapp_disconnected', { reason });
-            this.destroy();
-        });
-
         try {
+            console.log('[WhatsApp] Launching Puppeteer browser...');
+            this.client = new Client({
+                authStrategy: new LocalAuth({
+                    dataPath: path.join(process.cwd(), '.wwebjs_auth')
+                }),
+                puppeteer: {
+                    headless: true,
+                    args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-extensions']
+                }
+            });
+
+            // Set a safety timeout for initialization
+            const initTimeout = setTimeout(() => {
+                if (this.status === 'initializing') {
+                    console.error('[WhatsApp] Initialization timed out! Retrying...');
+                    this.initialize(true);
+                }
+            }, 45000); // 45 seconds timeout
+
+            this.client.on('qr', async (qr) => {
+                clearTimeout(initTimeout);
+                console.log('[WhatsApp] QR RECEIVED! Automatic refresh triggered.');
+                this.status = 'waiting_for_scan';
+                try {
+                    this.qrCode = await qrcode.toDataURL(qr);
+                    const io = socketHelper.getIo();
+                    if (io) io.emit('whatsapp_qr', { qr: this.qrCode });
+                } catch (err) {
+                    console.error('[WhatsApp] QR Generation Error:', err);
+                }
+            });
+
+            this.client.on('ready', () => {
+                clearTimeout(initTimeout);
+                console.log('[WhatsApp] Client is READY!');
+                this.status = 'connected';
+                this.qrCode = null;
+                const io = socketHelper.getIo();
+                if (io) io.emit('whatsapp_ready');
+            });
+
+            this.client.on('authenticated', () => {
+                console.log('[WhatsApp] Authenticated successfully.');
+            });
+
+            this.client.on('auth_failure', (msg) => {
+                clearTimeout(initTimeout);
+                console.error('[WhatsApp] Authentication failure:', msg);
+                this.status = 'disconnected';
+                const io = socketHelper.getIo();
+                if (io) io.emit('whatsapp_auth_failed', { message: msg });
+            });
+
+            this.client.on('message', async (msg) => {
+                const io = socketHelper.getIo();
+                if (io) {
+                    io.emit('whatsapp_log', {
+                        msg: `Incoming from ${msg.from}: ${msg.body.substring(0, 50)}...`,
+                        type: 'info'
+                    });
+                }
+
+                // --- FORWARD TO AI ---
+                try {
+                    const aiMaster = require('../controllers/wear/aiMasterController');
+                    await aiMaster.handleIncomingMessage(msg);
+                } catch (aiErr) {
+                    console.error('[WhatsApp AI Forward] Error:', aiErr.message);
+                }
+            });
+
+        this.client.on('message_create', async (msg) => {
+            if (msg.fromMe) {
+                const io = socketHelper.getIo();
+                if (io) {
+                    io.emit('whatsapp_log', {
+                        msg: `AI Response to ${msg.to}: ${msg.body.substring(0, 50)}...`,
+                        type: 'success'
+                    });
+                }
+            }
+        });
+
+        this.client.on('disconnected', async (reason) => {
+                console.warn('[WhatsApp] Disconnected! Reason:', reason);
+                this.status = 'disconnected';
+                const io = socketHelper.getIo();
+                if (io) io.emit('whatsapp_disconnected', { reason });
+                await this.destroy();
+                // Auto-retry initialization after a short delay
+                setTimeout(() => this.initialize(), 5000);
+            });
+
             await this.client.initialize();
         } catch (error) {
             console.error('[WhatsApp] Initialization error:', error);
             this.status = 'disconnected';
+            // Retry after failure
+            setTimeout(() => this.initialize(), 10000);
         }
     }
 

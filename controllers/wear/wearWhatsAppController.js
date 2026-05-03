@@ -13,8 +13,9 @@ class wearWhatsAppController {
 
     initialize = async (req, res) => {
         try {
+            const { force } = req.body;
             // Kick off initialization in background (socket will handle updates)
-            whatsappClient.initialize();
+            whatsappClient.initialize(force === true);
             responseReturn(res, 200, { message: 'WhatsApp initialization started' });
         } catch (error) {
             responseReturn(res, 500, { error: error.message });

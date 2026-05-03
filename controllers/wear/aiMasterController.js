@@ -434,9 +434,9 @@ class AIMasterController {
                 "English", "Tanglish", "தமிழ் (Tamil)", "हिन्दी (Hindi)", 
                 "తెలుగు (Telugu)", "ಕನ್ನಡ (Kannada)", "മലയാളം (Malayalam)", 
                 "मराठी (Marathi)", "বাংলা (Bengali)", "ગુજરાતી (Gujarati)",
-                "ਪੰਜਾਬી (Punjabi)", "ଓଡ଼ିଆ (Odia)", "অসমীয়া (Assamese)", 
+                "ਪੰਜਾਬੀ (Punjabi)", "ଓଡ଼ିଆ (Odia)", "অসমীয়া (Assamese)", 
                 "اردو (Urdu)", "संस्कृत (Sanskrit)", "सिंधी (Sindhi)",
-                "कोंकणी (Konkani)", "बोगो (Bodo)", "नेपाली (Nepali)"
+                "कोंकணி (Konkani)", "बोगो (Bodo)", "नेपाली (Nepali)"
             ];
             return responseReturn(res, 200, { languages });
         } catch(error) {
@@ -447,37 +447,71 @@ class AIMasterController {
 
     ai_customer_support = async (req, res) => {
         try {
-            const { message, chatHistory, agentName = 'Aditi' } = req.body;
-            const formattedHistory = Array.isArray(chatHistory) ? chatHistory.map(m => `${m.role}: ${m.content}`).join(" | ") : "";
-
-            const prompt = `TASK: You are ${agentName}, a human Customer Support Executive at Jeenora. 
-Recent Chat History: [${formattedHistory}]
-User Current Message: "${message}"
-
-RULES:
-1. NEVER mention that you are an AI, virtual assistant, chatbot, or automated system. You are a real human named ${agentName}.
-2. Empathize and respond conversationally to queries regarding Refunds, Returns, Shipping delays, Product issues, or Order Status.
-3. Keep it brief, professional, and friendly.
-4. If they ask about order status, ask them to check the 'My Orders' section in their Profile.
-5. If the issue is extremely complex, tell them you will have a senior executive look into it and reply via email at support@jeenora.com.
-
-RETURN ONLY JSON:
-{
-  "replyText": "your human-like support response"
-}`;
-
-            let aiResponse = await this.call_deepseek_conversational(prompt);
-
-            const finalPayload = {
-                replyText: aiResponse.replyText
-            };
-
-            await this.log_ai_action(req.id, req.role, 'AI Customer Support', `Customer asked: ${message}`, finalPayload);
-            return responseReturn(res, 200, finalPayload);
+            const { message, chatHistory, agentName = 'Jeeni' } = req.body;
+            const result = await this.process_customer_support_query(message, chatHistory, agentName);
+            
+            await this.log_ai_action(req.id, req.role, 'AI Customer Support', `Customer asked: ${message}`, result);
+            return responseReturn(res, 200, result);
         } catch(error) {
             console.error(error);
             responseReturn(res, 500, { error: 'Support Agent Failed' });
         }
+    }
+
+    /**
+     * Core logic for AI support query processing
+     */
+    process_customer_support_query = async (message, chatHistory = [], agentName = 'Jeeni') => {
+        const formattedHistory = Array.isArray(chatHistory) ? chatHistory.map(m => `${m.role}: ${m.content}`).join(" | ") : "";
+
+        // --- 1. SMART ORDER ID DETECTION ---
+        const orderIdMatch = message.match(/(?:#|ORD-)?([0-9a-fA-F]{24})/i);
+        let orderData = null;
+
+        if (orderIdMatch) {
+            const potentialId = orderIdMatch[1];
+            try {
+                const authOrder = require('../../models/wear/authOrder');
+                orderData = await customerOrder.findById(potentialId).lean() || await authOrder.findById(potentialId).lean();
+            } catch (dbErr) {
+                console.error('[AI Support] DB Lookup failed:', dbErr.message);
+            }
+        }
+
+        // --- 2. BUILD ENHANCED CONTEXT ---
+        let orderContext = "";
+        if (orderData) {
+            const moment = require('moment');
+            orderContext = `
+            CRITICAL ORDER DATA FOUND:
+            Order ID: ${orderData._id}
+            Customer: ${orderData.shippingInfo?.name || 'N/A'}
+            Payment Status: ${orderData.payment_status?.toUpperCase() || 'N/A'}
+            Delivery Status: ${orderData.delivery_status?.toUpperCase() || 'N/A'}
+            Total Price: ₹${orderData.price}
+            Placement Date: ${moment(orderData.createdAt).format('DD MMM YYYY')}
+            Items: ${orderData.products?.length || 0} items.
+            `;
+        }
+
+        const prompt = `TASK: You are ${agentName}, a human Customer Support Executive at Jeenora. 
+        Recent Chat History: [${formattedHistory}]
+        User Current Message: "${message}"
+        ${orderContext}
+
+        RULES:
+        1. NEVER mention that you are an AI. You are a real human named ${agentName}.
+        2. If ORDER DATA is provided above, use it to answer the customer's query accurately. 
+        3. For example, if Payment Status is 'unpaid', explain that the payment hasn't been confirmed yet.
+        4. If no Order ID is found in the message but the user is asking about an order, politely ask for their Order ID (starts with # or 24-digit code).
+        5. Keep it brief, professional, and friendly.
+
+        RETURN ONLY JSON:
+        {
+          "replyText": "your human-like support response"
+        }`;
+
+        return await this.call_deepseek_conversational(prompt);
     }
     track_behavior = async (req, res) => {
         const { productId, category, referrer, viewDuration } = req.body;
@@ -850,6 +884,33 @@ RETURN ONLY JSON:
 
         } catch (error) {
             console.error('[AI_AUTO] ❌ Supplier Reports failed:', error.message);
+        }
+    }
+
+    /**
+     * Handle incoming WhatsApp messages
+     * @param {Object} msg - The message object from whatsapp-web.js
+     */
+    handleIncomingMessage = async (msg) => {
+        try {
+            const senderPhone = msg.from.replace('@c.us', '');
+            const messageBody = msg.body;
+
+            console.log(`[AI Master] Processing message from ${senderPhone}: ${messageBody}`);
+
+            // Call the core logic directly
+            const result = await this.process_customer_support_query(messageBody, [], 'Jeeni');
+            
+            const reply = result?.replyText || "I'm sorry, I'm having trouble processing that right now.";
+
+            // Send response back via WhatsApp
+            await whatsappClient.sendMessage(msg.from, reply);
+
+            // Log the interaction
+            await this.log_ai_action(senderPhone, 'whatsapp_user', 'WhatsApp Support', messageBody, result);
+
+        } catch (error) {
+            console.error('[AI Master] WhatsApp processing failed:', error.message);
         }
     }
 }

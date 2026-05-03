@@ -11,6 +11,7 @@ const cloudinary = require('cloudinary').v2;
 const { responseReturn } = require('../../utiles/response');
 
 const { sendSMS } = require('../../services/smsService');
+const whatsappClient = require('../../utiles/whatsappClient');
 
 // Global Cloudinary Config (initialized once at startup, not inside functions)
 cloudinary.config({
@@ -45,12 +46,10 @@ exports.send_otp = async (req, res) => {
         const cleanPhone = phone.toString().replace(/\D/g, '');
 
         // --- SILENT LOGIN ONLY ---
-        // Check if this device is already trusted in either 'Customer' or 'WearBuyer'
         if (deviceId) {
             let user = await Customer.findOne({ phone: cleanPhone }).select('name phone role image devices');
             let isTrusted = user?.devices?.some(d => d.deviceId === deviceId && d.status === 'trusted');
 
-            // Fallback to WearBuyer
             if (!isTrusted) {
                 const buyer = await WearBuyer.findOne({ phone: cleanPhone }).select('name phone role image devices');
                 if (buyer?.devices?.some(d => d.deviceId === deviceId && d.status === 'trusted')) {
@@ -62,63 +61,43 @@ exports.send_otp = async (req, res) => {
             if (isTrusted && user) {
                 const accessToken = generateAccessToken(user._id, user.role, deviceId);
                 const refreshToken = generateRefreshToken();
-
                 const expiresAt = new Date();
                 expiresAt.setDate(expiresAt.getDate() + REFRESH_TOKEN_EXPIRY_DAYS);
 
                 await WearSession.create({
-                    userId: user._id,
-                    refreshToken,
-                    deviceId,
+                    userId: user._id, refreshToken, deviceId,
                     deviceName: req.headers['user-agent'] || 'Trusted Device',
-                    ipAddress: req.ip || '127.0.0.1',
-                    expiresAt
+                    ipAddress: req.ip || '127.0.0.1', expiresAt
                 });
 
-                // Update last login in the model we found
                 const dIdx = user.devices.findIndex(d => d.deviceId === deviceId);
                 if (dIdx > -1) user.devices[dIdx].lastLogin = new Date();
                 await user.save();
 
                 return responseReturn(res, 200, {
-                    success: true,
-                    message: 'Logged in successfully via trusted device',
-                    accessToken,
-                    refreshToken,
-                    userInfo: {
-                        _id: user._id,
-                        name: user.name,
-                        phone: user.phone,
-                        role: user.role,
-                        image: user.image
-                    },
+                    success: true, message: 'Logged in successfully via trusted device',
+                    accessToken, refreshToken, userInfo: { _id: user._id, name: user.name, phone: user.phone, role: user.role, image: user.image },
                     isSilent: true
                 });
             }
         }
 
         // --- NOT A SILENT LOGIN ---
-        // Generate a 4-digit OTP
         const otpCode = Math.floor(1000 + Math.random() * 9000).toString();
-        
-        // Save OTP to database
-        await WearOtp.findOneAndUpdate(
-            { phone: cleanPhone },
-            { 
-                otp: otpCode, 
-                createdAt: new Date() 
-            },
-            { upsert: true, new: true }
-        );
+        await WearOtp.findOneAndUpdate({ phone: cleanPhone }, { otp: otpCode, createdAt: new Date() }, { upsert: true, new: true });
 
-        // ⚠️ SECURITY FIX: OTP is NOT returned in production response
-        // In dev mode, we log it to console for testing
+        // Send OTP via WhatsApp
+        try {
+            await whatsappClient.sendMessage(cleanPhone, `🔐 *Jeenora Verification*\n\nYour OTP code is: *${otpCode}*\n\nThis code will expire in 5 minutes. Do not share it with anyone.`);
+        } catch (waError) {
+            console.error('[WhatsApp] Failed to send OTP:', waError.message);
+        }
+
         console.log(`[DEV] OTP for ${cleanPhone}: ${otpCode}`);
 
         return responseReturn(res, 200, {
             success: true,
             message: 'OTP sent successfully',
-            // otp field removed for security - OTP should only be sent via SMS
             proceedWithFirebase: true
         });
 
@@ -146,7 +125,7 @@ exports.verify_otp = async (req, res) => {
             return responseReturn(res, 400, { error: 'Invalid or expired OTP' });
         }
 
-        // 2. Find or Create User (Strict Selection)
+        // 2. Find or Create User
         const userSelection = 'name phone role image devices isDeleted';
         let user = await WearBuyer.findOne({ phone: cleanPhone }).select(userSelection);
         if (!user) {
@@ -161,9 +140,15 @@ exports.verify_otp = async (req, res) => {
                 name: 'Wear Buyer',
                 isVerified: true
             });
+
+            // Send Welcome Message via WhatsApp
+            try {
+                await whatsappClient.sendMessage(cleanPhone, `🎉 *Welcome to Jeenora!*\n\nThank you for registering. Your account has been successfully created. Explore our latest collections now!\n\n🌐 https://jeenora.com`);
+            } catch (waError) {
+                console.error('[WhatsApp] Failed to send welcome message:', waError.message);
+            }
         }
 
-        // Reactivate account if it was deleted
         if (user.isDeleted) {
             user.isDeleted = false;
         }
@@ -185,7 +170,7 @@ exports.verify_otp = async (req, res) => {
             expiresAt
         });
 
-        // 5. Update User Devices (Legacy support / trusted list)
+        // 5. Update User Devices
         if (!user.devices) user.devices = [];
         const deviceIndex = user.devices.findIndex(d => d.deviceId === deviceId);
         if (deviceIndex > -1) {
@@ -242,28 +227,15 @@ exports.refresh_token = async (req, res) => {
             return responseReturn(res, 400, { error: 'Refresh Token and DeviceID required' });
         }
 
-        // 1. Find Session
         const session = await WearSession.findOne({ refreshToken });
+        if (!session) return responseReturn(res, 401, { error: 'Session not found', code: 'SESSION_NOT_FOUND' });
+        if (session.isRevoked) return responseReturn(res, 401, { error: 'Session revoked', code: 'SESSION_REVOKED' });
+        if (new Date() > session.expiresAt) return responseReturn(res, 401, { error: 'Session expired', code: 'SESSION_EXPIRED' });
+        if (session.deviceId !== deviceId) return responseReturn(res, 401, { error: 'Device mismatch', code: 'DEVICE_MISMATCH' });
 
-        // 2. Validate Session
-        if (!session) {
-            return responseReturn(res, 401, { error: 'Session not found', code: 'SESSION_NOT_FOUND' });
-        }
-        if (session.isRevoked) {
-            return responseReturn(res, 401, { error: 'Session revoked', code: 'SESSION_REVOKED' });
-        }
-        if (new Date() > session.expiresAt) {
-            return responseReturn(res, 401, { error: 'Session expired', code: 'SESSION_EXPIRED' });
-        }
-        if (session.deviceId !== deviceId) {
-            return responseReturn(res, 401, { error: 'Device mismatch', code: 'DEVICE_MISMATCH' });
-        }
-
-        // 3. Rotate Token
         const rotatedRefreshToken = generateRefreshToken();
         const rotatedAccessToken = generateAccessToken(session.userId, 'wear_buyer', deviceId);
 
-        // Update session
         session.refreshToken = rotatedRefreshToken;
         session.ipAddress = currentIp;
         session.expiresAt = new Date(Date.now() + REFRESH_TOKEN_EXPIRY_DAYS * 24 * 60 * 60 * 1000);
@@ -286,15 +258,8 @@ exports.get_profile = async (req, res) => {
     try {
         const { id } = req;
         let user = await WearBuyer.findById(id).lean();
-
-        if (!user) {
-            user = await Customer.findById(id).lean();
-        }
-
-        if (!user) {
-            return responseReturn(res, 404, { error: 'User not found' });
-        }
-        console.log(`[DEBUG_PROFILE] ${user.email} -> emailVerified: ${user.emailVerified}`);
+        if (!user) user = await Customer.findById(id).lean();
+        if (!user) return responseReturn(res, 404, { error: 'User not found' });
 
         responseReturn(res, 200, {
             success: true,
@@ -309,7 +274,7 @@ exports.get_profile = async (req, res) => {
                 dob: user.dob,
                 city: user.city,
                 state: user.state,
-                emailVerified: user.emailVerified ?? true  // OTP users are implicitly verified
+                emailVerified: user.emailVerified ?? true
             }
         });
     } catch (error) {
@@ -324,7 +289,7 @@ exports.update_profile = async (req, res) => {
     
     const handleUpdate = async (updateFields) => {
         const {
-            name, email, phone, gender, languages, occupation,
+            name, email, phone, gender, occupation,
             dob, maritalStatus, kidsCount, education, monthlyIncome,
             businessName, pincode, city, state
         } = updateFields;
@@ -348,12 +313,8 @@ exports.update_profile = async (req, res) => {
 
         try {
             let user = await WearBuyer.findByIdAndUpdate(id, updateData, { new: true });
-            if (!user) {
-                user = await Customer.findByIdAndUpdate(id, updateData, { new: true });
-            }
-            if (!user) {
-                return responseReturn(res, 404, { error: 'User not found' });
-            }
+            if (!user) user = await Customer.findByIdAndUpdate(id, updateData, { new: true });
+            if (!user) return responseReturn(res, 404, { error: 'User not found' });
             return responseReturn(res, 200, { message: 'Profile updated', userInfo: user });
         } catch (error) {
             return responseReturn(res, 500, { error: error.message });
@@ -361,15 +322,12 @@ exports.update_profile = async (req, res) => {
     };
 
     const contentType = req.headers['content-type'] || '';
-    
     if (contentType.includes('application/json')) {
         return handleUpdate(req.body);
     } else {
         const form = formidable({ multiples: true });
         form.parse(req, async (err, fields, files) => {
-            if (err) {
-                return responseReturn(res, 500, { error: err.message });
-            }
+            if (err) return responseReturn(res, 500, { error: err.message });
             return handleUpdate(fields);
         });
     }
@@ -381,40 +339,25 @@ exports.profile_image_upload = async (req, res) => {
     const form = formidable({ multiples: true });
 
     form.parse(req, async (err, fields, files) => {
-        if (err) {
-            return responseReturn(res, 500, { error: err.message });
-        }
+        if (err) return responseReturn(res, 500, { error: err.message });
 
         const { image } = files;
         const imageFile = Array.isArray(image) ? image[0] : image;
 
         try {
-            if (!imageFile) {
-                return responseReturn(res, 400, { error: 'No image provided' });
-            }
+            if (!imageFile) return responseReturn(res, 400, { error: 'No image provided' });
 
             const result = await cloudinary.uploader.upload(imageFile.filepath, { folder: 'wear_profiles' });
 
             if (result) {
-                let user = await WearBuyer.findByIdAndUpdate(id, {
-                    image: result.url
-                }, { new: true });
-
-                if (!user) {
-                    user = await Customer.findByIdAndUpdate(id, {
-                        image: result.url
-                    }, { new: true });
-                }
+                let user = await WearBuyer.findByIdAndUpdate(id, { image: result.url }, { new: true });
+                if (!user) user = await Customer.findByIdAndUpdate(id, { image: result.url }, { new: true });
 
                 responseReturn(res, 200, {
                     success: true,
                     message: 'Profile image updated successfully',
                     image: result.url,
-                    userInfo: {
-                        _id: user._id,
-                        name: user.name,
-                        image: user.image
-                    }
+                    userInfo: { _id: user._id, name: user.name, image: user.image }
                 });
             } else {
                 responseReturn(res, 500, { error: 'Image upload failed' });
@@ -426,14 +369,11 @@ exports.profile_image_upload = async (req, res) => {
     });
 };
 
-// 4. Email Signup (Username, Email, Password, Phone)
+// 4. Email Signup
 exports.email_signup = async (req, res) => {
     try {
         const { username, email, password, phone } = req.body;
-
-        if (!username || !email || !password || !phone) {
-            return responseReturn(res, 400, { error: 'Username, email, password and phone are required' });
-        }
+        if (!username || !email || !password || !phone) return responseReturn(res, 400, { error: 'Username, email, password and phone are required' });
 
         const cleanEmail = email.toLowerCase().trim();
         const cleanPhone = phone.toString().replace(/\D/g, '');
@@ -445,58 +385,32 @@ exports.email_signup = async (req, res) => {
         if (existingPhone) return responseReturn(res, 400, { error: 'This phone number is already in use' });
 
         const hashedPassword = await bcrypt.hash(password, 10);
-
-        // Generate email verification token
         const verifyToken = crypto.randomBytes(32).toString('hex');
 
         const user = await WearBuyer.create({
-            username,
-            name: username,
-            email: cleanEmail,
-            phone: cleanPhone,
-            password: hashedPassword,
-            role: 'wear_buyer',
-            isVerified: true,
-            emailVerified: false,
-            emailVerifyToken: verifyToken
+            username, name: username, email: cleanEmail, phone: cleanPhone,
+            password: hashedPassword, role: 'wear_buyer', isVerified: true,
+            emailVerified: false, emailVerifyToken: verifyToken
         });
 
-        // Send verification email (non-blocking)
+        // WhatsApp Welcome (Even for email signup)
+        try {
+            await whatsappClient.sendMessage(cleanPhone, `🎉 *Welcome to Jeenora!*\n\nThank you for registering with us. We're excited to have you on board!\n\n🌐 https://jeenora.com`);
+        } catch (waErr) {
+            console.error('[WhatsApp Signup Error]', waErr.message);
+        }
+
         try {
             const { sendEmail } = require('../../utiles/emailSender');
             const frontendUrl = process.env.FRONTEND_URL || 'https://www.jeenora.com';
             const verifyUrl = `${frontendUrl}/verify-email?token=${verifyToken}&id=${user._id}`;
-            const html = `
-                <div style="font-family:'Segoe UI',Arial,sans-serif;max-width:600px;margin:0 auto;border:1px solid #e5e7eb;border-radius:16px;overflow:hidden;">
-                  <div style="background:linear-gradient(135deg,#e11955 0%,#f97316 100%);padding:36px;text-align:center;">
-                    <h1 style="color:white;margin:0;font-size:26px;letter-spacing:3px;font-weight:900;">JEENORA</h1>
-                    <p style="color:rgba(255,255,255,0.8);margin:8px 0 0;font-size:13px;letter-spacing:1px;">FASHION MARKETPLACE</p>
-                  </div>
-                  <div style="padding:40px;background:#ffffff;text-align:center;">
-                    <div style="width:64px;height:64px;background:#fef2f2;border-radius:50%;margin:0 auto 20px;display:flex;align-items:center;justify-content:center;font-size:28px;">✉️</div>
-                    <h2 style="color:#111827;margin:0 0 12px;font-size:22px;font-weight:800;">Verify Your Email</h2>
-                    <p style="font-size:15px;line-height:1.7;color:#6b7280;margin:0 0 32px;">Hi <strong style="color:#111827;">${username}</strong>, welcome to Jeenora! Please verify your email address to unlock all features of your account.</p>
-                    <a href="${verifyUrl}" style="display:inline-block;background:linear-gradient(135deg,#e11955,#f97316);color:white;padding:16px 40px;border-radius:50px;text-decoration:none;font-weight:900;font-size:14px;letter-spacing:2px;text-transform:uppercase;box-shadow:0 8px 24px rgba(225,25,85,0.3);">Verify My Email</a>
-                    <p style="font-size:12px;color:#9ca3af;margin:24px 0 0;">This link expires in <strong>24 hours</strong>. If you didn't register on Jeenora, you can safely ignore this email.</p>
-                  </div>
-                  <div style="background:#f9fafb;padding:20px;text-align:center;font-size:12px;color:#9ca3af;border-top:1px solid #f3f4f6;">
-                    © ${new Date().getFullYear()} Jeenora Enterprise. All rights reserved.
-                  </div>
-                </div>`;
-            await sendEmail(cleanEmail, 'Verify your Jeenora account', `Click this link to verify your email: ${verifyUrl}`, html);
+            const html = `<div style="font-family:Arial;padding:20px;"><h2>Verify Email</h2><a href="${verifyUrl}">Click here to verify</a></div>`;
+            await sendEmail(cleanEmail, 'Verify your Jeenora account', `Verify your email: ${verifyUrl}`, html);
         } catch (mailErr) {
             console.error('[Email Verification Send Error]', mailErr.message);
         }
 
-        await WearLog.create({
-            user: user._id, phone: '', action: 'SIGNUP',
-            details: { page: 'Auth', method: 'Email_Signup' }
-        });
-
-        responseReturn(res, 201, {
-            success: true,
-            message: 'Account created! Check your email to verify your account.'
-        });
+        responseReturn(res, 201, { success: true, message: 'Account created! Check your email to verify your account.' });
 
     } catch (error) {
         console.error('Email Signup Error:', error);
@@ -504,14 +418,13 @@ exports.email_signup = async (req, res) => {
     }
 };
 
-// 4.1 — Resend Verification Email
+// 4.1 Resend Verification Email
 exports.resend_verification_email = async (req, res) => {
     try {
-        const { id } = req; // from authMiddleware
+        const { id } = req;
         const user = await WearBuyer.findById(id).select('+emailVerifyToken +emailVerified');
         if (!user) return responseReturn(res, 404, { error: 'User not found' });
         if (user.emailVerified) return responseReturn(res, 400, { error: 'Email already verified' });
-        if (!user.email) return responseReturn(res, 400, { error: 'No email address on account' });
 
         const verifyToken = crypto.randomBytes(32).toString('hex');
         user.emailVerifyToken = verifyToken;
@@ -520,19 +433,7 @@ exports.resend_verification_email = async (req, res) => {
         const { sendEmail } = require('../../utiles/emailSender');
         const frontendUrl = process.env.FRONTEND_URL || 'https://www.jeenora.com';
         const verifyUrl = `${frontendUrl}/verify-email?token=${verifyToken}&id=${user._id}`;
-        const html = `
-            <div style="font-family:'Segoe UI',Arial,sans-serif;max-width:600px;margin:0 auto;border:1px solid #e5e7eb;border-radius:16px;overflow:hidden;">
-              <div style="background:linear-gradient(135deg,#e11955 0%,#f97316 100%);padding:36px;text-align:center;">
-                <h1 style="color:white;margin:0;font-size:26px;letter-spacing:3px;font-weight:900;">JEENORA</h1>
-              </div>
-              <div style="padding:40px;background:#ffffff;text-align:center;">
-                <h2 style="color:#111827;margin:0 0 12px;font-size:22px;font-weight:800;">Verify Your Email</h2>
-                <p style="font-size:15px;line-height:1.7;color:#6b7280;margin:0 0 32px;">Click the button below to verify your email address.</p>
-                <a href="${verifyUrl}" style="display:inline-block;background:linear-gradient(135deg,#e11955,#f97316);color:white;padding:16px 40px;border-radius:50px;text-decoration:none;font-weight:900;font-size:14px;letter-spacing:2px;text-transform:uppercase;box-shadow:0 8px 24px rgba(225,25,85,0.3);">Verify My Email</a>
-                <p style="font-size:12px;color:#9ca3af;margin:24px 0 0;">This link expires in <strong>24 hours</strong>.</p>
-              </div>
-              <div style="background:#f9fafb;padding:20px;text-align:center;font-size:12px;color:#9ca3af;">© ${new Date().getFullYear()} Jeenora Enterprise.</div>
-            </div>`;
+        const html = `<div style="font-family:Arial;padding:20px;"><h2>Verify Email</h2><a href="${verifyUrl}">Click here to verify</a></div>`;
         await sendEmail(user.email, 'Verify your Jeenora account', `Verify your email: ${verifyUrl}`, html);
 
         responseReturn(res, 200, { success: true, message: 'Verification email sent!' });
@@ -542,31 +443,19 @@ exports.resend_verification_email = async (req, res) => {
     }
 };
 
-// 4.2 — Verify Email via Token Link
+// 4.2 Verify Email Token
 exports.verify_email_token = async (req, res) => {
     let { token, id } = req.query;
     try {
         if (!token || !id) return responseReturn(res, 400, { error: 'Invalid verification link' });
-        
-        token = token.trim();
-        id = id.trim();
-
-        // 1. Try to find in WearBuyer
         let user = await WearBuyer.findById(id).select('+emailVerifyToken +emailVerified');
-
-        // 2. If not found, try Customer
-        if (!user) {
-            user = await Customer.findById(id).select('+emailVerifyToken +emailVerified');
-        }
-
+        if (!user) user = await Customer.findById(id).select('+emailVerifyToken +emailVerified');
         if (!user) return responseReturn(res, 404, { error: 'User not found' });
-        
-        if (user.emailVerified) return responseReturn(res, 200, { success: true, message: 'Email already verified', alreadyVerified: true });
-        
-        if (user.emailVerifyToken !== token) return responseReturn(res, 400, { error: 'Invalid or expired verification link' });
+        if (user.emailVerified) return responseReturn(res, 200, { success: true, message: 'Email already verified' });
+        if (user.emailVerifyToken !== token) return responseReturn(res, 400, { error: 'Invalid or expired token' });
 
         user.emailVerified = true;
-        user.isVerified = true; // Also set isVerified to true
+        user.isVerified = true;
         user.emailVerifyToken = undefined;
         await user.save();
 
@@ -577,49 +466,36 @@ exports.verify_email_token = async (req, res) => {
     }
 };
 
-// 4.3 — Forgot Password (send reset link)
+// 4.3 Forgot Password
 exports.forgot_password = async (req, res) => {
     try {
         const { email } = req.body;
         if (!email) return responseReturn(res, 400, { error: 'Email is required' });
 
         const cleanEmail = email.toLowerCase().trim();
-        let user = await WearBuyer.findOne({ email: cleanEmail }).select('+resetPasswordToken +resetPasswordExpiry');
-        if (!user) user = await Customer.findOne({ email: cleanEmail }).select('+resetPasswordToken +resetPasswordExpiry');
+        let user = await WearBuyer.findOne({ email: cleanEmail }).select('+resetPasswordToken +resetPasswordExpiry phone');
+        if (!user) user = await Customer.findOne({ email: cleanEmail }).select('+resetPasswordToken +resetPasswordExpiry phone');
 
-        // Always respond success to prevent email enumeration
-        if (!user) {
-            return responseReturn(res, 200, { success: true, message: 'If that email exists, a reset link has been sent.' });
-        }
+        if (!user) return responseReturn(res, 200, { success: true, message: 'If that email exists, a reset link has been sent.' });
 
         const resetToken = crypto.randomBytes(32).toString('hex');
         user.resetPasswordToken = resetToken;
-        user.resetPasswordExpiry = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+        user.resetPasswordExpiry = new Date(Date.now() + 60 * 60 * 1000);
         await user.save();
+
+        // Send WhatsApp Alert for Forgot Password request
+        try {
+            await whatsappClient.sendMessage(user.phone, `🔑 *Security Alert: Password Reset*\n\nA request to reset your Jeenora password was made. If this wasn't you, please secure your account. Otherwise, follow the instructions sent to your email.`);
+        } catch (waErr) {
+            console.error('[WhatsApp Forgot Password Error]', waErr.message);
+        }
 
         const { sendEmail } = require('../../utiles/emailSender');
         const frontendUrl = process.env.FRONTEND_URL || 'https://www.jeenora.com';
         const resetUrl = `${frontendUrl}/reset-password?token=${resetToken}&id=${user._id}`;
-
-        const html = `
-            <div style="font-family:'Segoe UI',Arial,sans-serif;max-width:600px;margin:0 auto;border:1px solid #e5e7eb;border-radius:16px;overflow:hidden;">
-              <div style="background:linear-gradient(135deg,#e11955 0%,#f97316 100%);padding:36px;text-align:center;">
-                <h1 style="color:white;margin:0;font-size:26px;letter-spacing:3px;font-weight:900;">JEENORA</h1>
-                <p style="color:rgba(255,255,255,0.8);margin:8px 0 0;font-size:13px;">Password Reset Request</p>
-              </div>
-              <div style="padding:40px;background:#ffffff;text-align:center;">
-                <div style="width:64px;height:64px;background:#fff7ed;border-radius:50%;margin:0 auto 20px;font-size:28px;line-height:64px;">🔑</div>
-                <h2 style="color:#111827;margin:0 0 12px;font-size:22px;font-weight:800;">Reset Your Password</h2>
-                <p style="font-size:15px;line-height:1.7;color:#6b7280;margin:0 0 32px;">We received a request to reset the password for your Jeenora account. Click the button below to set a new password.</p>
-                <a href="${resetUrl}" style="display:inline-block;background:linear-gradient(135deg,#e11955,#f97316);color:white;padding:16px 40px;border-radius:50px;text-decoration:none;font-weight:900;font-size:14px;letter-spacing:2px;text-transform:uppercase;box-shadow:0 8px 24px rgba(225,25,85,0.3);">Reset Password</a>
-                <p style="font-size:12px;color:#9ca3af;margin:24px 0 0;">This link expires in <strong>1 hour</strong>. If you didn't request a password reset, you can safely ignore this email.</p>
-              </div>
-              <div style="background:#f9fafb;padding:20px;text-align:center;font-size:12px;color:#9ca3af;border-top:1px solid #f3f4f6;">
-                © ${new Date().getFullYear()} Jeenora Enterprise. All rights reserved.
-              </div>
-            </div>`;
-
+        const html = `<div style="font-family:Arial;padding:20px;"><h2>Reset Password</h2><a href="${resetUrl}">Click here to reset</a></div>`;
         await sendEmail(cleanEmail, 'Reset your Jeenora password', `Reset your password: ${resetUrl}`, html);
+
         responseReturn(res, 200, { success: true, message: 'If that email exists, a reset link has been sent.' });
 
     } catch (error) {
@@ -628,25 +504,31 @@ exports.forgot_password = async (req, res) => {
     }
 };
 
-// 4.4 — Reset Password (consume token)
+// 4.4 Reset Password
 exports.reset_password = async (req, res) => {
     try {
         const { token, id, newPassword } = req.body;
         if (!token || !id || !newPassword) return responseReturn(res, 400, { error: 'Token, ID, and new password are required' });
-        if (newPassword.length < 8) return responseReturn(res, 400, { error: 'Password must be at least 8 characters' });
 
-        let user = await WearBuyer.findById(id).select('+password +resetPasswordToken +resetPasswordExpiry +isDeleted');
-        if (!user) user = await Customer.findById(id).select('+password +resetPasswordToken +resetPasswordExpiry +isDeleted');
+        let user = await WearBuyer.findById(id).select('+password +resetPasswordToken +resetPasswordExpiry +isDeleted phone');
+        if (!user) user = await Customer.findById(id).select('+password +resetPasswordToken +resetPasswordExpiry +isDeleted phone');
 
         if (!user) return responseReturn(res, 404, { error: 'Invalid reset link' });
-        if (user.resetPasswordToken !== token) return responseReturn(res, 400, { error: 'Invalid or expired reset link' });
-        if (!user.resetPasswordExpiry || new Date() > user.resetPasswordExpiry) return responseReturn(res, 400, { error: 'Reset link has expired. Please request a new one.' });
+        if (user.resetPasswordToken !== token) return responseReturn(res, 400, { error: 'Invalid or expired token' });
+        if (!user.resetPasswordExpiry || new Date() > user.resetPasswordExpiry) return responseReturn(res, 400, { error: 'Reset link has expired' });
 
         user.password = await bcrypt.hash(newPassword, 10);
         user.resetPasswordToken = undefined;
         user.resetPasswordExpiry = undefined;
         user.isDeleted = false;
         await user.save();
+
+        // WhatsApp Confirmation
+        try {
+            await whatsappClient.sendMessage(user.phone, `✅ *Success! Password Reset*\n\nYour Jeenora account password has been successfully reset. You can now log in with your new password.`);
+        } catch (waErr) {
+            console.error('[WhatsApp Reset Success Error]', waErr.message);
+        }
 
         responseReturn(res, 200, { success: true, message: 'Password reset successfully! You can now login.' });
     } catch (error) {
@@ -659,87 +541,53 @@ exports.reset_password = async (req, res) => {
 exports.email_login = async (req, res) => {
     try {
         const { email, password, deviceId, deviceName } = req.body;
-        const currentIp = req.ip || req.connection.remoteAddress;
-
-        if (!email || !password) {
-            return responseReturn(res, 400, { error: 'Email and password are required' });
-        }
+        const currentIp = req.ip || '127.0.0.1';
 
         const input = email.toLowerCase().trim();
         const isEmail = input.includes('@');
         const cleanInput = isEmail ? input : input.replace(/\D/g, '');
-
         let query = isEmail ? { email: input } : { phone: cleanInput };
 
-        let user = await WearBuyer.findOne(query).select('+password name email role image devices username phone isDeleted');
-        if (!user) {
-            user = await Customer.findOne(query).select('+password name email role image devices phone isDeleted');
-        }
+        let user = await WearBuyer.findOne(query).select('+password name email role image devices phone isDeleted');
+        if (!user) user = await Customer.findOne(query).select('+password name email role image devices phone isDeleted');
 
-        if (user && user.isDeleted) {
-            return responseReturn(res, 403, { error: 'Your account has been deleted. Please contact support to reactivate.' });
-        }
-
-        if (!user) {
-            return responseReturn(res, 401, { error: 'Invalid credentials or account not found' });
-        }
+        if (user && user.isDeleted) return responseReturn(res, 403, { error: 'Your account has been deleted.' });
+        if (!user) return responseReturn(res, 401, { error: 'Invalid credentials' });
 
         const isMatch = await bcrypt.compare(password, user.password);
-        if (!isMatch) {
-            return responseReturn(res, 401, { error: 'Invalid email or password' });
-        }
+        if (!isMatch) return responseReturn(res, 401, { error: 'Invalid email or password' });
 
         const accessToken = generateAccessToken(user._id, user.role, deviceId);
         const refreshToken = generateRefreshToken();
-
         const expiresAt = new Date();
         expiresAt.setDate(expiresAt.getDate() + REFRESH_TOKEN_EXPIRY_DAYS);
 
         await WearSession.create({
-            userId: user._id,
-            refreshToken,
-            deviceId,
+            userId: user._id, refreshToken, deviceId,
             deviceName: deviceName || 'Unknown Device',
-            ipAddress: currentIp,
-            expiresAt
+            ipAddress: currentIp, expiresAt
         });
 
         if (deviceId) {
             if (!user.devices) user.devices = [];
-            const deviceIndex = user.devices.findIndex(d => d.deviceId === deviceId);
-            if (deviceIndex > -1) {
-                user.devices[deviceIndex].status = 'trusted';
-                user.devices[deviceIndex].lastLogin = new Date();
-                user.devices[deviceIndex].ip = currentIp;
+            const dIdx = user.devices.findIndex(d => d.deviceId === deviceId);
+            if (dIdx > -1) {
+                user.devices[dIdx].status = 'trusted';
+                user.devices[dIdx].lastLogin = new Date();
             } else {
-                user.devices.push({
-                    deviceId,
-                    ip: currentIp,
-                    status: 'trusted',
-                    lastLogin: new Date()
-                });
+                user.devices.push({ deviceId, ip: currentIp, status: 'trusted', lastLogin: new Date() });
             }
             await user.save();
         }
 
         await WearLog.create({
             user: user._id, phone: user.phone || '', action: 'LOGIN',
-            details: { page: 'Auth', method: 'Email_Login' },
-            device: { deviceId, ip: currentIp, platform: 'Web/Mobile' }
+            details: { page: 'Auth', method: 'Email_Login' }
         });
 
         responseReturn(res, 200, {
-            success: true,
-            accessToken,
-            refreshToken,
-            userInfo: {
-                _id: user._id,
-                name: user.name,
-                email: user.email,
-                role: user.role,
-                image: user.image,
-                username: user.username
-            }
+            success: true, accessToken, refreshToken,
+            userInfo: { _id: user._id, name: user.name, email: user.email, role: user.role, image: user.image }
         });
 
     } catch (error) {
@@ -748,45 +596,25 @@ exports.email_login = async (req, res) => {
     }
 };
 
-// Logout - Untrust the current device
+// Logout
 exports.logout = async (req, res) => {
     try {
         const { deviceId } = req.body;
         const userId = req.id;
-        const ip = req.ip || req.connection.remoteAddress;
-
         const buyer = await WearBuyer.findById(userId);
         const customer = await Customer.findById(userId);
 
-        const updateDeviceLogout = (user) => {
+        const updateDevice = (user) => {
             if (user && deviceId && user.devices) {
-                const deviceIndex = user.devices.findIndex(d => d.deviceId === deviceId);
-                if (deviceIndex > -1) {
-                    user.devices[deviceIndex].lastLogout = new Date();
-                    return true;
-                }
+                const idx = user.devices.findIndex(d => d.deviceId === deviceId);
+                if (idx > -1) user.devices[idx].lastLogout = new Date();
+                return true;
             }
             return false;
         };
 
-        if (updateDeviceLogout(buyer)) await buyer.save();
-        if (updateDeviceLogout(customer)) await customer.save();
-
-        if (buyer || customer) {
-            await WearLog.create({
-                user: userId,
-                phone: buyer?.phone || customer?.phone,
-                action: 'LOGOUT',
-                details: { page: 'Profile', method: 'Manual_Logout' },
-                device: { deviceId, ip, platform: 'Mobile' }
-            });
-        }
-
-        const { blacklistToken } = require('../../middlewares/authMiddleware');
-
-        if (req.token) {
-            await blacklistToken(req.token);
-        }
+        if (updateDevice(buyer)) await buyer.save();
+        if (updateDevice(customer)) await customer.save();
 
         responseReturn(res, 200, { success: true, message: 'Logged out successfully' });
     } catch (error) {
@@ -794,29 +622,20 @@ exports.logout = async (req, res) => {
         responseReturn(res, 500, { error: error.message });
     }
 };
-// 10. Delete Account (Soft Delete)
+
+// 10. Delete Account
 exports.delete_account = async (req, res) => {
     try {
         const { password } = req.body;
-        const { id } = req; // from authMiddleware
-
-        if (!password) {
-            return responseReturn(res, 400, { error: 'Password is required to delete account' });
-        }
-
+        const { id } = req;
         const user = await WearBuyer.findById(id).select('+password');
         if (!user) return responseReturn(res, 404, { error: 'User not found' });
 
         const isMatch = await bcrypt.compare(password, user.password);
-        if (!isMatch) {
-            return responseReturn(res, 401, { error: 'Incorrect password' });
-        }
+        if (!isMatch) return responseReturn(res, 401, { error: 'Incorrect password' });
 
-        // Soft Delete
         user.isDeleted = true;
         await user.save();
-
-        // Revoke all sessions
         await WearSession.deleteMany({ userId: id });
 
         responseReturn(res, 200, { success: true, message: 'Account deleted successfully' });

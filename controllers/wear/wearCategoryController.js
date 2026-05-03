@@ -136,10 +136,11 @@ class WearCategoryController {
                 query = { $text: { $search: searchValue } };
             }
 
-            const { parentId, level, _id } = req.query;
+            const { parentId, level, _id, status } = req.query;
             if (parentId) query.parentId = parentId;
             if (_id) query._id = _id;
             if (level !== undefined) query.level = parseInt(level);
+            if (status) query.status = status;
 
             if (parPage && page) {
                 const categories = await wearCategoryModel.find(query)

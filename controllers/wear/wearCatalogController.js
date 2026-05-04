@@ -45,6 +45,13 @@ class wearCatalogController {
         return `JEEN-${vendorShort}-${randomStr}`;
     }
 
+    // Helper to auto-generate HSN code per product (category-based prefix + random)
+    generateHSN = (category) => {
+        const catPrefix = category ? category.substring(0, 3).toUpperCase().replace(/[^A-Z0-9]/g, '') : 'GEN';
+        const randomStr = Math.random().toString(36).substring(2, 7).toUpperCase();
+        return `HSN-${catPrefix}-${randomStr}`;
+    }
+
     // Add new product catalog (Meesho flow) - Supports bulk similar products
     add_catalog = async (req, res) => {
         const { id } = req;
@@ -116,7 +123,7 @@ class wearCatalogController {
                         category: item.category,
                         subCategory: item.subCategory,
                         images: processedImages,
-                        hsnCode: item.hsnCode,
+                        hsnCode: item.hsnCode || this.generateHSN(item.category),
                         gstPercentage: item.gstPercentage,
                         weight: item.weight,
                         dimensions: item.dimensions,
@@ -143,7 +150,7 @@ class wearCatalogController {
                         category: item.category,
                         subCategory: item.subCategory,
                         images: processedImages,
-                        hsnCode: item.hsnCode,
+                        hsnCode: item.hsnCode || this.generateHSN(item.category),
                         gstPercentage: item.gstPercentage,
                         weight: item.weight,
                         dimensions: item.dimensions,
@@ -902,52 +909,27 @@ class wearCatalogController {
         }
     }
 
-    // Public: Get HSN code + GST rate for a category (looked up from DB)
+    // Public: Get GST rate for a category (HSN auto-generated at product create — no lookup needed)
     get_hsn_tax_data = async (req, res) => {
         try {
             const WearCategory = require('../../models/wear/wearCategoryModel');
             const { category } = req.query;
 
             if (category) {
-                // Find the category by name (case-insensitive) and return its HSN/GST
+                // Find category GST rate only (HSN is auto-generated per product)
                 const cat = await WearCategory.findOne({
                     name: { $regex: new RegExp(category, 'i') },
                     status: 'active'
-                }).select('name hsnCode gstRate').lean();
+                }).select('name gstRate').lean();
 
-                if (cat && cat.hsnCode) {
-                    return responseReturn(res, 200, {
-                        success: true,
-                        suggestion: { hsn: cat.hsnCode, gst: cat.gstRate || 5, label: cat.name }
-                    });
-                }
-
-                // Also try partial match on parent categories
-                const partialCat = await WearCategory.findOne({
-                    name: { $regex: new RegExp(category.split(' ')[0], 'i') },
-                    hsnCode: { $ne: '' },
-                    status: 'active'
-                }).select('name hsnCode gstRate').lean();
-
-                if (partialCat) {
-                    return responseReturn(res, 200, {
-                        success: true,
-                        suggestion: { hsn: partialCat.hsnCode, gst: partialCat.gstRate || 5, label: partialCat.name }
-                    });
-                }
-
-                return responseReturn(res, 200, { success: true, suggestion: null });
+                const gst = cat?.gstRate ?? 5;
+                return responseReturn(res, 200, {
+                    success: true,
+                    suggestion: { gst, label: cat?.name || category }
+                });
             }
 
-            // Return all categories that have HSN codes configured
-            const allCats = await WearCategory.find({ hsnCode: { $ne: '' }, status: 'active' })
-                .select('name hsnCode gstRate')
-                .lean();
-
-            responseReturn(res, 200, {
-                success: true,
-                data: allCats.map(c => ({ label: c.name, hsn: c.hsnCode, gst: c.gstRate || 5 }))
-            });
+            return responseReturn(res, 200, { success: true, suggestion: { gst: 5 } });
         } catch (error) {
             responseReturn(res, 500, { error: error.message });
         }

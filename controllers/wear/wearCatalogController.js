@@ -212,23 +212,15 @@ class wearCatalogController {
             ]);
 
             const wearCatalogs = groupedCatalogs.map(g => ({
-                _id: g.mainProduct._id,
-                catalogId: g.mainProduct.catalogId || g._id,
+                _id: g._id, // Use the grouped ID (catalogId) as the primary ID
+                catalogId: g._id,
                 productName: g.mainProduct.productName,
                 category: g.mainProduct.category,
                 images: [g.mainProduct.images?.[0]],
                 status: g.mainProduct.status,
                 hsnCode: g.mainProduct.hsnCode,
                 similarProductsCount: g.count,
-                createdAt: g.mainProduct.createdAt,
-                // Minimal variants for single-product quick actions
-                variants: g.mainProduct.variants?.map(v => ({
-                    skuId: v.skuId,
-                    stock: v.stock,
-                    size: v.size,
-                    color: v.color,
-                    listingPrice: v.listingPrice
-                }))
+                createdAt: g.mainProduct.createdAt
             }));
 
             // 2. Get Legacy Products for this seller
@@ -245,13 +237,7 @@ class wearCatalogController {
                 similarProductsCount: 1,
                 isLegacy: true,
                 createdAt: p.createdAt,
-                price: p.price,
-                // Legacy variants fallback
-                variants: p.variants?.map(v => ({ skuId: v.skuId, stock: v.stock, listingPrice: v.listingPrice || p.price })) || [{
-                    listingPrice: p.price,
-                    stock: p.stock,
-                    skuId: p._id.toString().slice(-8).toUpperCase()
-                }]
+                price: p.price
             }));
 
             // 3. Combine and Sort

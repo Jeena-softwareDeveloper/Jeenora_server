@@ -842,27 +842,40 @@ class wearCatalogController {
                 return responseReturn(res, 403, { error: 'Catalog not found or not authorized' });
             }
 
-            // Return a structured response with only needed fields for the expansion UI
-            const catalog = {
-                _id: catalogId,
-                catalogId: catalogId,
-                similarProductsCount: products.length,
-                similarProducts: products.map(p => ({
-                    _id: p._id,
-                    catalogId: p.catalogId,
-                    productName: p.productName,
-                    images: [p.images?.[0]],
-                    status: p.status,
-                    hsnCode: p.hsnCode,
-                    variants: p.variants?.map(v => ({
-                        skuId: v.skuId,
-                        stock: v.stock,
-                        size: v.size,
-                        color: v.color,
-                        listingPrice: v.listingPrice,
-                        mrp: v.mrp
+            // Optimization: If mode=list, return only essential fields for the expansion UI
+            if (req.query.mode === 'list') {
+                const catalog = {
+                    _id: catalogId,
+                    catalogId: catalogId,
+                    similarProductsCount: products.length,
+                    similarProducts: products.map(p => ({
+                        _id: p._id,
+                        catalogId: p.catalogId,
+                        productName: p.productName,
+                        images: [p.images?.[0]],
+                        status: p.status,
+                        hsnCode: p.hsnCode,
+                        variants: p.variants?.map(v => ({
+                            skuId: v.skuId,
+                            stock: v.stock,
+                            size: v.size,
+                            color: v.color,
+                            listingPrice: v.listingPrice,
+                            mrp: v.mrp
+                        }))
                     }))
-                }))
+                };
+                return responseReturn(res, 200, { success: true, catalog });
+            }
+
+            // Default: Return FULL data for editing purposes
+            const primary = products.find(p => p.isPrimary) || products[0];
+            const catalog = {
+                ...primary, // Spread all fields (name, desc, images, etc.)
+                _id: primary._id,
+                catalogId: catalogId,
+                similarProducts: products,
+                similarProductsCount: products.length
             };
 
             responseReturn(res, 200, { success: true, catalog });

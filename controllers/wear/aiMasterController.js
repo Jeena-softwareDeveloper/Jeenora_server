@@ -1000,8 +1000,14 @@ RETURN ONLY JSON:
         try {
             const { productName, category, subCategory, mrp } = req.body;
 
+            // Be more lenient - if data is missing, return a default instead of 400
             if (!productName && !category) {
-                return responseReturn(res, 400, { error: 'Product name or category required' });
+                return responseReturn(res, 200, { 
+                    success: true, 
+                    gst: 12, 
+                    hsn: '', 
+                    reason: 'Insufficient data for AI suggestion, using default' 
+                });
             }
 
             const prompt = `You are an Indian GST and HSN code classifier for apparel/fashion products.

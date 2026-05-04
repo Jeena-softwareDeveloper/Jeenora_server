@@ -38,8 +38,8 @@ class homeControllers {
     get_categorys = async (req, res) => {
         try {
             const wearCategoryModel = require('../../models/wear/wearCategoryModel');
-            // Show ONLY Main Categories (Level 0) on home page
-            const categories = await wearCategoryModel.find({ level: 0 }).sort({ priority: 1 });
+            // Show ONLY Active Main Categories (Level 0) on home page
+            const categories = await wearCategoryModel.find({ level: 0, status: 'active' }).sort({ priority: 1 });
             responseReturn(res, 200, {
                 categories
             })

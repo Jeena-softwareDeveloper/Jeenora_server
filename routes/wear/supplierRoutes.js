@@ -113,12 +113,12 @@ router.post('/ai-seo-tags', authMiddleware, aiMasterController.generate_seo_tags
 router.post('/ai-smart-reply', authMiddleware, aiMasterController.smart_review_reply);
 router.get('/catalog/my-list', authMiddleware, wearCatalogController.get_my_catalogs);
 router.get('/catalog/manual-list', authMiddleware, wearCatalogController.get_supplier_catalogs); // NEW: Dashboard specific list
+router.get('/catalog/hsn-data', wearCatalogController.get_hsn_tax_data); // Public - must be BEFORE :catalogId
 router.get('/catalog/:catalogId', authMiddleware, wearCatalogController.get_catalog_by_id);
 router.put('/catalog/supplier-edit/:catalogId', authMiddleware, wearCatalogController.supplier_edit_catalog);
 router.put('/catalog/update/:productId', authMiddleware, wearCatalogController.update_catalog);
 router.patch('/catalog/status/:productId', authMiddleware, wearCatalogController.update_catalog_status);
 router.delete('/catalog/delete/:productId', authMiddleware, wearCatalogController.delete_catalog);
-router.get('/catalog/hsn-data', wearCatalogController.get_hsn_tax_data); // Public - no auth needed for reference data
 
 router.get('/list', authMiddleware, supplierController.get_suppliers);
 router.get('/detail/:supplierId', authMiddleware, supplierController.get_supplier_by_id);

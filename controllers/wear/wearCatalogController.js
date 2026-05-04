@@ -736,16 +736,9 @@ class wearCatalogController {
             }
 
             if (isWearProduct) {
-                // Update entire catalog group status
-                if (productToUpdate.catalogId) {
-                    await WearProduct.updateMany(
-                        { catalogId: productToUpdate.catalogId },
-                        { $set: { status: status } }
-                    );
-                } else {
-                    productToUpdate.status = status;
-                    await productToUpdate.save();
-                }
+                // Update ONLY the specific product variant status
+                productToUpdate.status = status;
+                await productToUpdate.save();
             } else {
                 // Update legacy product
                 productToUpdate.status = status;

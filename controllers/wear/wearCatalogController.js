@@ -215,8 +215,7 @@ class wearCatalogController {
                 ...g.mainProduct,
                 _id: g.mainProduct._id,
                 catalogId: g.mainProduct.catalogId || g._id,
-                similarProductsCount: g.count,
-                similarProducts: g.allProducts
+                similarProductsCount: g.count
             }));
 
             // 2. Get Legacy Products for this seller
@@ -234,7 +233,6 @@ class wearCatalogController {
                     stock: p.stock
                 }],
                 similarProductsCount: 1,
-                similarProducts: [p],
                 isLegacy: true,
                 status: p.status || 'active'
             }));

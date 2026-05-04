@@ -25,6 +25,7 @@ router.post('/supplier/ai-observe-image', authMiddleware, aiMasterController.ai_
 router.post('/supplier/ai-recommend', authMiddleware, aiMasterController.generate_ai_recommendation)
 router.post('/supplier/ai-advise-price', authMiddleware, aiMasterController.advise_price)
 router.post('/supplier/ai-seo-tags', authMiddleware, aiMasterController.generate_seo_tags)
+router.post('/supplier/ai-suggest-gst', authMiddleware, aiMasterController.ai_suggest_gst)
 
 // Supplier Catalog Routes (via dashboard path)
 const wearCatalogController = require('../../controllers/wear/wearCatalogController');

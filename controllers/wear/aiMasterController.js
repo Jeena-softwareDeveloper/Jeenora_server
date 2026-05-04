@@ -994,6 +994,58 @@ RETURN ONLY JSON:
             console.error('[AI Master] WhatsApp processing failed:', error.message);
         }
     }
+
+    // AI-powered GST rate suggestion (no HSN needed)
+    ai_suggest_gst = async (req, res) => {
+        try {
+            const { productName, category, subCategory, mrp } = req.body;
+
+            if (!productName && !category) {
+                return responseReturn(res, 400, { error: 'Product name or category required' });
+            }
+
+            const prompt = `You are an Indian GST and HSN code classifier for apparel/fashion products.
+Task: Determine the correct GST rate AND official Indian HSN code for this product.
+
+Product: "${productName || ''}"
+Category: "${category || ''}"
+Sub-category: "${subCategory || ''}"
+MRP: ₹${mrp || 'unknown'}
+
+Indian GST Rules for Apparel:
+- Garments with MRP < ₹1000 → 5% GST
+- Garments with MRP ≥ ₹1000 → 12% GST
+- Footwear < ₹1000 → 5%, ≥ ₹1000 → 18%
+- Cotton fabric, sarees, dhotis → 5%
+- Accessories (belts, wallets, bags) → 18%
+
+Common HSN codes:
+6205=Men shirts, 6109=T-shirts, 6203=Men trousers/jeans, 6201=Men jackets/coats,
+6110=Sweaters/hoodies, 6108=Innerwear/vests, 6211=Sportswear/tracksuits,
+6204=Women dresses/suits, 6206=Women blouses/tops, 6209=Kids clothing,
+6403=Footwear, 6217=Accessories/scarves, 4202=Bags/wallets/belts
+
+Return ONLY this JSON (no explanation):
+{"gst": <number: 5, 12, or 18>, "hsn": "<4-digit HSN code>", "reason": "<one line reason>"}`;
+
+            const result = await this.call_deepseek_with_guardrail(prompt);
+
+            const gst = [5, 12, 18].includes(Number(result.gst)) ? Number(result.gst) : 12;
+            const hsn = result.hsn || '';
+
+            return responseReturn(res, 200, {
+                success: true,
+                gst,
+                hsn,
+                reason: result.reason || ''
+            });
+
+        } catch (error) {
+            console.error('[AI GST] Error:', error.message);
+            // Fallback: return 12% default for apparel
+            return responseReturn(res, 200, { success: true, gst: 12, reason: 'Default apparel GST' });
+        }
+    }
 }
 
 module.exports = new AIMasterController();

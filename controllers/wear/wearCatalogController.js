@@ -45,13 +45,6 @@ class wearCatalogController {
         return `JEEN-${vendorShort}-${randomStr}`;
     }
 
-    // Helper to auto-generate HSN code per product (category-based prefix + random)
-    generateHSN = (category) => {
-        const catPrefix = category ? category.substring(0, 3).toUpperCase().replace(/[^A-Z0-9]/g, '') : 'GEN';
-        const randomStr = Math.random().toString(36).substring(2, 7).toUpperCase();
-        return `HSN-${catPrefix}-${randomStr}`;
-    }
-
     // Add new product catalog (Meesho flow) - Supports bulk similar products
     add_catalog = async (req, res) => {
         const { id } = req;
@@ -123,7 +116,7 @@ class wearCatalogController {
                         category: item.category,
                         subCategory: item.subCategory,
                         images: processedImages,
-                        hsnCode: item.hsnCode || this.generateHSN(item.category),
+                        hsnCode: item.hsnCode || '',
                         gstPercentage: item.gstPercentage,
                         weight: item.weight,
                         dimensions: item.dimensions,
@@ -872,7 +865,7 @@ class wearCatalogController {
                     category: info?.category || item.category,
                     subCategory: info?.subCategory || item.subCategory,
                     images: processedImages.length > 0 ? processedImages : item.images,
-                    hsnCode: info?.hsnCode,
+                    hsnCode: info?.hsnCode || '',
                     gstPercentage: info?.gstPercentage ? parseInt(info.gstPercentage) : undefined,
                     weight: info?.weight ? parseInt(info.weight) : undefined,
                     dimensions: info?.dimensions,
@@ -909,27 +902,47 @@ class wearCatalogController {
         }
     }
 
-    // Public: Get GST rate for a category (HSN auto-generated at product create — no lookup needed)
+    // Public: Get real HSN code + GST rate for a category (set by admin in WearCategory)
     get_hsn_tax_data = async (req, res) => {
         try {
             const WearCategory = require('../../models/wear/wearCategoryModel');
             const { category } = req.query;
 
             if (category) {
-                // Find category GST rate only (HSN is auto-generated per product)
+                // Exact match first
                 const cat = await WearCategory.findOne({
+                    name: { $regex: new RegExp(`^${category}$`, 'i') },
+                    status: 'active'
+                }).select('name hsnCode gstRate').lean();
+
+                if (cat) {
+                    return responseReturn(res, 200, {
+                        success: true,
+                        suggestion: {
+                            hsn: cat.hsnCode || '',
+                            gst: cat.gstRate ?? 5,
+                            label: cat.name
+                        }
+                    });
+                }
+
+                // Partial / parent category fallback
+                const parentCat = await WearCategory.findOne({
                     name: { $regex: new RegExp(category, 'i') },
                     status: 'active'
-                }).select('name gstRate').lean();
+                }).select('name hsnCode gstRate').lean();
 
-                const gst = cat?.gstRate ?? 5;
                 return responseReturn(res, 200, {
                     success: true,
-                    suggestion: { gst, label: cat?.name || category }
+                    suggestion: {
+                        hsn: parentCat?.hsnCode || '',
+                        gst: parentCat?.gstRate ?? 5,
+                        label: parentCat?.name || category
+                    }
                 });
             }
 
-            return responseReturn(res, 200, { success: true, suggestion: { gst: 5 } });
+            return responseReturn(res, 200, { success: true, suggestion: { hsn: '', gst: 5 } });
         } catch (error) {
             responseReturn(res, 500, { error: error.message });
         }

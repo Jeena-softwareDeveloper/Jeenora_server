@@ -51,7 +51,7 @@ class homeControllers {
     }
     // end method 
     get_products = async (req, res) => {
-        const parPage = parseInt(req.query.limit) || 50;
+        const parPage = parseInt(req.query.limit) || 15;
         const { category, searchValue, sort, gender, lowPrice, highPrice, pageNumber } = req.query;
         try {
             let categoryRegexes = [];
@@ -59,14 +59,29 @@ class homeControllers {
 
             if (category) {
                 const WearCategory = require('../../models/wear/wearCategoryModel');
-                const catDoc = await WearCategory.findOne({ 
-                    $or: [{ name: { $regex: new RegExp(`^${category}$`, 'i') } }, { slug: category.toLowerCase() }] 
-                });
+                const mongoose = require('mongoose');
+                
+                let query = { 
+                    $or: [
+                        { name: { $regex: new RegExp(`^${category}$`, 'i') } }, 
+                        { slug: category.toLowerCase() }
+                    ] 
+                };
+
+                if (mongoose.Types.ObjectId.isValid(category)) {
+                    query.$or.push({ _id: category });
+                }
+
+                const catDoc = await WearCategory.findOne(query);
 
                 if (catDoc) {
+                    // If it's a parent category, get all child category names too
                     const childCategories = await WearCategory.find({ parentId: catDoc._id });
                     categoryNames = [catDoc.name, ...childCategories.map(c => c.name)];
                     categoryRegexes = categoryNames.map(n => new RegExp(`^${n}$`, 'i'));
+                    
+                    // Also include the ID string as a possibility if stored as ID
+                    categoryNames.push(catDoc._id.toString());
                 } else {
                     categoryRegexes = [new RegExp(`^${category}$`, 'i')];
                     categoryNames = [category];
@@ -245,9 +260,20 @@ class homeControllers {
             let categoryRegexes = [];
             if (category) {
                 const WearCategory = require('../../models/wear/wearCategoryModel');
-                const catDoc = await WearCategory.findOne({ 
-                    $or: [{ name: { $regex: new RegExp(`^${category}$`, 'i') } }, { slug: category.toLowerCase() }] 
-                });
+                const mongoose = require('mongoose');
+                
+                let query = { 
+                    $or: [
+                        { name: { $regex: new RegExp(`^${category}$`, 'i') } }, 
+                        { slug: category.toLowerCase() }
+                    ] 
+                };
+
+                if (mongoose.Types.ObjectId.isValid(category)) {
+                    query.$or.push({ _id: category });
+                }
+
+                const catDoc = await WearCategory.findOne(query);
                 if (catDoc) {
                     const childCategories = await WearCategory.find({ parentId: catDoc._id });
                     categoryRegexes = [catDoc.name, ...childCategories.map(c => c.name)].map(n => new RegExp(`^${n}$`, 'i'));

@@ -613,11 +613,10 @@ class supplierController {
         }
     }
 
-    // 5.1 Admin - Get full supplier details by ID (including all select:false fields)
+    // 5.1 Admin - Get full supplier details by ID (including all select:false fields + sales stats)
     get_supplier_by_id = async (req, res) => {
         const { supplierId } = req.params;
         try {
-            // Use .select('+fieldName') to force-include fields marked select:false
             const supplier = await Supplier.findById(supplierId)
                 .populate('user', 'name phone email')
                 .select('+businessDetails.gstNumber +businessDetails.panNumber +businessDetails.panName +businessDetails.enrolmentId +addressDetails.state +addressDetails.pincode +addressDetails.district +addressDetails.city +addressDetails.addressLine +addressDetails.street +addressDetails.landmark +bankDetails.accountNumber +bankDetails.ifscCode +bankDetails.bankName +bankDetails.branchName +bankDetails.address +bankDetails.city +bankDetails.state +bankDetails.micr')
@@ -627,17 +626,37 @@ class supplierController {
                 return responseReturn(res, 404, { error: 'Supplier not found' });
             }
 
-            // Attach product stats
             const WearProduct = require('../../models/wear/wearProductModel');
             const legacyProductModel = require('../../models/wear/productModel');
             const mongoose = require('mongoose');
             const sellerObjId = new mongoose.Types.ObjectId(supplierId);
 
+            // Catalog counts
             const [totalCatalogs, activeCatalogs, pendingCatalogs, legacyCount] = await Promise.all([
                 WearProduct.countDocuments({ sellerId: sellerObjId }),
                 WearProduct.countDocuments({ sellerId: sellerObjId, status: 'active' }),
                 WearProduct.countDocuments({ sellerId: sellerObjId, status: 'pending' }),
                 legacyProductModel.countDocuments({ sellerId: sellerObjId }),
+            ]);
+
+            // Sales stats from authOrders
+            const orders = await authOrderModel.find({ sellerId: sellerObjId }).lean();
+            const totalOrders = orders.length;
+            const deliveredOrders = orders.filter(o => o.delivery_status === 'delivered');
+            const totalGMV = orders.reduce((sum, o) => sum + (o.price || 0), 0);
+            const totalRevenue = deliveredOrders.reduce((sum, o) => sum + (o.price || 0), 0);
+            const avgOrderValue = totalOrders > 0 ? Math.round(totalGMV / totalOrders) : 0;
+            const totalReturns = orders.filter(o => o.return_status && o.return_status !== 'none').length;
+            const pendingOrders = orders.filter(o => o.delivery_status === 'pending').length;
+            const cancelledOrders = orders.filter(o => o.delivery_status === 'cancelled').length;
+            const returnRate = totalOrders > 0 ? parseFloat(((totalReturns / totalOrders) * 100).toFixed(1)) : 0;
+
+            // Top selling products by this supplier (top 5 by name)
+            const topProducts = await authOrderModel.aggregate([
+                { $match: { sellerId: sellerObjId } },
+                { $group: { _id: '$productId', name: { $first: '$productName' }, totalSales: { $sum: '$price' }, count: { $sum: 1 } } },
+                { $sort: { totalSales: -1 } },
+                { $limit: 5 }
             ]);
 
             responseReturn(res, 200, {
@@ -648,6 +667,18 @@ class supplierController {
                         totalCatalogs: totalCatalogs + legacyCount,
                         activeCatalogs,
                         pendingCatalogs,
+                    },
+                    salesStats: {
+                        totalOrders,
+                        totalGMV,
+                        totalRevenue,
+                        avgOrderValue,
+                        totalReturns,
+                        returnRate,
+                        pendingOrders,
+                        cancelledOrders,
+                        deliveredOrders: deliveredOrders.length,
+                        topProducts,
                     }
                 }
             });

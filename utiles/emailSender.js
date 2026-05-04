@@ -1,4 +1,4 @@
-const nodemailer = require('nodemailer');
+ const nodemailer = require('nodemailer');
 
 // Email transporter configuration
 const transporter = nodemailer.createTransport({
@@ -33,25 +33,34 @@ const sendEmail = async (to, subject, message, html = null) => {
         }
 
         const mailOptions = {
-            from: `Jeenora Wear <${process.env.EMAIL_USER}>`,
+            from: `"Jeenora Wear Support" <${process.env.EMAIL_USER}>`,
             to: to,
             subject: subject,
             text: message,
+            headers: {
+                'List-Unsubscribe': `<mailto:${process.env.EMAIL_USER}?subject=unsubscribe>`,
+                'Precedence': 'bulk'
+            },
             html: html || `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e1e1e1; border-radius: 10px; overflow: hidden;">
-          <div style="background: #a31545; padding: 30px; text-align: center;">
-            <h1 style="color: white; margin: 0; font-size: 24px; letter-spacing: 2px;">JEENORA WEAR</h1>
+        <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #eee; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 10px rgba(0,0,0,0.05);">
+          <div style="background: linear-gradient(135deg, #a31545 0%, #720d2e 100%); padding: 35px 20px; text-align: center;">
+            <h1 style="color: white; margin: 0; font-size: 26px; letter-spacing: 3px; font-weight: 800;">JEENORA WEAR</h1>
           </div>
-          <div style="padding: 30px; background: #ffffff;">
-            <h2 style="color: #333; margin-top: 0;">New Promotional Alert!</h2>
-            <p style="font-size: 16px; line-height: 1.6; color: #555;">${message}</p>
-            <div style="margin-top: 40px; padding: 20px; background: #f8f9fa; border-radius: 8px; text-align: center;">
-              <p style="margin: 0; color: #888; font-size: 12px;">This is an automated notification from the Jeenora Wear Administration.</p>
-              <p style="margin: 5px 0 0 0; color: #888; font-size: 12px;">Please check your supplier dashboard for more details.</p>
+          <div style="padding: 40px 30px; background: #ffffff;">
+            <h2 style="color: #2d3436; margin-top: 0; font-size: 20px;">Business Update</h2>
+            <p style="font-size: 16px; line-height: 1.7; color: #636e72;">${message}</p>
+            
+            <div style="margin-top: 40px; padding: 25px; background: #fdf2f5; border-left: 4px solid #a31545; border-radius: 8px;">
+              <p style="margin: 0; color: #a31545; font-size: 13px; font-weight: 600;">System Notification</p>
+              <p style="margin: 5px 0 0 0; color: #7f8c8d; font-size: 12px;">This update was automatically generated for your supplier account to keep you informed about your dashboard activity.</p>
             </div>
           </div>
-          <div style="background: #f1f1f1; padding: 15px; text-align: center; font-size: 12px; color: #aaa;">
-            &copy; ${new Date().getFullYear()} Jeenora. All rights reserved.
+          <div style="background: #f8f9fa; padding: 30px; text-align: center; border-top: 1px solid #eee;">
+            <p style="margin: 0; font-size: 12px; color: #b2bec3;">&copy; ${new Date().getFullYear()} Jeenora Wear. All rights reserved.</p>
+            <p style="margin: 10px 0 0 0; font-size: 11px; color: #b2bec3; line-height: 1.5;">
+              Jeenora Headquarters, Industrial Estate, Tamil Nadu, India<br/>
+              To stop receiving these reports, <a href="#" style="color: #a31545; text-decoration: underline;">unsubscribe here</a>
+            </p>
           </div>
         </div>
       `

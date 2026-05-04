@@ -212,29 +212,46 @@ class wearCatalogController {
             ]);
 
             const wearCatalogs = groupedCatalogs.map(g => ({
-                ...g.mainProduct,
                 _id: g.mainProduct._id,
                 catalogId: g.mainProduct.catalogId || g._id,
-                similarProductsCount: g.count
+                productName: g.mainProduct.productName,
+                category: g.mainProduct.category,
+                images: [g.mainProduct.images?.[0]],
+                status: g.mainProduct.status,
+                hsnCode: g.mainProduct.hsnCode,
+                similarProductsCount: g.count,
+                createdAt: g.mainProduct.createdAt,
+                // Minimal variants for single-product quick actions
+                variants: g.mainProduct.variants?.map(v => ({
+                    skuId: v.skuId,
+                    stock: v.stock,
+                    size: v.size,
+                    color: v.color,
+                    listingPrice: v.listingPrice
+                }))
             }));
 
             // 2. Get Legacy Products for this seller
             const legacyProductsRaw = await productModel.find({ sellerId: sellerObjectId }).sort({ createdAt: -1 }).lean();
 
             const legacyCatalogs = legacyProductsRaw.map(p => ({
-                ...p,
-                productName: p.name,
+                _id: p._id,
                 catalogId: p._id,
-                variants: p.variants || [{
-                    listingPrice: p.price,
-                    mrp: p.price + (p.discount || 0),
-                    size: 'Standard',
-                    color: 'Multi',
-                    stock: p.stock
-                }],
+                productName: p.name,
+                category: p.category || 'Legacy',
+                images: [p.images?.[0] || p.image],
+                status: p.status || 'active',
+                hsnCode: '',
                 similarProductsCount: 1,
                 isLegacy: true,
-                status: p.status || 'active'
+                createdAt: p.createdAt,
+                price: p.price,
+                // Legacy variants fallback
+                variants: p.variants?.map(v => ({ skuId: v.skuId, stock: v.stock, listingPrice: v.listingPrice || p.price })) || [{
+                    listingPrice: p.price,
+                    stock: p.stock,
+                    skuId: p._id.toString().slice(-8).toUpperCase()
+                }]
             }));
 
             // 3. Combine and Sort
@@ -839,13 +856,27 @@ class wearCatalogController {
                 return responseReturn(res, 403, { error: 'Catalog not found or not authorized' });
             }
 
-            // Return the same structure myCatalogs returns (primary + similarProducts)
-            const primary = products.find(p => p.isPrimary) || products[0];
+            // Return a structured response with only needed fields for the expansion UI
             const catalog = {
-                ...primary,
-                catalogId,
-                similarProducts: products,
-                similarProductsCount: products.length
+                _id: catalogId,
+                catalogId: catalogId,
+                similarProductsCount: products.length,
+                similarProducts: products.map(p => ({
+                    _id: p._id,
+                    catalogId: p.catalogId,
+                    productName: p.productName,
+                    images: [p.images?.[0]],
+                    status: p.status,
+                    hsnCode: p.hsnCode,
+                    variants: p.variants?.map(v => ({
+                        skuId: v.skuId,
+                        stock: v.stock,
+                        size: v.size,
+                        color: v.color,
+                        listingPrice: v.listingPrice,
+                        mrp: v.mrp
+                    }))
+                }))
             };
 
             responseReturn(res, 200, { success: true, catalog });

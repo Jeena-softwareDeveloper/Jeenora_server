@@ -26,4 +26,9 @@ router.post('/supplier/ai-recommend', authMiddleware, aiMasterController.generat
 router.post('/supplier/ai-advise-price', authMiddleware, aiMasterController.advise_price)
 router.post('/supplier/ai-seo-tags', authMiddleware, aiMasterController.generate_seo_tags)
 
+// Supplier Catalog Routes (via dashboard path)
+const wearCatalogController = require('../../controllers/wear/wearCatalogController');
+router.get('/supplier/catalog/hsn-data', wearCatalogController.get_hsn_tax_data); // Public - no auth
+router.patch('/supplier/catalog/status/:productId', authMiddleware, wearCatalogController.update_catalog_status);
+
 module.exports = router

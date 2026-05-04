@@ -721,7 +721,15 @@ class wearCatalogController {
                 if (role === 'supplier' || role === 'vendor') {
                     // Check ownership for suppliers
                     const supplier = await Supplier.findOne({ user: req.id });
-                    if (!supplier || String(productToUpdate.sellerId) !== String(supplier._id)) {
+                    if (!supplier) {
+                        return responseReturn(res, 403, { error: 'Supplier profile not found.' });
+                    }
+                    // Check by sellerId OR catalogId ownership
+                    const sellerIdMatch = String(productToUpdate.sellerId) === String(supplier._id);
+                    const catalogOwned = productToUpdate.catalogId 
+                        ? await WearProduct.findOne({ catalogId: productToUpdate.catalogId, sellerId: supplier._id })
+                        : null;
+                    if (!sellerIdMatch && !catalogOwned) {
                         return responseReturn(res, 403, { error: 'Not authorized: You do not own this catalog.' });
                     }
                 } else {

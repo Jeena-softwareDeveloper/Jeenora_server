@@ -122,6 +122,7 @@ class wearCatalogController {
                         dimensions: item.dimensions,
                         attributes: item.attributes,
                         alterSlug: item.alterSlug,
+                        tags: item.tags && typeof item.tags === 'string' ? item.tags.split(',').map(t => t.trim()).filter(Boolean) : (Array.isArray(item.tags) ? item.tags : []),
                         variants: (item.variants || []).map(v => ({
                             ...v,
                             skuId: v.skuId || this.generateSKU(supplier.businessDetails?.shopName)
@@ -148,6 +149,7 @@ class wearCatalogController {
                         dimensions: item.dimensions,
                         attributes: item.attributes,
                         alterSlug: item.alterSlug,
+                        tags: item.tags && typeof item.tags === 'string' ? item.tags.split(',').map(t => t.trim()).filter(Boolean) : (Array.isArray(item.tags) ? item.tags : []),
                         variants: (item.variants || []).map(v => ({
                             ...v,
                             skuId: v.skuId || this.generateSKU(supplier.businessDetails?.shopName)
@@ -711,10 +713,20 @@ class wearCatalogController {
 
             if (!productToUpdate) return responseReturn(res, 404, { error: 'Product not found' });
 
-            // Dashboard Support: Admin and Seller (Dashboard users) can update any catalog
-            const isDashboardUser = role === 'admin' || role === 'seller';
-            if (!isDashboardUser) {
-                return responseReturn(res, 403, { error: 'Not authorized' });
+            // Dashboard Support: Admin and Seller can update any catalog. 
+            // Suppliers can only update their OWN catalogs.
+            const isAdminOrSeller = role === 'admin' || role === 'seller';
+            
+            if (!isAdminOrSeller) {
+                if (role === 'supplier' || role === 'vendor') {
+                    // Check ownership for suppliers
+                    const supplier = await Supplier.findOne({ user: req.id });
+                    if (!supplier || String(productToUpdate.sellerId) !== String(supplier._id)) {
+                        return responseReturn(res, 403, { error: 'Not authorized: You do not own this catalog.' });
+                    }
+                } else {
+                    return responseReturn(res, 403, { error: 'Not authorized: Invalid role.' });
+                }
             }
 
             if (isWearProduct) {

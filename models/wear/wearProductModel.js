@@ -46,6 +46,10 @@ const wearProductSchema = new mongoose.Schema({
         enum: ['Manufacturer', 'Wholesaler', 'Retailer', 'Brand', ''],
         default: ''
     },
+    tags: [{
+        type: String,
+        index: true
+    }],
 
     // Meesho-style Pricing & Tax
     hsnCode: { type: String },

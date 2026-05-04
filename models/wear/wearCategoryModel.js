@@ -40,6 +40,14 @@ const wearCategorySchema = new mongoose.Schema({
     priority: {
         type: Number,
         default: 0
+    },
+    hsnCode: {
+        type: String,
+        default: ''   // e.g., '6203' — set by admin when creating category
+    },
+    gstRate: {
+        type: Number,
+        default: 5    // GST % — 0, 5, 12, 18, 28
     }
 }, { timestamps: true });
 

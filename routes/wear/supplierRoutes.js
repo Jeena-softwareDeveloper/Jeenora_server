@@ -118,6 +118,7 @@ router.put('/catalog/supplier-edit/:catalogId', authMiddleware, wearCatalogContr
 router.put('/catalog/update/:productId', authMiddleware, wearCatalogController.update_catalog);
 router.patch('/catalog/status/:productId', authMiddleware, wearCatalogController.update_catalog_status);
 router.delete('/catalog/delete/:productId', authMiddleware, wearCatalogController.delete_catalog);
+router.get('/catalog/hsn-data', wearCatalogController.get_hsn_tax_data); // Public - no auth needed for reference data
 
 router.get('/list', authMiddleware, supplierController.get_suppliers);
 router.get('/detail/:supplierId', authMiddleware, supplierController.get_supplier_by_id);

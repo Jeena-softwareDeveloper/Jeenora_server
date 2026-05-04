@@ -11,7 +11,7 @@ class WearCategoryController {
             if (err) {
                 responseReturn(res, 404, { error: 'Something went wrong' });
             } else {
-                let { name, additionalDetails, priority } = fields;
+                let { name, additionalDetails, priority, hsnCode, gstRate } = fields;
                 let { image } = files;
 
                 if (!name || (Array.isArray(name) && !name[0])) {
@@ -107,7 +107,9 @@ class WearCategoryController {
                             parentId: parentId,
                             level: level,
                             additionalDetails: parsedAdditionalDetails,
-                            priority: parseInt(priority) || 0
+                            priority: parseInt(priority) || 0,
+                            hsnCode: (Array.isArray(hsnCode) ? hsnCode[0] : hsnCode) || '',
+                            gstRate: parseFloat(Array.isArray(gstRate) ? gstRate[0] : gstRate) || 5
                         });
                         responseReturn(res, 201, { category, message: 'Wear Category Added Successfully' });
                     } else {
@@ -167,7 +169,7 @@ class WearCategoryController {
                 responseReturn(res, 404, { error: 'Something went wrong' });
             } else {
                 const { id } = req.params;
-                let { name, status, additionalDetails, priority } = fields;
+                let { name, status, additionalDetails, priority, hsnCode, gstRate } = fields;
                 let { image } = files;
 
                 // Handle formidable v3+ arrays
@@ -262,6 +264,10 @@ class WearCategoryController {
                             updateData.priority = parsedPriority;
                         }
                     }
+                    const rawHsn = Array.isArray(hsnCode) ? hsnCode[0] : hsnCode;
+                    const rawGst = Array.isArray(gstRate) ? gstRate[0] : gstRate;
+                    if (rawHsn !== undefined) updateData.hsnCode = rawHsn || '';
+                    if (rawGst !== undefined && rawGst !== '') updateData.gstRate = parseFloat(rawGst);
 
                     if (image) {
                         cloudinary.config({

@@ -893,6 +893,57 @@ class wearCatalogController {
             responseReturn(res, 500, { error: error.message });
         }
     }
+
+    // Public: Get HSN code + GST rate for a category (looked up from DB)
+    get_hsn_tax_data = async (req, res) => {
+        try {
+            const WearCategory = require('../../models/wear/wearCategoryModel');
+            const { category } = req.query;
+
+            if (category) {
+                // Find the category by name (case-insensitive) and return its HSN/GST
+                const cat = await WearCategory.findOne({
+                    name: { $regex: new RegExp(category, 'i') },
+                    status: 'active'
+                }).select('name hsnCode gstRate').lean();
+
+                if (cat && cat.hsnCode) {
+                    return responseReturn(res, 200, {
+                        success: true,
+                        suggestion: { hsn: cat.hsnCode, gst: cat.gstRate || 5, label: cat.name }
+                    });
+                }
+
+                // Also try partial match on parent categories
+                const partialCat = await WearCategory.findOne({
+                    name: { $regex: new RegExp(category.split(' ')[0], 'i') },
+                    hsnCode: { $ne: '' },
+                    status: 'active'
+                }).select('name hsnCode gstRate').lean();
+
+                if (partialCat) {
+                    return responseReturn(res, 200, {
+                        success: true,
+                        suggestion: { hsn: partialCat.hsnCode, gst: partialCat.gstRate || 5, label: partialCat.name }
+                    });
+                }
+
+                return responseReturn(res, 200, { success: true, suggestion: null });
+            }
+
+            // Return all categories that have HSN codes configured
+            const allCats = await WearCategory.find({ hsnCode: { $ne: '' }, status: 'active' })
+                .select('name hsnCode gstRate')
+                .lean();
+
+            responseReturn(res, 200, {
+                success: true,
+                data: allCats.map(c => ({ label: c.name, hsn: c.hsnCode, gst: c.gstRate || 5 }))
+            });
+        } catch (error) {
+            responseReturn(res, 500, { error: error.message });
+        }
+    }
 }
 
 module.exports = new wearCatalogController();

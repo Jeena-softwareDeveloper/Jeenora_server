@@ -136,14 +136,35 @@ class homeControllers {
             else if (sort === 'top-rated') wearSort = { avgRating: -1, createdAt: -1 };
 
             const wearProductsRaw = await wearProductModel.find(wearMatch).sort(wearSort).lean();
-            const products = wearProductsRaw.map(p => ({
-                ...p,
-                name: p.productName,
-                price: p.variants?.[0]?.listingPrice || 0,
-                discount: 0,
-                rating: p.avgRating || 5,
-                type: 'wear'
-            }));
+
+            // --- Group by catalogId: one card per catalog ---
+            const catalogMap = new Map();
+            for (const p of wearProductsRaw) {
+                const key = p.catalogId ? String(p.catalogId) : String(p._id);
+                if (!catalogMap.has(key)) {
+                    catalogMap.set(key, {
+                        ...p,
+                        name: p.productName,
+                        price: p.variants?.[0]?.listingPrice || 0,
+                        discount: 0,
+                        rating: p.avgRating || 5,
+                        type: 'wear',
+                        allColors: []
+                    });
+                }
+                // Collect all unique colors from all products in the same catalog
+                const entry = catalogMap.get(key);
+                const productColors = (p.variants || [])
+                    .map(v => v.color || v.colorName || null)
+                    .filter(Boolean);
+                for (const c of productColors) {
+                    if (!entry.allColors.includes(c)) {
+                        entry.allColors.push(c);
+                    }
+                }
+            }
+
+            const products = Array.from(catalogMap.values());
 
             // Pagination
             const totalProducts = products.length;

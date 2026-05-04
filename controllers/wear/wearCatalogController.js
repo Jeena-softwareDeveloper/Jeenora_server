@@ -718,12 +718,9 @@ class wearCatalogController {
             const isAdminOrSeller = role === 'admin' || role === 'seller';
             
             if (!isAdminOrSeller) {
-                if (role === 'supplier' || role === 'vendor') {
-                    // Check ownership for suppliers
-                    const supplier = await Supplier.findOne({ user: req.id });
-                    if (!supplier) {
-                        return responseReturn(res, 403, { error: 'Supplier profile not found.' });
-                    }
+                // Check if user is a registered supplier
+                const supplier = await Supplier.findOne({ user: req.id });
+                if (supplier) {
                     // Check by sellerId OR catalogId ownership
                     const sellerIdMatch = String(productToUpdate.sellerId) === String(supplier._id);
                     const catalogOwned = productToUpdate.catalogId 
@@ -775,6 +772,46 @@ class wearCatalogController {
         }
     }
     // Supplier: Get a specific catalog by catalogId (for edit pre-fill)
+    scan_catalog_product = async (req, res) => {
+        const { skuId } = req.params;
+        const { id } = req; // user id
+
+        try {
+            const supplier = await Supplier.findOne({ user: id });
+            if (!supplier) return responseReturn(res, 404, { error: 'Supplier account not found' });
+
+            const query = skuId.toUpperCase();
+            
+            // Search by exact ObjectId or variant SKU
+            let matchCondition = [{ 'variants.skuId': { $regex: new RegExp(`^${query}$`, 'i') } }];
+            if (query.length === 24 && /^[0-9a-fA-F]{24}$/.test(query)) {
+                 matchCondition.push({ _id: query });
+            }
+
+            let product = await WearProduct.findOne({
+                sellerId: supplier._id,
+                $or: matchCondition
+            });
+
+            // Fallback for 8-char sliced ObjectId
+            if (!product && query.length === 8) {
+                 const allProducts = await WearProduct.find({ sellerId: supplier._id }, '_id');
+                 const match = allProducts.find(p => p._id.toString().slice(-8).toUpperCase() === query);
+                 if (match) {
+                     product = await WearProduct.findById(match._id);
+                 }
+            }
+
+            if (!product) {
+                return responseReturn(res, 404, { error: 'Product not found for this SKU' });
+            }
+
+            responseReturn(res, 200, { success: true, product });
+        } catch (error) {
+            responseReturn(res, 500, { error: error.message });
+        }
+    }
+
     get_catalog_by_id = async (req, res) => {
         const { catalogId } = req.params;
         const { id } = req;

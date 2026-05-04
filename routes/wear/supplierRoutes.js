@@ -114,6 +114,7 @@ router.post('/ai-smart-reply', authMiddleware, aiMasterController.smart_review_r
 router.get('/catalog/my-list', authMiddleware, wearCatalogController.get_my_catalogs);
 router.get('/catalog/manual-list', authMiddleware, wearCatalogController.get_supplier_catalogs); // NEW: Dashboard specific list
 router.get('/catalog/hsn-data', wearCatalogController.get_hsn_tax_data); // Public - must be BEFORE :catalogId
+router.get('/catalog/scan/:skuId', authMiddleware, wearCatalogController.scan_catalog_product); // Scanner Route
 router.get('/catalog/:catalogId', authMiddleware, wearCatalogController.get_catalog_by_id);
 router.put('/catalog/supplier-edit/:catalogId', authMiddleware, wearCatalogController.supplier_edit_catalog);
 router.put('/catalog/update/:productId', authMiddleware, wearCatalogController.update_catalog);

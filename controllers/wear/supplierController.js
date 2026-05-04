@@ -239,7 +239,7 @@ class supplierController {
     // 2.4 Mobile App - Update Order Status
     update_order_status = async (req, res) => {
         const { orderId } = req.params;
-        const { status } = req.body;
+        const { status, reason } = req.body;
         const { id } = req; // user id from midleware
 
         try {
@@ -259,6 +259,9 @@ class supplierController {
             }
 
             order.delivery_status = status;
+            if (status === 'cancelled' && reason) {
+                order.cancel_reason = reason;
+            }
             await order.save();
 
             // SYNC UPWARDS TO MAIN ORDER

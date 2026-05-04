@@ -45,6 +45,10 @@ const authSchema = new Schema({
         type: String,
         default: ''
     },
+    cancel_reason: {
+        type: String,
+        default: ''
+    },
     date: {
         type: String,
         required: true

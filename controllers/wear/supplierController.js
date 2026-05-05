@@ -248,7 +248,7 @@ class supplierController {
                 return order;
             }));
 
-            responseReturn(res, 200, { success: true, orders });
+            responseReturn(res, 200, { success: true, orders, supplier });
         } catch (error) {
             responseReturn(res, 500, { error: error.message });
         }

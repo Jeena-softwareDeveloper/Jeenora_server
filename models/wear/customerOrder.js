@@ -31,15 +31,7 @@ const customerOrder = new Schema({
         type: String,
         required: true,
         enum: ['pending_payment', 'pending', 'confirmed', 'processing', 'shipped', 'delivered', 'cancelled', 'returned'],
-        validate: {
-            validator: function (v) {
-                // 'this.isNew' allows the initial 'pending' or 'pending_payment' states
-                if (this.isNew) return ['pending', 'pending_payment'].includes(v);
 
-                // For updates via .save(), enforce state machine
-                return isValidTransition(this.delivery_status, v);
-            }
-        }
     },
     date: {
         type: String,

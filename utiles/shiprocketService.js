@@ -92,7 +92,11 @@ class ShiprocketService {
                         edd: bestCourier.estimated_delivery_date,
                         cod_charges: bestCourier.cod_charges || 0
                     };
+                } else {
+                    console.warn(`[SHIPROCKET_API] No couriers in response for ${delivery_pincode}`);
                 }
+            } else {
+                console.error(`[SHIPROCKET_API] Error status: ${response.data.status}, Message: ${response.data.message}`);
             }
             return null;
         } catch (error) {

@@ -11,6 +11,7 @@ const productOfferModel = require('../../models/wear/productOfferModel')
 const customerOrderModel = require('../../models/wear/customerOrder')
 const adminSettingsModel = require('../../models/adminSettingsModel')
 const wearBuyerModel = require('../../models/wear/wearBuyerModel')
+const userBehaviorModel = require('../../models/wear/userBehaviorModel')
 
 
 
@@ -56,7 +57,10 @@ class homeControllers {
         try {
             // Build Wear Products query
             let wearMatch = { status: 'active' };
-            const andConditions = [{ status: 'active' }];
+            const andConditions = [
+                { status: 'active' },
+                { 'variants.stock': { $gt: 0 } } // Exclude out of stock
+            ];
 
             if (category) {
                 const mongoose = require('mongoose');
@@ -175,7 +179,8 @@ class homeControllers {
         try {
             // Fetch products from Wear model with status active, sorted by rating
             const productsRaw = await wearProductModel.find({ 
-                status: 'active'
+                status: 'active',
+                'variants.stock': { $gt: 0 } // Exclude out of stock
             }).sort({
                 avgRating: -1,
                 createdAt: -1
@@ -234,7 +239,10 @@ class homeControllers {
         const { category, searchValue, price, rating, sort } = req.query;
         try {
             let wearMatch = { status: 'active' };
-            const andConditions = [{ status: 'active' }];
+            const andConditions = [
+                { status: 'active' },
+                { 'variants.stock': { $gt: 0 } } // Exclude out of stock
+            ];
             if (category) {
                 const mongoose = require('mongoose');
                 if (mongoose.Types.ObjectId.isValid(category)) {
@@ -295,7 +303,7 @@ class homeControllers {
     product_details = async (req, res) => {
         const { slug } = req.params
         try {
-            const sellerSelection = 'name shopInfo image status';
+            const sellerSelection = 'name shopInfo businessDetails image status';
             let product = await productModel.findOne({ slug }).populate({ path: 'offers', match: { status: 'active' } }).populate('sellerId', sellerSelection);
 
             if (!product && ObjectId.isValid(slug)) {
@@ -338,8 +346,8 @@ class homeControllers {
                 rating: product.rating || 5,
                 description: product.description,
                 brand: product.brand,
-                shopName: product.sellerId?.shopInfo?.shopName || product.shopName,
-                sellerId: product.sellerId?._id,
+                shopName: product.sellerId?.businessDetails?.shopName || product.sellerId?.shopInfo?.shopName || product.shopName,
+                sellerId: product.sellerId, // Return full object if needed, or at least the part frontend needs
                 variants: product.variants || [],
                 offers: product.offers || [],
                 catalogId: product.catalogId,

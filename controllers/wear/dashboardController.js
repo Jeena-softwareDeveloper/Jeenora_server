@@ -61,67 +61,72 @@ class dashboardController {
     get_seller_dashboard_data = async (req, res) => {
         const { id } = req
         try {
-            const totalSale = await sellerWallet.aggregate([
+            // Fetch supplier info for the header
+            const supplier = await sellerModel.findById(id);
+
+            // Define statuses that count as valid active business
+            const validStatuses = ['pending', 'confirmed', 'processing', 'shipped', 'delivered', 'returned'];
+            
+            const statsAggregation = await authOrder.aggregate([
                 {
                     $match: {
-                        sellerId: {
-                            $eq: id
-                        }
+                        sellerId: new ObjectId(id),
+                        delivery_status: { $in: validStatuses }
                     }
-                }, {
+                },
+                {
                     $group: {
                         _id: null,
-                        totalAmount: { $sum: '$amount' }
+                        totalSales: { $sum: '$price' },
+                        totalOrders: { $sum: 1 },
+                        pendingConfirmation: {
+                            $sum: { $cond: [{ $eq: ['$delivery_status', 'pending'] }, 1, 0] }
+                        },
+                        pendingShipments: {
+                            $sum: { $cond: [{ $in: ['$delivery_status', ['confirmed', 'processing']] }, 1, 0] }
+                        },
+                        returnsCount: {
+                            $sum: { $cond: [{ $eq: ['$delivery_status', 'returned'] }, 1, 0] }
+                        }
                     }
                 }
-            ])
+            ]);
+
+            const dashboardStats = statsAggregation.length > 0 ? statsAggregation[0] : {
+                totalSales: 0,
+                totalOrders: 0,
+                pendingConfirmation: 0,
+                pendingShipments: 0,
+                returnsCount: 0
+            };
+
             const totalProduct = await productModel.find({
                 sellerId: new ObjectId(id)
             }).countDocuments()
 
-            const totalOrder = await authOrder.find({
-                sellerId: new ObjectId(id)
-            }).countDocuments()
-            const totalPendingOrder = await authOrder.find({
-                $and: [
-                    {
-                        sellerId: {
-                            $eq: new ObjectId(id)
-                        }
-                    },
-                    {
-                        delivery_status: {
-                            $eq: 'pending'
-                        }
-                    }
-                ]
-            }).countDocuments()
             const messages = await sellerCustomerMessage.find({
-                $or: [
-                    {
-                        senderId: {
-                            $eq: id
-                        }
-                    }, {
-                        receverId: {
-                            $eq: id
-                        }
-                    }
-                ]
-            }).limit(3)
+                $or: [{ senderId: id }, { receverId: id }]
+            }).sort({ createdAt: -1 }).limit(3)
+
             const recentOrders = await authOrder.find({
-                sellerId: new ObjectId(id)
-            }).limit(5)
+                sellerId: new ObjectId(id),
+                delivery_status: { $in: validStatuses }
+            }).sort({ createdAt: -1 }).limit(5)
+
+            // Return in the format expected by Redux vendorReducer
             responseReturn(res, 200, {
-                totalProduct,
-                totalOrder,
-                totalPendingOrder,
+                stats: {
+                    ...dashboardStats,
+                    totalProduct
+                },
+                status: supplier?.status || 'none',
+                shopName: supplier?.shopName || 'Shop',
                 messages,
-                recentOrders,
-                totalSale: totalSale.length > 0 ? totalSale[0].totalAmount : 0,
+                recentOrders
             })
         } catch (error) {
-            console.log(error.message)
+            console.log('[DASHBOARD_ERROR]', error.message)
+            responseReturn(res, 500, { error: 'Failed to fetch dashboard data' })
         }
     }
     //end Method 

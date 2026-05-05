@@ -394,7 +394,10 @@ class orderController {
             for (let i = 0; i < products.length; i++) {
                 const pro = products[i].products;
                 const pri = products[i].price; // This is the subtotal for this seller
-                const sellerId = products[i].sellerId;
+                let sellerId = products[i].sellerId;
+                if (sellerId && typeof sellerId === 'object' && sellerId._id) {
+                    sellerId = sellerId._id;
+                }
 
                 const commAmount = Math.round(pri * (COMMISSION_RATE / 100));
                 const sellAmount = pri - commAmount;
@@ -1290,15 +1293,19 @@ class orderController {
         const { pincode } = req.params;
         const { weight = 0.5, cod = 0 } = req.query;
         try {
+            console.log(`[SHIPPING_CHECK] Pincode: ${pincode}, Weight: ${weight}, COD: ${cod}`);
             const shiprocketService = require('../../utiles/shiprocketService');
-            // Assuming 641001 as primary default pickup pincode for MVP calculation
             const rateData = await shiprocketService.getShippingRate('641001', pincode, Number(weight), Number(cod));
+            
             if (rateData) {
+                console.log(`[SHIPPING_SUCCESS] Rate: ${rateData.rate}`);
                 responseReturn(res, 200, { success: true, data: rateData });
             } else {
+                console.warn(`[SHIPPING_FAIL] No couriers found for pincode: ${pincode}`);
                 responseReturn(res, 400, { error: 'Courier not serviceable for this pincode' });
             }
         } catch (error) {
+            console.error('[SHIPPING_ERROR]', error.message);
             responseReturn(res, 500, { error: 'Failed to calculate shipping rate' });
         }
     }

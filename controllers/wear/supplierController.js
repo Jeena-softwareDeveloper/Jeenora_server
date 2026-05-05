@@ -229,7 +229,10 @@ class supplierController {
             const supplier = await Supplier.findOne({ user: id });
             if (!supplier) return responseReturn(res, 404, { error: 'Supplier account not found' });
 
-            const orders = await authOrderModel.find({ sellerId: supplier._id }).sort({ createdAt: -1 });
+            const orders = await authOrderModel.find({ 
+                sellerId: supplier._id,
+                delivery_status: { $ne: 'pending_payment' }
+            }).sort({ createdAt: -1 });
             responseReturn(res, 200, { success: true, orders });
         } catch (error) {
             responseReturn(res, 500, { error: error.message });

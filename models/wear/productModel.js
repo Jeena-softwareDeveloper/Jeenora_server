@@ -57,6 +57,10 @@ const productSchema = new Schema({
         type: String,
         enum: ['active', 'pending', 'rejected'],
         default: 'active'
+    },
+    gstPercentage: {
+        type: Number,
+        default: 0
     }
 
 }, { timestamps: true })

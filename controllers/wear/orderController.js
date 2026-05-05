@@ -1083,7 +1083,7 @@ class orderController {
             }
 
             await customerOrder.findByIdAndUpdate(orderId, { delivery_status: 'cancelled' });
-            await authOrderModel.updateMany({ orderId: new ObjectId(orderId) }, { delivery_status: 'cancelled' });
+            await authOrderModel.deleteMany({ orderId: new ObjectId(orderId) });
 
             responseReturn(res, 200, { message: 'Order abandoned and stock released' });
         } catch (error) {

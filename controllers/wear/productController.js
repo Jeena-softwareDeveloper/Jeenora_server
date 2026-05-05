@@ -19,7 +19,7 @@ class productController {
             if (err) {
                 return responseReturn(res, 500, { error: 'Form parsing failed' });
             }
-            let { name, category, description, stock, price, discount, shopName, brand } = field;
+            let { name, category, description, stock, price, discount, shopName, brand, gstPercentage } = field;
             let { images } = files;
 
             if (!Array.isArray(images)) {
@@ -55,6 +55,7 @@ class productController {
                     discount: parseInt(discount),
                     images: allImageUrl,
                     brand: brand.trim(),
+                    gstPercentage: parseInt(gstPercentage) || 0,
                 });
 
                 responseReturn(res, 201, { message: 'Product Added Successfully' });
@@ -118,7 +119,7 @@ class productController {
 
 
     product_update = async (req, res) => {
-        let { name, category, description, stock, price, discount, brand, productId } = req.body;
+        let { name, category, description, stock, price, discount, brand, productId, gstPercentage } = req.body;
         const { id } = req;
         name = name.trim();
         const slug = name.split(' ').join('-');
@@ -134,6 +135,7 @@ class productController {
 
             await productModel.findByIdAndUpdate(productId, {
                 name, description, stock, price, discount, brand,
+                gstPercentage: parseInt(gstPercentage) || 0,
                 slug
             })
             const updatedProduct = await productModel.findById(productId)

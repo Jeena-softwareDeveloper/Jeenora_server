@@ -93,12 +93,24 @@ class homeControllers {
             const andConditions = [{ status: 'active' }];
 
             if (category && categoryRegexes.length > 0) {
-                andConditions.push({
-                    $or: [
-                        { category: { $in: categoryRegexes } },
-                        { subCategory: { $in: categoryRegexes } }
-                    ]
-                });
+                if (catDoc && catDoc.level === 0) {
+                    // If filtering by a top-level category (Level 0 like Men/Women), 
+                    // only match against the product's main category field to prevent 
+                    // subcategory name leakage (e.g., Men's T-shirt showing in Women's section)
+                    andConditions.push({
+                        $or: [
+                            { category: { $in: categoryRegexes } }
+                        ]
+                    });
+                } else {
+                    // For subcategories (Level 1) or unknown, match both to be safe
+                    andConditions.push({
+                        $or: [
+                            { category: { $in: categoryRegexes } },
+                            { subCategory: { $in: categoryRegexes } }
+                        ]
+                    });
+                }
             }
 
             if (searchValue) {
@@ -285,7 +297,20 @@ class homeControllers {
             let wearMatch = { status: 'active' };
             const andConditions = [{ status: 'active' }];
             if (category && categoryRegexes.length > 0) {
-                andConditions.push({ $or: [{ category: { $in: categoryRegexes } }, { subCategory: { $in: categoryRegexes } }] });
+                if (catDoc && catDoc.level === 0) {
+                    andConditions.push({
+                        $or: [
+                            { category: { $in: categoryRegexes } }
+                        ]
+                    });
+                } else {
+                    andConditions.push({
+                        $or: [
+                            { category: { $in: categoryRegexes } },
+                            { subCategory: { $in: categoryRegexes } }
+                        ]
+                    });
+                }
             }
             if (searchValue) {
                 andConditions.push({ $or: [{ productName: { $regex: searchValue, $options: 'i' } }, { category: { $regex: searchValue, $options: 'i' } }] });

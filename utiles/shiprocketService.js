@@ -239,6 +239,18 @@ class ShiprocketService {
             return null;
         }
     }
+    async getPickupLocations() {
+        try {
+            const token = await this.getToken();
+            const response = await axios.get('https://apiv2.shiprocket.in/v1/external/settings/company/pickup', {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            return response.data;
+        } catch (error) {
+            console.error('[SHIPROCKET] Pickup fetch error:', error.message);
+            return null;
+        }
+    }
 }
 
 module.exports = new ShiprocketService();

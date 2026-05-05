@@ -270,7 +270,10 @@ class supplierController {
             }
 
             // 1. Validate Transition
-            if (!isValidTransition(order.delivery_status, status)) {
+            // Allow "retry" transitions if status is the same but shiprocket ID is missing
+            const isRetry = order.delivery_status === status && !order.shiprocket_order_id && (status === 'confirmed' || status === 'processing');
+            
+            if (!isRetry && !isValidTransition(order.delivery_status, status)) {
                 return responseReturn(res, 400, {
                     error: `Illegal Status Transition: Cannot move from ${order.delivery_status.toUpperCase()} to ${status.toUpperCase()}`
                 })
@@ -283,7 +286,8 @@ class supplierController {
             await order.save();
 
             // === SHIPROCKET AUTOMATION ===
-            if (status === 'confirmed' && !order.shiprocket_order_id) {
+            // Trigger if moving to confirmed OR processing, and no shiprocket ID exists yet
+            if (['confirmed', 'processing'].includes(status) && !order.shiprocket_order_id) {
                 try {
                     const shiprocketService = require('../../utiles/shiprocketService');
                     const customerOrderModel = require('../../models/wear/customerOrder');
@@ -303,10 +307,25 @@ class supplierController {
                             hsn: ''
                         }));
 
+                        // Fetch pickup locations to ensure we use a valid one
+                        let pickupLocation = "Primary";
+                        try {
+                            const locations = await shiprocketService.getPickupLocations();
+                            if (locations && locations.data && locations.data.shipping_address && locations.data.shipping_address.length > 0) {
+                                // Check if "Primary" exists, else use the first one
+                                const hasPrimary = locations.data.shipping_address.find(l => l.pickup_location === 'Primary');
+                                if (!hasPrimary) {
+                                    pickupLocation = locations.data.shipping_address[0].pickup_location;
+                                }
+                            }
+                        } catch (locErr) {
+                            console.warn('Could not fetch Shiprocket pickup locations, defaulting to Primary');
+                        }
+
                         const shiprocketPayload = {
                             order_id: `JN-${order._id.toString().slice(-8).toUpperCase()}`,
                             order_date: new Date().toISOString().slice(0, 16).replace('T', ' '),
-                            pickup_location: "Primary", 
+                            pickup_location: pickupLocation, 
                             billing_customer_name: shippingInfo?.name || 'Customer',
                             billing_last_name: '',
                             billing_address: shippingInfo?.address || 'Address',
@@ -332,10 +351,14 @@ class supplierController {
                             order.shiprocket_order_id = shiprocketResponse.order_id.toString();
                             order.shiprocket_shipment_id = shiprocketResponse.shipment_id?.toString();
                             await order.save();
+                        } else {
+                            console.warn('Shiprocket response missing order_id:', shiprocketResponse);
                         }
                     }
                 } catch (srError) {
-                    console.error('Shiprocket Automation Error:', srError);
+                    console.error('Shiprocket Automation Error:', srError.response?.data || srError.message);
+                    // We don't block the response, but we could add a flag to the response
+                    order.shiprocket_error = srError.response?.data?.message || srError.message;
                 }
             }
             // ============================

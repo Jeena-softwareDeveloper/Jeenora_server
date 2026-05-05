@@ -413,7 +413,7 @@ class orderController {
                     products: storePor,
                     price: pri,
                     payment_status: 'unpaid',
-                    shippingInfo: 'Easy Main Warehouse',
+                    shippingInfo: shippingInfo,
                     delivery_status: 'pending',
                     date: tempDate,
                     commissionRate: COMMISSION_RATE,
@@ -1268,7 +1268,75 @@ class orderController {
                 }
             }
         } catch (error) {
-            console.error('[AI LOGISTICS] Cron error:', error.message);
+            console.error('[AI LOGISTICS CRON] Error:', error);
+        }
+    }
+
+    check_rto_risk = async (req, res) => {
+        const { mobile } = req.params;
+        try {
+            const shiprocketService = require('../../utiles/shiprocketService');
+            // Shiprocket returns something like: { risk_score: 0.8, reason: "High return rate" }
+            const riskData = await shiprocketService.getRtoRisk(mobile);
+            responseReturn(res, 200, { success: true, data: riskData });
+        } catch (error) {
+            // Default to safe if API fails to not block users
+            responseReturn(res, 200, { success: true, data: { risk_score: 0 } });
+        }
+    }
+
+
+    get_dynamic_shipping_rate = async (req, res) => {
+        const { pincode } = req.params;
+        const { weight = 0.5, cod = 0 } = req.query;
+        try {
+            const shiprocketService = require('../../utiles/shiprocketService');
+            // Assuming 641001 as primary default pickup pincode for MVP calculation
+            const rateData = await shiprocketService.getShippingRate('641001', pincode, Number(weight), Number(cod));
+            if (rateData) {
+                responseReturn(res, 200, { success: true, data: rateData });
+            } else {
+                responseReturn(res, 400, { error: 'Courier not serviceable for this pincode' });
+            }
+        } catch (error) {
+            responseReturn(res, 500, { error: 'Failed to calculate shipping rate' });
+        }
+    }
+
+    shiprocket_webhook = async (req, res) => {
+        const payload = req.body;
+        console.log('[SHIPROCKET WEBHOOK] Received:', payload.awb, payload.current_status);
+
+        try {
+            const { awb, current_status, shipment_id } = payload;
+            
+            const order = await customerOrder.findOne({ 
+                $or: [{ awb_number: awb }, { shiprocket_shipment_id: shipment_id }] 
+            });
+
+            if (!order) {
+                return res.status(200).send('Order not found');
+            }
+
+            const status = current_status?.toLowerCase() || '';
+
+            if (status.includes('undelivered') || status.includes('failed') || status.includes('return') || status.includes('rto')) {
+                const customer = await customerModel.findById(order.customerId);
+                if (customer && customer.phone) {
+                    const aiMsg = await aiService.generateLogisticsSupportMessage('ndr', {
+                        name: customer.name,
+                        orderId: order._id.toString().slice(-8).toUpperCase(),
+                        status: current_status,
+                        itemName: order.products[0]?.name || 'Item'
+                    });
+                    await whatsappClient.sendMessage(customer.phone, aiMsg);
+                }
+            }
+
+            res.status(200).send('OK');
+        } catch (error) {
+            console.error('[SHIPROCKET WEBHOOK] Error:', error);
+            res.status(500).send('Error processing webhook');
         }
     }
 }

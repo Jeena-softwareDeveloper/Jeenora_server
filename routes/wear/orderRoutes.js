@@ -15,6 +15,9 @@ router.get('/admin/order/:orderId', orderController.get_admin_order)
 router.post('/order/cashfree-create-order', orderController.create_cashfree_order)
 router.post('/order/cashfree-verify', orderController.verify_cashfree_payment)
 router.get('/order/confirm/:orderId', orderController.order_confirm)
+router.get('/order/rto-risk/:mobile', orderController.check_rto_risk)
+router.get('/order/shipping-rate/:pincode', orderController.get_dynamic_shipping_rate)
+router.post('/webhook/shiprocket', orderController.shiprocket_webhook)
 //ADMIN
 
 router.get('/admin/orders', orderController.get_admin_orders)

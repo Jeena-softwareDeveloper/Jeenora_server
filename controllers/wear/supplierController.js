@@ -229,10 +229,25 @@ class supplierController {
             const supplier = await Supplier.findOne({ user: id });
             if (!supplier) return responseReturn(res, 404, { error: 'Supplier account not found' });
 
-            const orders = await authOrderModel.find({ 
+            let orders = await authOrderModel.find({ 
                 sellerId: supplier._id,
                 delivery_status: { $ne: 'pending_payment' }
-            }).sort({ createdAt: -1 });
+            }).sort({ createdAt: -1 }).lean();
+
+            // Populate legacy string shipping info with real customer address
+            const customerOrderModel = require('../../models/wear/customerOrder');
+            orders = await Promise.all(orders.map(async (order) => {
+                if (typeof order.shippingInfo === 'string') {
+                    const parentOrder = await customerOrderModel.findById(order.orderId);
+                    if (parentOrder && parentOrder.shippingInfo) {
+                        order.shippingInfo = parentOrder.shippingInfo;
+                    } else {
+                        order.shippingInfo = {};
+                    }
+                }
+                return order;
+            }));
+
             responseReturn(res, 200, { success: true, orders });
         } catch (error) {
             responseReturn(res, 500, { error: error.message });
@@ -266,6 +281,64 @@ class supplierController {
                 order.cancel_reason = reason;
             }
             await order.save();
+
+            // === SHIPROCKET AUTOMATION ===
+            if (status === 'confirmed' && !order.shiprocket_order_id) {
+                try {
+                    const shiprocketService = require('../../utiles/shiprocketService');
+                    const customerOrderModel = require('../../models/wear/customerOrder');
+                    
+                    const parentOrder = await customerOrderModel.findById(order.orderId);
+                    
+                    if (parentOrder) {
+                        const shippingInfo = parentOrder.shippingInfo;
+                        
+                        const orderItems = order.products.map(p => ({
+                            name: p.name || p.productName || 'Jeenora Product',
+                            sku: p.sku || 'SKU-001',
+                            units: p.quantity || 1,
+                            selling_price: Math.max(1, p.price || Math.round(order.price / order.products.length)),
+                            discount: 0,
+                            tax: 0,
+                            hsn: ''
+                        }));
+
+                        const shiprocketPayload = {
+                            order_id: `JN-${order._id.toString().slice(-8).toUpperCase()}`,
+                            order_date: new Date().toISOString().slice(0, 16).replace('T', ' '),
+                            pickup_location: "Primary", 
+                            billing_customer_name: shippingInfo?.name || 'Customer',
+                            billing_last_name: '',
+                            billing_address: shippingInfo?.address || 'Address',
+                            billing_city: shippingInfo?.city || 'City',
+                            billing_pincode: shippingInfo?.pincode || '000000',
+                            billing_state: shippingInfo?.state || 'State',
+                            billing_country: "India",
+                            billing_email: shippingInfo?.email || 'customer@jeenora.com',
+                            billing_phone: shippingInfo?.phone || '9999999999',
+                            shipping_is_billing: true,
+                            order_items: orderItems,
+                            payment_method: parentOrder.payment_method === 'ONLINE' ? 'Prepaid' : 'COD',
+                            sub_total: order.price,
+                            length: 10,
+                            breadth: 10,
+                            height: 10,
+                            weight: 0.5
+                        };
+
+                        const shiprocketResponse = await shiprocketService.createOrder(shiprocketPayload);
+                        
+                        if (shiprocketResponse && shiprocketResponse.order_id) {
+                            order.shiprocket_order_id = shiprocketResponse.order_id.toString();
+                            order.shiprocket_shipment_id = shiprocketResponse.shipment_id?.toString();
+                            await order.save();
+                        }
+                    }
+                } catch (srError) {
+                    console.error('Shiprocket Automation Error:', srError);
+                }
+            }
+            // ============================
 
             // SYNC UPWARDS TO MAIN ORDER
             try {

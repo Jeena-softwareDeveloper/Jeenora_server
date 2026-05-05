@@ -102,6 +102,22 @@ class wearCatalogController {
                     }
                 }
 
+                // --- CATEGORY ID RESOLUTION ---
+                const WearCategory = require('../../models/wear/wearCategoryModel');
+                let catDoc = null;
+                let subCatDoc = null;
+
+                if (item.category) {
+                    catDoc = await WearCategory.findOne({ 
+                        $or: [{ name: item.category }, { _id: mongoose.Types.ObjectId.isValid(item.category) ? item.category : null }] 
+                    });
+                }
+                if (item.subCategory) {
+                    subCatDoc = await WearCategory.findOne({ 
+                        $or: [{ name: item.subCategory }, { _id: mongoose.Types.ObjectId.isValid(item.subCategory) ? item.subCategory : null }] 
+                    });
+                }
+
                 let product;
                 if (item._id && mongoose.Types.ObjectId.isValid(item._id)) {
                     // 1. Update Existing Product
@@ -114,7 +130,9 @@ class wearCatalogController {
                         detailedDescription: item.detailedDescription,
                         isPrimary: item.isPrimary,
                         category: item.category,
+                        categoryId: catDoc ? catDoc._id : productToUpdate.categoryId,
                         subCategory: item.subCategory,
+                        subCategoryId: subCatDoc ? subCatDoc._id : productToUpdate.subCategoryId,
                         images: processedImages,
                         hsnCode: item.hsnCode || '',
                         gstPercentage: item.gstPercentage,
@@ -141,7 +159,9 @@ class wearCatalogController {
                         detailedDescription: item.detailedDescription,
                         isPrimary: item.isPrimary,
                         category: item.category,
+                        categoryId: catDoc ? catDoc._id : null,
                         subCategory: item.subCategory,
+                        subCategoryId: subCatDoc ? subCatDoc._id : null,
                         images: processedImages,
                         hsnCode: item.hsnCode || this.generateHSN(item.category),
                         gstPercentage: item.gstPercentage,
@@ -504,23 +524,14 @@ class wearCatalogController {
             let categoryRegexes = [];
 
             if (category) {
-                const WearCategory = require('../../models/wear/wearCategoryModel');
-                const catDoc = await WearCategory.findOne({ 
-                    $or: [{ name: { $regex: new RegExp(`^${category}$`, 'i') } }, { slug: category.toLowerCase() }] 
-                });
-
-                if (catDoc) {
-                    const childCategories = await WearCategory.find({ parentId: catDoc._id });
-                    const categoryNames = [catDoc.name, ...childCategories.map(c => c.name)];
-                    categoryRegexes = categoryNames.map(n => new RegExp(`^${n}$`, 'i'));
-                    
+                const mongoose = require('mongoose');
+                if (mongoose.Types.ObjectId.isValid(category)) {
                     matchQuery.$or = [
-                        { category: { $in: categoryRegexes } },
-                        { subCategory: { $in: categoryRegexes } }
+                        { categoryId: new mongoose.Types.ObjectId(category) },
+                        { subCategoryId: new mongoose.Types.ObjectId(category) }
                     ];
                 } else {
                     const categoryRegex = { $regex: new RegExp(`^${category}$`, 'i') };
-                    categoryRegexes = [categoryRegex];
                     matchQuery.$or = [
                         { category: categoryRegex },
                         { subCategory: categoryRegex }

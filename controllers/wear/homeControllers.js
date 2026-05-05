@@ -54,61 +54,24 @@ class homeControllers {
         const parPage = parseInt(req.query.limit) || 15;
         const { category, searchValue, sort, gender, lowPrice, highPrice, pageNumber } = req.query;
         try {
-            let categoryRegexes = [];
-            let categoryNames = [];
-            let catDoc = null;
-
-            if (category) {
-                const WearCategory = require('../../models/wear/wearCategoryModel');
-                const mongoose = require('mongoose');
-                
-                let query = { 
-                    $or: [
-                        { name: { $regex: new RegExp(`^${category}$`, 'i') } }, 
-                        { slug: category.toLowerCase() }
-                    ] 
-                };
-
-                if (mongoose.Types.ObjectId.isValid(category)) {
-                    query.$or.push({ _id: category });
-                }
-
-                catDoc = await WearCategory.findOne(query);
-
-                if (catDoc) {
-                    // If it's a parent category, get all child category names too
-                    const childCategories = await WearCategory.find({ parentId: catDoc._id });
-                    categoryNames = [catDoc.name, ...childCategories.map(c => c.name)];
-                    categoryRegexes = categoryNames.map(n => new RegExp(`^${n}$`, 'i'));
-                    
-                    // Also include the ID string as a possibility if stored as ID
-                    categoryNames.push(catDoc._id.toString());
-                } else {
-                    categoryRegexes = [new RegExp(`^${category}$`, 'i')];
-                    categoryNames = [category];
-                }
-            }
-
             // Build Wear Products query
             let wearMatch = { status: 'active' };
             const andConditions = [{ status: 'active' }];
 
-            if (category && categoryRegexes.length > 0) {
-                if (catDoc && catDoc.level === 0) {
-                    // If filtering by a top-level category (Level 0 like Men/Women), 
-                    // only match against the product's main category field to prevent 
-                    // subcategory name leakage (e.g., Men's T-shirt showing in Women's section)
+            if (category) {
+                const mongoose = require('mongoose');
+                if (mongoose.Types.ObjectId.isValid(category)) {
                     andConditions.push({
                         $or: [
-                            { category: { $in: categoryRegexes } }
+                            { categoryId: category },
+                            { subCategoryId: category }
                         ]
                     });
                 } else {
-                    // For subcategories (Level 1) or unknown, match both to be safe
                     andConditions.push({
                         $or: [
-                            { category: { $in: categoryRegexes } },
-                            { subCategory: { $in: categoryRegexes } }
+                            { category: new RegExp(`^${category}$`, 'i') },
+                            { subCategory: new RegExp(`^${category}$`, 'i') }
                         ]
                     });
                 }
@@ -270,46 +233,22 @@ class homeControllers {
         const parPage = 12;
         const { category, searchValue, price, rating, sort } = req.query;
         try {
-            let categoryRegexes = [];
-            let catDoc = null;
-            if (category) {
-                const WearCategory = require('../../models/wear/wearCategoryModel');
-                const mongoose = require('mongoose');
-                
-                let query = { 
-                    $or: [
-                        { name: { $regex: new RegExp(`^${category}$`, 'i') } }, 
-                        { slug: category.toLowerCase() }
-                    ] 
-                };
-
-                if (mongoose.Types.ObjectId.isValid(category)) {
-                    query.$or.push({ _id: category });
-                }
-
-                catDoc = await WearCategory.findOne(query);
-                if (catDoc) {
-                    const childCategories = await WearCategory.find({ parentId: catDoc._id });
-                    categoryRegexes = [catDoc.name, ...childCategories.map(c => c.name)].map(n => new RegExp(`^${n}$`, 'i'));
-                } else {
-                    categoryRegexes = [new RegExp(`^${category}$`, 'i')];
-                }
-            }
-
             let wearMatch = { status: 'active' };
             const andConditions = [{ status: 'active' }];
-            if (category && categoryRegexes.length > 0) {
-                if (catDoc && catDoc.level === 0) {
+            if (category) {
+                const mongoose = require('mongoose');
+                if (mongoose.Types.ObjectId.isValid(category)) {
                     andConditions.push({
                         $or: [
-                            { category: { $in: categoryRegexes } }
+                            { categoryId: category },
+                            { subCategoryId: category }
                         ]
                     });
                 } else {
                     andConditions.push({
                         $or: [
-                            { category: { $in: categoryRegexes } },
-                            { subCategory: { $in: categoryRegexes } }
+                            { category: new RegExp(`^${category}$`, 'i') },
+                            { subCategory: new RegExp(`^${category}$`, 'i') }
                         ]
                     });
                 }

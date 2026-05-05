@@ -35,8 +35,18 @@ const wearProductSchema = new mongoose.Schema({
         type: String, // e.g., "Sarees"
         required: true
     },
+    categoryId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'WearCategory',
+        index: true
+    },
     subCategory: {
         type: String // e.g., "Banarasi Sarees"
+    },
+    subCategoryId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'WearCategory',
+        index: true
     },
     images: [{
         type: String // URLs or base64 for now

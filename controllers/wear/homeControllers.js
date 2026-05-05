@@ -56,6 +56,7 @@ class homeControllers {
         try {
             let categoryRegexes = [];
             let categoryNames = [];
+            let catDoc = null;
 
             if (category) {
                 const WearCategory = require('../../models/wear/wearCategoryModel');
@@ -72,7 +73,7 @@ class homeControllers {
                     query.$or.push({ _id: category });
                 }
 
-                const catDoc = await WearCategory.findOne(query);
+                catDoc = await WearCategory.findOne(query);
 
                 if (catDoc) {
                     // If it's a parent category, get all child category names too
@@ -270,6 +271,7 @@ class homeControllers {
         const { category, searchValue, price, rating, sort } = req.query;
         try {
             let categoryRegexes = [];
+            let catDoc = null;
             if (category) {
                 const WearCategory = require('../../models/wear/wearCategoryModel');
                 const mongoose = require('mongoose');
@@ -285,7 +287,7 @@ class homeControllers {
                     query.$or.push({ _id: category });
                 }
 
-                const catDoc = await WearCategory.findOne(query);
+                catDoc = await WearCategory.findOne(query);
                 if (catDoc) {
                     const childCategories = await WearCategory.find({ parentId: catDoc._id });
                     categoryRegexes = [catDoc.name, ...childCategories.map(c => c.name)].map(n => new RegExp(`^${n}$`, 'i'));

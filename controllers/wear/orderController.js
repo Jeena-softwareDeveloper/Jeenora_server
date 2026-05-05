@@ -21,6 +21,7 @@ const sellerModel = require('../../models/wear/sellerModel');
 const aiService = require('../../utiles/aiService');
 const whatsappClient = require('../../utiles/whatsappClient');
 const { Cashfree, CFEnvironment } = require('cashfree-pg');
+const WearBuyer = require('../../models/wear/wearBuyerModel');
 
 const cashfreeInstance = new Cashfree();
 cashfreeInstance.XClientId = process.env.CASHFREE_APP_ID;

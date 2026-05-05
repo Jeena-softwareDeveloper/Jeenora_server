@@ -226,7 +226,7 @@ class supplierController {
     get_supplier_orders = async (req, res) => {
         const { id } = req;
         try {
-            const supplier = await Supplier.findOne({ user: id });
+            const supplier = await Supplier.findOne({ user: id }).select('+addressDetails');
             if (!supplier) return responseReturn(res, 404, { error: 'Supplier account not found' });
 
             let orders = await authOrderModel.find({ 

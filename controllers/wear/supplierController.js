@@ -377,7 +377,11 @@ class supplierController {
             } catch (err) {
             }
 
-            responseReturn(res, 200, { success: true, message: `Order status updated to ${status}`, order });
+            responseReturn(res, 200, { 
+                success: true, 
+                message: order.shiprocket_error ? `Order updated, but Shiprocket sync failed: ${order.shiprocket_error}` : `Order status updated to ${status}`, 
+                order 
+            });
         } catch (error) {
             console.error('Update Order Status Error:', error);
             responseReturn(res, 500, { error: error.message });

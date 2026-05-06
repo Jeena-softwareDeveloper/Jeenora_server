@@ -5,7 +5,6 @@
             "items": [
                 { "name": "Inventory", "icon": "Package", "color": "text-red-400", "path": "/supplier-inventory" },
                 { "name": "Returns", "icon": "RefreshCw", "color": "text-pink-400", "path": "/supplier-returns" },
-                { "name": "Catalog Upload", "icon": "CloudUpload", "color": "text-blue-400", "path": "/catalog-upload" },
                 { "name": "Payments", "icon": "Wallet", "color": "text-green-400", "path": "/supplier-payments" },
                 { "name": "Pricing", "icon": "Tag", "color": "text-orange-400", "path": "/supplier-pricing" },
                 { "name": "Warehouse", "icon": "Warehouse", "color": "text-red-500", "path": "/supplier-warehouse" }

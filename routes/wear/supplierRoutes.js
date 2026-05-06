@@ -6,7 +6,18 @@ const settlementController = require('../../controllers/wear/settlementControlle
 const catalogMaintenanceController = require('../../controllers/wear/catalogMaintenanceController');
 const supportCommunicationController = require('../../controllers/wear/supportCommunicationController');
 const securityController = require('../../controllers/wear/securityController');
+const supplierStockController = require('../../controllers/wear/supplierStockController');
 const { authMiddleware } = require('../../middlewares/authMiddleware');
+
+// ==================== SUPPLIER STOCK (ERP) ROUTES ====================
+router.get('/stock/hsn-gst', supplierStockController.get_hsn_gst); // Public — no auth needed
+router.get('/stock/list', authMiddleware, supplierStockController.get_stock_list);
+router.get('/stock/:id', authMiddleware, supplierStockController.get_stock_detail);
+router.post('/stock/add', authMiddleware, supplierStockController.add_stock);
+router.patch('/stock/:id', authMiddleware, supplierStockController.update_stock);
+router.post('/stock/:id/request-listing', authMiddleware, supplierStockController.request_listing);
+router.patch('/stock/:id/stock-update', authMiddleware, supplierStockController.update_variant_stock);
+
 
 router.post('/apply', authMiddleware, supplierController.apply_supplier);
 router.post('/add', authMiddleware, supplierController.add_supplier);

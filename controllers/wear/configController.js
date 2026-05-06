@@ -61,27 +61,33 @@ class configController {
     get_nav_menu = async (req, res) => {
         const { platform } = req.params;
         try {
-            // 1. Try fetching from DB
-            let menu = await NavMenu.findOne({ platform });
-
-            if (!menu) {
-                // 2. Fallback to config file
-                const configPath = path.join(__dirname, '../../config/data/menuConfig.json');
-                if (fs.existsSync(configPath)) {
-                    const configData = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
-                    const platformItems = configData[platform];
+            // Always check JSON config file first (source of truth for menu structure)
+            const configPath = path.join(__dirname, '../../config/data/menuConfig.json');
+            
+            if (fs.existsSync(configPath)) {
+                const configData = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+                const platformItems = configData[platform];
+                
+                if (platformItems) {
+                    const sections = platform === 'supplier' ? platformItems : [{ title: 'Main', items: platformItems }];
                     
-                    if (platformItems) {
-                        // Transform to DB structure if it was a flat list
-                        // For supplier, it's already an array of sections in my JSON
-                        const sections = platform === 'supplier' ? platformItems : [{ title: 'Main', items: platformItems }];
-                        
-                        // Optionally seed the DB automatically
-                        menu = await NavMenu.create({ platform, sections });
-                    }
+                    // Upsert into DB to keep in sync
+                    await NavMenu.findOneAndUpdate(
+                        { platform },
+                        { sections },
+                        { upsert: true, new: true }
+                    );
+                    
+                    return responseReturn(res, 200, {
+                        menu: sections,
+                        platform,
+                        success: true
+                    });
                 }
             }
-
+            
+            // Fallback: read from DB if no JSON file
+            const menu = await NavMenu.findOne({ platform });
             responseReturn(res, 200, {
                 menu: menu ? menu.sections : [],
                 platform,

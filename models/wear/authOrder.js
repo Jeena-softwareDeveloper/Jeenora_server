@@ -68,7 +68,8 @@ const authSchema = new Schema({
     awb_number: { type: String },
     label_url: { type: String },
     is_high_risk: { type: Boolean, default: false },
-    risk_score: { type: Number, default: 0 }
+    risk_score: { type: Number, default: 0 },
+    stock_decreased: { type: Boolean, default: false }
 }, { timestamps: true })
 
 module.exports = model('authorOrders', authSchema)

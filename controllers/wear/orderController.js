@@ -300,21 +300,7 @@ class orderController {
                     delivery_status: 'cancelled'
                 })
 
-                // RETURN STOCK back to inventory
-                for (const item of order.products) {
-                    const isWear = !!item.variants || !!item.size; // Detection
-                    if (isWear) {
-                        await wearProductModel.findOneAndUpdate(
-                            { _id: item._id, "variants.size": item.size },
-                            { $inc: { "variants.$.stock": item.quantity } }
-                        );
-                    } else {
-                        await productModel.findByIdAndUpdate(
-                            item._id,
-                            { $inc: { stock: item.quantity } }
-                        );
-                    }
-                }
+                // Stock return logic removed - stock is now decreased only at shipping/processing
             }
             return true
         } catch (error) {
@@ -345,42 +331,32 @@ class orderController {
         }
 
         try {
-            // --- ATOMIC STOCK LOCKING PHASE ---
-            // Before creating any order records, we must ensure all items have sufficient stock
-            // and reduce it atomically.
+            // --- STOCK AVAILABILITY CHECK ---
+            // We only check if stock is available. We don't decrease it yet.
+            // Stock will be decreased when the supplier processes/couriers the item.
             for (let i = 0; i < products.length; i++) {
                 const pro = products[i].products;
                 for (let j = 0; j < pro.length; j++) {
                     const item = pro[j];
                     const productInfo = item.productInfo;
                     const requestedQty = item.quantity;
-                    const isWear = !!productInfo.variants; // Detection logic for Wear vs Standard
+                    const isWear = !!productInfo.variants;
 
-                    let stockResult;
+                    let availableProduct;
                     if (isWear) {
-                        // Atomic check + decrease for Wear variant
-                        stockResult = await wearProductModel.findOneAndUpdate(
-                            {
-                                _id: productInfo._id,
-                                "variants.size": item.size || productInfo.variants[0].size,
-                                "variants.stock": { $gte: requestedQty }
-                            },
-                            { $inc: { "variants.$.stock": -requestedQty } },
-                            { new: true }
-                        );
+                        availableProduct = await wearProductModel.findOne({
+                            _id: productInfo._id,
+                            "variants.size": item.size || productInfo.variants[0].size,
+                            "variants.stock": { $gte: requestedQty }
+                        });
                     } else {
-                        // Atomic check + decrease for standard product
-                        stockResult = await productModel.findOneAndUpdate(
-                            {
-                                _id: productInfo._id,
-                                stock: { $gte: requestedQty }
-                            },
-                            { $inc: { stock: -requestedQty } },
-                            { new: true }
-                        );
+                        availableProduct = await productModel.findOne({
+                            _id: productInfo._id,
+                            stock: { $gte: requestedQty }
+                        });
                     }
 
-                    if (!stockResult) {
+                    if (!availableProduct) {
                         return responseReturn(res, 400, {
                             error: `Insufficient stock for ${productInfo.name || productInfo.productName}. Please adjust quantity.`
                         });
@@ -710,20 +686,26 @@ class orderController {
                 })
             }
 
-            // If transition to cancelled, return stock
+            // If transition to cancelled, return stock for each suborder that was already processed
             if (status === 'cancelled' && order.delivery_status !== 'cancelled') {
-                for (const item of order.products) {
-                    const isWear = !!item.variants || !!item.size;
-                    if (isWear) {
-                        await wearProductModel.findOneAndUpdate(
-                            { _id: item._id, "variants.size": item.size },
-                            { $inc: { "variants.$.stock": item.quantity } }
-                        );
-                    } else {
-                        await productModel.findByIdAndUpdate(
-                            item._id,
-                            { $inc: { stock: item.quantity } }
-                        );
+                const subOrders = await authOrderModel.find({ orderId: new ObjectId(orderId) });
+                for (const sub of subOrders) {
+                    if (sub.stock_decreased) {
+                        for (const item of sub.products) {
+                            const isWear = !!item.variants || !!item.size;
+                            if (isWear) {
+                                await wearProductModel.findOneAndUpdate(
+                                    { _id: item._id, "variants.size": item.size },
+                                    { $inc: { "variants.$.stock": item.quantity } }
+                                );
+                            } else {
+                                await productModel.findByIdAndUpdate(
+                                    item._id,
+                                    { $inc: { stock: item.quantity } }
+                                );
+                            }
+                        }
+                        await authOrderModel.findByIdAndUpdate(sub._id, { stock_decreased: false });
                     }
                 }
             }
@@ -821,6 +803,27 @@ class orderController {
             await authOrderModel.findByIdAndUpdate(orderId, {
                 delivery_status: status
             })
+
+            // --- INVENTORY COMMITMENT PHASE ---
+            // If the supplier moves the order to 'processing' or 'shipped', we finally decrease stock.
+            if (['processing', 'shipped'].includes(status) && !order.stock_decreased) {
+                for (const item of order.products) {
+                    const isWear = !!item.variants || !!item.size;
+                    if (isWear) {
+                        await wearProductModel.findOneAndUpdate(
+                            { _id: item._id, "variants.size": item.size },
+                            { $inc: { "variants.$.stock": -item.quantity } }
+                        );
+                    } else {
+                        await productModel.findByIdAndUpdate(
+                            item._id,
+                            { $inc: { stock: -item.quantity } }
+                        );
+                    }
+                }
+                // Mark sub-order as stock decreased
+                await authOrderModel.findByIdAndUpdate(orderId, { stock_decreased: true });
+            }
 
             // SYNC UPWARDS TO MAIN ORDER
             await this.sync_main_order_status(order.orderId);
@@ -1009,21 +1012,8 @@ class orderController {
                 return responseReturn(res, 400, { message: 'Order cannot be cancelled at this stage' });
             }
 
-            // 2. Return Stock
-            for (const item of order.products) {
-                const isWear = !!item.variants || !!item.size;
-                if (isWear) {
-                    await wearProductModel.findOneAndUpdate(
-                        { _id: item._id, "variants.size": item.size },
-                        { $inc: { "variants.$.stock": item.quantity } }
-                    );
-                } else {
-                    await productModel.findByIdAndUpdate(
-                        item._id,
-                        { $inc: { stock: item.quantity } }
-                    );
-                }
-            }
+            // 2. Return Stock removed here - stock is decreased at processing/shipped stage.
+            // If cancellation is allowed, it means the order is not yet processed/shipped.
 
             // 3. REVERSE WALLET CREDITS / CASHBACK (Deduct on refund logic)
             // If the user earned any cashback from this order, we reverse it
@@ -1069,22 +1059,7 @@ class orderController {
                 return responseReturn(res, 400, { message: 'Order cannot be abandoned in this state' });
             }
 
-            // Return Stock
-            for (const item of order.products) {
-                const isWear = !!item.variants || !!item.size;
-                if (isWear) {
-                    await wearProductModel.findOneAndUpdate(
-                        { _id: item._id, "variants.size": item.size },
-                        { $inc: { "variants.$.stock": item.quantity } }
-                    );
-                } else {
-                    await productModel.findByIdAndUpdate(
-                        item._id,
-                        { $inc: { stock: item.quantity } }
-                    );
-                }
-            }
-
+            // Return Stock removed - stock is not decreased for pending_payment orders
             await customerOrder.findByIdAndUpdate(orderId, { delivery_status: 'cancelled' });
             await authOrderModel.deleteMany({ orderId: new ObjectId(orderId) });
 

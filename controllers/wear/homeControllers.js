@@ -433,8 +433,17 @@ class homeControllers {
                 status: 'active'
             }).limit(12).select('name images price discount slug _id');
 
+            const mappedRelated = related.map(p => {
+                const variantName = p.variants?.[0]?.color || p.variants?.[0]?.name;
+                const finalName = variantName || p.productName;
+                return {
+                    ...p.toObject(),
+                    productName: finalName
+                };
+            });
+
             responseReturn(res, 200, {
-                related: [...related, ...legacyRelated].slice(0, 12)
+                related: [...mappedRelated, ...legacyRelated].slice(0, 12)
             })
         } catch (error) {
             responseReturn(res, 200, { related: [] })

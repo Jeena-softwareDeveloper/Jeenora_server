@@ -136,11 +136,24 @@ class homeControllers {
             const catalogMap = new Map();
             for (const p of wearProductsRaw) {
                 const key = p.catalogId ? String(p.catalogId) : String(p._id);
+                
+                // Server-side best price calculation for Bulk-Only catalogs
+                let bestPrice = p.variants?.[0]?.listingPrice || 0;
+                if (p.isBulkOnly) {
+                    let lowest = Infinity;
+                    p.variants?.forEach(v => {
+                        (v.priceTiers || []).forEach(t => {
+                            if (t.price < lowest) lowest = t.price;
+                        });
+                    });
+                    if (lowest !== Infinity) bestPrice = lowest;
+                }
+
                 if (!catalogMap.has(key)) {
                     catalogMap.set(key, {
                         ...p,
                         name: p.productName,
-                        price: p.variants?.[0]?.listingPrice || 0,
+                        price: bestPrice,
                         discount: 0,
                         rating: p.avgRating || 5,
                         type: 'wear',
@@ -186,14 +199,26 @@ class homeControllers {
                 createdAt: -1
             }).limit(12).lean();
 
-            const products = productsRaw.map(p => ({
-                ...p,
-                name: p.productName,
-                price: p.variants?.[0]?.listingPrice || 0,
-                discount: 0,
-                rating: p.avgRating || 5,
-                type: 'wear'
-            }));
+            const products = productsRaw.map(p => {
+                let bestPrice = p.variants?.[0]?.listingPrice || 0;
+                if (p.isBulkOnly) {
+                    let lowest = Infinity;
+                    p.variants?.forEach(v => {
+                        (v.priceTiers || []).forEach(t => {
+                            if (t.price < lowest) lowest = t.price;
+                        });
+                    });
+                    if (lowest !== Infinity) bestPrice = lowest;
+                }
+                return {
+                    ...p,
+                    name: p.productName,
+                    price: bestPrice,
+                    discount: 0,
+                    rating: p.avgRating || 5,
+                    type: 'wear'
+                };
+            });
 
             responseReturn(res, 200, {
                 products
@@ -277,14 +302,26 @@ class homeControllers {
             else if (sort === 'high-to-low') wearSort = { 'variants.0.listingPrice': -1 };
 
             const wearProductsRaw = await wearProductModel.find(wearMatch).sort(wearSort).lean();
-            const products = wearProductsRaw.map(p => ({
-                ...p,
-                name: p.productName,
-                price: p.variants?.[0]?.listingPrice || 0,
-                discount: 0,
-                rating: p.avgRating || 5,
-                type: 'wear'
-            }));
+            const products = wearProductsRaw.map(p => {
+                let bestPrice = p.variants?.[0]?.listingPrice || 0;
+                if (p.isBulkOnly) {
+                    let lowest = Infinity;
+                    p.variants?.forEach(v => {
+                        (v.priceTiers || []).forEach(t => {
+                            if (t.price < lowest) lowest = t.price;
+                        });
+                    });
+                    if (lowest !== Infinity) bestPrice = lowest;
+                }
+                return {
+                    ...p,
+                    name: p.productName,
+                    price: bestPrice,
+                    discount: 0,
+                    rating: p.avgRating || 5,
+                    type: 'wear'
+                };
+            });
 
             const totalProduct = products.length;
             const skip = (parseInt(req.query.pageNumber || 1) - 1) * parPage;

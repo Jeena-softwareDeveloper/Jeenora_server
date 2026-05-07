@@ -141,10 +141,17 @@ class wearCatalogController {
                         attributes: item.attributes,
                         alterSlug: item.alterSlug,
                         tags: item.tags && typeof item.tags === 'string' ? item.tags.split(',').map(t => t.trim()).filter(Boolean) : (Array.isArray(item.tags) ? item.tags : []),
-                        variants: (item.variants || []).map(v => ({
-                            ...v,
-                            skuId: v.skuId || this.generateSKU(supplier.businessDetails?.shopName)
-                        })),
+                        variants: (item.variants || []).map(v => {
+                            const tiers = v.priceTiers || [];
+                            const bestPrice = (item.isBulkOnly && tiers.length > 0) 
+                                ? Math.min(...tiers.map(t => parseFloat(t.price))) 
+                                : v.listingPrice;
+                            return {
+                                ...v,
+                                listingPrice: bestPrice,
+                                skuId: v.skuId || this.generateSKU(supplier.businessDetails?.shopName)
+                            };
+                        }),
                         minOrderQty: item.minOrderQty || 1,
                         isBulkOnly: item.isBulkOnly || false,
                         status: item.status || 'pending'
@@ -949,17 +956,25 @@ class wearCatalogController {
                     weight: info?.weight ? parseInt(info.weight) : undefined,
                     dimensions: info?.dimensions,
                     additionalDetails: item.highlights || item.additionalDetails,
-                    variants: (item.variants || []).map(v => ({
-                        ...v,
-                        color: item.color,
-                        listingPrice: parseFloat(v.listingPrice),
-                        mrp: parseFloat(v.mrp),
-                        stock: parseInt(v.stock),
-                        priceTiers: (v.priceTiers || []).map(t => ({
+                    variants: (item.variants || []).map(v => {
+                        const tiers = (v.priceTiers || []).map(t => ({
                             minQty: parseInt(t.minQty),
                             price: parseFloat(t.price)
-                        })).filter(t => !isNaN(t.minQty) && !isNaN(t.price))
-                    })),
+                        })).filter(t => !isNaN(t.minQty) && !isNaN(t.price));
+                        
+                        const bestPrice = (info?.isBulkOnly && tiers.length > 0)
+                            ? Math.min(...tiers.map(t => t.price))
+                            : parseFloat(v.listingPrice);
+
+                        return {
+                            ...v,
+                            color: item.color,
+                            listingPrice: bestPrice,
+                            mrp: parseFloat(v.mrp),
+                            stock: parseInt(v.stock),
+                            priceTiers: tiers
+                        };
+                    }),
                     isBulkOnly: info?.isBulkOnly || false,
                     status: 'pending', // Reset to pending for re-review
                     updatedAt: new Date()

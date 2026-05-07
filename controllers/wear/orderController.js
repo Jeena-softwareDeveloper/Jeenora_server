@@ -344,11 +344,23 @@ class orderController {
 
                     let availableProduct;
                     if (isWear) {
-                        availableProduct = await wearProductModel.findOne({
-                            _id: productInfo._id,
-                            "variants.size": item.size || productInfo.variants[0].size,
-                            "variants.stock": { $gte: requestedQty }
-                        });
+                        const actualProduct = await wearProductModel.findById(productInfo._id);
+                        const isBulk = actualProduct?.isBulkOnly || (actualProduct?.variants || []).some(v => v.priceTiers?.length > 0);
+                        
+                        if (isBulk) {
+                            // For bulk products, allow ordering more than stock as long as stock exists (> 0)
+                            availableProduct = await wearProductModel.findOne({
+                                _id: productInfo._id,
+                                "variants.size": item.size || productInfo.variants[0].size,
+                                "variants.stock": { $gt: 0 }
+                            });
+                        } else {
+                            availableProduct = await wearProductModel.findOne({
+                                _id: productInfo._id,
+                                "variants.size": item.size || productInfo.variants[0].size,
+                                "variants.stock": { $gte: requestedQty }
+                            });
+                        }
                     } else {
                         availableProduct = await productModel.findOne({
                             _id: productInfo._id,

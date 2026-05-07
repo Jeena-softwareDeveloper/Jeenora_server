@@ -40,11 +40,19 @@ class wearCatalogController {
     _formatProductName = (baseName, color, isMultiColor) => {
         if (!baseName) return '';
         
+        // Clean the color string to remove redundant descriptions if it's too long
+        let cleanColor = color || '';
+        if (cleanColor.length > 30) {
+            // If it looks like a full title, try to extract just the color or first few words
+            cleanColor = cleanColor.split('|')[0].replace(/Men's|Formal|Trousers|Slim Fit|Soft Cotton Blend/gi, '').trim();
+            if (!cleanColor) cleanColor = color.split(' ')[0]; // Fallback
+        }
+
         // Take everything before the first bracket as the base name
         let cleanName = baseName.split('(')[0].trim();
 
-        if (isMultiColor && color) {
-            return `${cleanName} (${color})`;
+        if (isMultiColor && cleanColor) {
+            return `${cleanName} (${cleanColor})`;
         }
         return cleanName;
     }
@@ -505,11 +513,24 @@ class wearCatalogController {
                     console.log(`  Item ${idx + 1}: ID=${p._id} Name="${p.productName}" Color="${p.variants?.[0]?.color}"`);
                     
                     // AUTO-FIX: If name is doubled or messy, clean it now
-                    const correctName = this._formatProductName(p.productName, p.variants?.[0]?.color, g.allProducts.length > 1);
+                    const variantColor = p.variants?.[0]?.color || '';
+                    const correctName = this._formatProductName(p.productName, variantColor, g.allProducts.length > 1);
+                    
                     if (p.productName !== correctName) {
-                        console.log(`  -> Auto-fixing name to: "${correctName}"`);
+                        console.log(`  -> Permanently fixing name in DB to: "${correctName}"`);
                         p.productName = correctName;
-                        // We don't save to DB here to avoid slow UI, but we return fixed data
+                        
+                        // Also clean the variant color if it's messy
+                        let cleanColor = variantColor;
+                        if (variantColor.length > 30) {
+                            cleanColor = variantColor.split('|')[0].replace(/Men's|Formal|Trousers|Slim Fit|Soft Cotton Blend/gi, '').trim();
+                        }
+
+                        // Save to DB in background
+                        WearProduct.findByIdAndUpdate(p._id, { 
+                            productName: correctName,
+                            "variants.0.color": cleanColor || variantColor
+                        }).catch(err => console.error("Fix Save Error:", err));
                     }
                 });
                 

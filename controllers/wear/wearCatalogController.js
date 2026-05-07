@@ -36,6 +36,18 @@ class wearCatalogController {
             throw new Error(`Cloudinary Upload Failed: ${error.message}. Check your Cloud Name and API Keys.`);
         }
     }
+    // --- HELPER: Format Product Name (Simple Version) ---
+    _formatProductName = (baseName, color, isMultiColor) => {
+        if (!baseName) return '';
+        
+        // Take everything before the first bracket as the base name
+        let cleanName = baseName.split('(')[0].trim();
+
+        if (isMultiColor && color) {
+            return `${cleanName} (${color})`;
+        }
+        return cleanName;
+    }
 
 
     // Helper to generate unique SKU
@@ -124,23 +136,9 @@ class wearCatalogController {
                     product = await WearProduct.findByIdAndUpdate(item._id, {
                         sellerId: supplier._id,
                         catalogId: sharedCatalogId,
-                        productName: item.productName,
-                        description: item.description,
-                        miniDescription: item.miniDescription,
-                        detailedDescription: item.detailedDescription,
-                        isPrimary: item.isPrimary,
-                        category: item.category,
-                        categoryId: catDoc ? catDoc._id : productToUpdate.categoryId,
-                        subCategory: item.subCategory,
-                        subCategoryId: subCatDoc ? subCatDoc._id : productToUpdate.subCategoryId,
-                        images: processedImages,
-                        hsnCode: item.hsnCode || '',
-                        gstPercentage: item.gstPercentage,
-                        weight: item.weight,
-                        dimensions: item.dimensions,
-                        attributes: item.attributes,
                         alterSlug: item.alterSlug,
                         tags: item.tags && typeof item.tags === 'string' ? item.tags.split(',').map(t => t.trim()).filter(Boolean) : (Array.isArray(item.tags) ? item.tags : []),
+                        productName: this._formatProductName(item.productName, item.variants?.[0]?.color, productsToCreate.length > 1),
                         variants: (item.variants || []).map(v => {
                             const tiers = v.priceTiers || [];
                             const bestPrice = (item.isBulkOnly && tiers.length > 0) 
@@ -305,6 +303,13 @@ class wearCatalogController {
             }
 
             // Also update the specific product with all details
+            // Apply formatting to name if not explicitly disabled
+            if (updateData.productName) {
+                // Determine if this is a multicolor catalog to decide on suffix
+                const isMultiColor = (await WearProduct.countDocuments({ catalogId: productToUpdate.catalogId })) > 1;
+                updateData.productName = this._formatProductName(updateData.productName, productToUpdate.variants?.[0]?.color, isMultiColor);
+            }
+
             const updatedProduct = await WearProduct.findByIdAndUpdate(productId, updateData, { new: true });
 
             responseReturn(res, 200, { success: true, message: 'Catalog group updated successfully', data: updatedProduct });
@@ -947,21 +952,8 @@ class wearCatalogController {
                     }
                 }
 
-                // Smart naming to avoid doubling up suffixes like "Name (Color) (Color)"
-                let finalName = info?.productName || item.productName || '';
-                const colorSuffix = item.color ? `(${item.color})` : '';
-                
-                if (updatedProducts.length > 1 && item.color) {
-                    // Strip existing suffix if present to prevent "Name (Color) (Color)"
-                    if (finalName.includes('(')) {
-                        finalName = finalName.split('(')[0].trim();
-                    }
-                    finalName = `${finalName} ${colorSuffix}`;
-                } else if (finalName.includes('(')) {
-                    // If single product but name has suffix, maybe keep it or strip it. 
-                    // Usually we want the clean name for single products.
-                    // But if it's the exact same color suffix, keep it if they want it.
-                }
+                // Smart naming using helper
+                const finalName = this._formatProductName(info?.productName || item.productName, item.color, updatedProducts.length > 1);
 
                 const updatePayload = {
                     productName: finalName,

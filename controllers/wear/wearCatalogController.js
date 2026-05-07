@@ -38,23 +38,9 @@ class wearCatalogController {
     }
     // --- HELPER: Format Product Name (Simple Version) ---
     _formatProductName = (baseName, color, isMultiColor) => {
-        if (!baseName) return '';
-        
-        // Clean the color string to remove redundant descriptions if it's too long
-        let cleanColor = color || '';
-        if (cleanColor.length > 30) {
-            // If it looks like a full title, try to extract just the color or first few words
-            cleanColor = cleanColor.split('|')[0].replace(/Men's|Formal|Trousers|Slim Fit|Soft Cotton Blend/gi, '').trim();
-            if (!cleanColor) cleanColor = color.split(' ')[0]; // Fallback
-        }
-
-        // Take everything before the first bracket as the base name
-        let cleanName = baseName.split('(')[0].trim();
-
-        if (isMultiColor && cleanColor) {
-            return `${cleanName} (${cleanColor})`;
-        }
-        return cleanName;
+        // Return the full name exactly as provided by the supplier. 
+        // No more stripping brackets or cleaning descriptions.
+        return baseName || '';
     }
 
 

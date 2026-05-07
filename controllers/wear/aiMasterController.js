@@ -545,7 +545,12 @@ class AIMasterController {
 
             if (viewedCategories.length === 0) {
                 // Return top products if no history
-                const products = await wearProductModel.find({ status: 'active' }).limit(8);
+                const productsRaw = await wearProductModel.find({ status: 'active' }).limit(8).lean();
+                const products = productsRaw.map(p => {
+                    const variantName = p.variants?.[0]?.color || p.variants?.[0]?.name;
+                    const finalName = variantName || p.productName;
+                    return { ...p, name: finalName, productName: finalName };
+                });
                 return responseReturn(res, 200, { products });
             }
 
@@ -559,10 +564,16 @@ class AIMasterController {
             const allInterests = [...viewedCategories, ...(aiResponse.suggestedCategories || [])];
 
             // 3. Fetch products from these categories
-            const products = await wearProductModel.find({
+            const productsRaw = await wearProductModel.find({
                 category: { $in: allInterests },
                 status: 'active'
-            }).limit(12);
+            }).limit(12).lean();
+
+            const products = productsRaw.map(p => {
+                const variantName = p.variants?.[0]?.color || p.variants?.[0]?.name;
+                const finalName = variantName || p.productName;
+                return { ...p, name: finalName, productName: finalName };
+            });
 
             return responseReturn(res, 200, { 
                 products,

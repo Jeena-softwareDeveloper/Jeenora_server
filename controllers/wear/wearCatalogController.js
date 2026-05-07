@@ -500,7 +500,19 @@ class wearCatalogController {
             ]);
 
             const wearCatalogs = groupedCatalogs.map(g => {
-                console.log(`[Inventory] Catalog ${g._id} has ${g.allProducts.length} items. First item color: ${g.allProducts[0]?.variants?.[0]?.color}`);
+                console.log(`[Inventory] --- Catalog Group: ${g._id} ---`);
+                g.allProducts.forEach((p, idx) => {
+                    console.log(`  Item ${idx + 1}: ID=${p._id} Name="${p.productName}" Color="${p.variants?.[0]?.color}"`);
+                    
+                    // AUTO-FIX: If name is doubled or messy, clean it now
+                    const correctName = this._formatProductName(p.productName, p.variants?.[0]?.color, g.allProducts.length > 1);
+                    if (p.productName !== correctName) {
+                        console.log(`  -> Auto-fixing name to: "${correctName}"`);
+                        p.productName = correctName;
+                        // We don't save to DB here to avoid slow UI, but we return fixed data
+                    }
+                });
+                
                 return {
                     ...g.mainProduct,
                     _id: g.mainProduct._id,

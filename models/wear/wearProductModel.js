@@ -60,6 +60,10 @@ const wearProductSchema = new mongoose.Schema({
         type: String,
         index: true
     }],
+    isBulkOnly: {
+        type: Boolean,
+        default: false
+    },
 
     // Meesho-style Pricing & Tax
     hsnCode: { type: String },

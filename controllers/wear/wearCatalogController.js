@@ -146,6 +146,7 @@ class wearCatalogController {
                             skuId: v.skuId || this.generateSKU(supplier.businessDetails?.shopName)
                         })),
                         minOrderQty: item.minOrderQty || 1,
+                        isBulkOnly: item.isBulkOnly || false,
                         status: item.status || 'pending'
                     }, { new: true });
                 } else {
@@ -175,6 +176,7 @@ class wearCatalogController {
                             skuId: v.skuId || this.generateSKU(supplier.businessDetails?.shopName)
                         })),
                         minOrderQty: item.minOrderQty || 1,
+                        isBulkOnly: item.isBulkOnly || false,
                         status: 'pending'
                     });
                 }
@@ -958,6 +960,7 @@ class wearCatalogController {
                             price: parseFloat(t.price)
                         })).filter(t => !isNaN(t.minQty) && !isNaN(t.price))
                     })),
+                    isBulkOnly: info?.isBulkOnly || false,
                     status: 'pending', // Reset to pending for re-review
                     updatedAt: new Date()
                 };

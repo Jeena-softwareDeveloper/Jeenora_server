@@ -159,7 +159,7 @@ class wearCatalogController {
                     product = await WearProduct.create({
                         sellerId: supplier._id,
                         catalogId: sharedCatalogId,
-                        productName: item.productName,
+                        productName: this._formatProductName(item.productName, item.variants?.[0]?.color, productsToCreate.length > 1),
                         description: item.description,
                         miniDescription: item.miniDescription,
                         detailedDescription: item.detailedDescription,
@@ -307,7 +307,11 @@ class wearCatalogController {
             if (updateData.productName) {
                 // Determine if this is a multicolor catalog to decide on suffix
                 const isMultiColor = (await WearProduct.countDocuments({ catalogId: productToUpdate.catalogId })) > 1;
-                updateData.productName = this._formatProductName(updateData.productName, productToUpdate.variants?.[0]?.color, isMultiColor);
+                
+                // CRITICAL FIX: Use the NEW color from updateData if provided, otherwise the existing color
+                const currentVariantColor = updateData.variants?.[0]?.color || productToUpdate.variants?.[0]?.color;
+                
+                updateData.productName = this._formatProductName(updateData.productName, currentVariantColor, isMultiColor);
             }
 
             const updatedProduct = await WearProduct.findByIdAndUpdate(productId, updateData, { new: true });

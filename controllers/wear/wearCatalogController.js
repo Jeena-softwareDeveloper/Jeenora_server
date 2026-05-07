@@ -293,12 +293,14 @@ class wearCatalogController {
             const productToUpdate = await WearProduct.findById(productId);
             if (!productToUpdate) return responseReturn(res, 404, { error: 'Product not found' });
 
-            // If we are updating status, update all products in the same catalog group
-            if (updateData.status && productToUpdate.catalogId) {
-                console.log(`[Admin] Updating status to ${updateData.status} for catalog: ${productToUpdate.catalogId}`);
+            // If an admin edits, we should generally mark it as active (Accepted) unless they are explicitly rejecting it.
+            // This ensures the supplier sees it as 'Accepted' and can manage stock/edits.
+            if (productToUpdate.catalogId) {
+                const newStatus = updateData.status || 'active';
+                console.log(`[Admin] Syncing status to ${newStatus} for catalog: ${productToUpdate.catalogId}`);
                 await WearProduct.updateMany(
                     { catalogId: productToUpdate.catalogId },
-                    { $set: { status: updateData.status } }
+                    { $set: { status: newStatus } }
                 );
             }
 
@@ -945,8 +947,24 @@ class wearCatalogController {
                     }
                 }
 
+                // Smart naming to avoid doubling up suffixes like "Name (Color) (Color)"
+                let finalName = info?.productName || item.productName || '';
+                const colorSuffix = item.color ? `(${item.color})` : '';
+                
+                if (updatedProducts.length > 1 && item.color) {
+                    // Strip existing suffix if present to prevent "Name (Color) (Color)"
+                    if (finalName.includes('(')) {
+                        finalName = finalName.split('(')[0].trim();
+                    }
+                    finalName = `${finalName} ${colorSuffix}`;
+                } else if (finalName.includes('(')) {
+                    // If single product but name has suffix, maybe keep it or strip it. 
+                    // Usually we want the clean name for single products.
+                    // But if it's the exact same color suffix, keep it if they want it.
+                }
+
                 const updatePayload = {
-                    productName: info?.productName ? (updatedProducts.length > 1 ? `${info.productName} (${item.color})` : info.productName) : item.productName,
+                    productName: finalName,
                     description: item.description || '',
                     category: info?.category || item.category,
                     subCategory: info?.subCategory || item.subCategory,

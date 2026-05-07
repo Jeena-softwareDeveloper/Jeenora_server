@@ -47,10 +47,27 @@ const wearCartController = {
                 .select('-userId')
                 .populate('productId', 'productName images variants sellerId');
 
+            const mappedItems = cartItems.map(item => {
+                const product = item.productId;
+                if (!product) return item;
+
+                // PRIORITIZE VARIANT NAME for Cart Items
+                const variantName = product.variants?.[0]?.color || product.variants?.[0]?.name;
+                const finalName = (variantName && variantName.length > 10) ? variantName : product.productName;
+
+                return {
+                    ...item.toObject(),
+                    productId: {
+                        ...product.toObject(),
+                        productName: finalName
+                    }
+                };
+            });
+
             console.log(`[GET_CART] Found ${cartItems.length} items for User ${userId}`);
             res.status(200).json({
                 success: true,
-                cartItems,
+                cartItems: mappedItems,
                 totalItems: cartItems.length
             });
         } catch (error) {

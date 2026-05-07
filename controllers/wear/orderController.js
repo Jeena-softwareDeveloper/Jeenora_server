@@ -510,15 +510,22 @@ class orderController {
             }).countDocuments()
 
             responseReturn(res, 200, {
-                recentOrders: recentOrdersRaw.map(o => ({
-                    _id: o._id,
-                    products: o.products,
-                    price: o.price,
-                    payment_status: o.payment_status,
-                    delivery_status: o.delivery_status,
-                    date: o.date,
-                    shippingInfo: o.shippingInfo || 'Standard Delivery'
-                })),
+                recentOrders: recentOrdersRaw.map(o => {
+                    const mappedProducts = (o.products || []).map(p => {
+                        const variantName = p.variants?.[0]?.color || p.variants?.[0]?.name || p.color;
+                        const finalName = (variantName && variantName.length > 10) ? variantName : (p.productName || p.name);
+                        return { ...p, productName: finalName, name: finalName };
+                    });
+                    return {
+                        _id: o._id,
+                        products: mappedProducts,
+                        price: o.price,
+                        payment_status: o.payment_status,
+                        delivery_status: o.delivery_status,
+                        date: o.date,
+                        shippingInfo: o.shippingInfo || 'Standard Delivery'
+                    };
+                }),
                 pendingOrder,
                 totalOrder,
                 cancelledOrder
@@ -549,15 +556,22 @@ class orderController {
             }
 
             responseReturn(res, 200, { 
-                orders: ordersRaw.map(o => ({
-                    _id: o._id,
-                    products: o.products,
-                    price: o.price,
-                    payment_status: o.payment_status,
-                    delivery_status: o.delivery_status,
-                    date: o.date,
-                    shippingInfo: o.shippingInfo || 'Standard Delivery'
-                }))
+                orders: ordersRaw.map(o => {
+                    const mappedProducts = (o.products || []).map(p => {
+                        const variantName = p.variants?.[0]?.color || p.variants?.[0]?.name || p.color;
+                        const finalName = (variantName && variantName.length > 10) ? variantName : (p.productName || p.name);
+                        return { ...p, productName: finalName, name: finalName };
+                    });
+                    return {
+                        _id: o._id,
+                        products: mappedProducts,
+                        price: o.price,
+                        payment_status: o.payment_status,
+                        delivery_status: o.delivery_status,
+                        date: o.date,
+                        shippingInfo: o.shippingInfo || 'Standard Delivery'
+                    };
+                })
             })
         } catch (error) {
             responseReturn(res, 500, { error: 'Internal Server Error' })
@@ -583,15 +597,22 @@ class orderController {
             ]);
             // Scrub suborders to remove internal platform fee info for customers
             if (order[0] && order[0].suborders) {
-                order[0].suborders = order[0].suborders.map(so => ({
-                    _id: so._id,
-                    sellerId: so.sellerId,
-                    products: so.products,
-                    price: so.price,
-                    delivery_status: so.delivery_status,
-                    date: so.date
-                    // commissionAmount and sellerAmount are EXCLUDED here
-                }));
+                order[0].suborders = order[0].suborders.map(so => {
+                    const mappedProducts = (so.products || []).map(p => {
+                        const variantName = p.variants?.[0]?.color || p.variants?.[0]?.name || p.color;
+                        const finalName = (variantName && variantName.length > 10) ? variantName : (p.productName || p.name);
+                        return { ...p, productName: finalName, name: finalName };
+                    });
+                    return {
+                        _id: so._id,
+                        sellerId: so.sellerId,
+                        products: mappedProducts,
+                        price: so.price,
+                        delivery_status: so.delivery_status,
+                        date: so.date
+                        // commissionAmount and sellerAmount are EXCLUDED here
+                    };
+                });
             }
 
             // Scrub main order top-level fields

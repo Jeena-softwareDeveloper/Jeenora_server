@@ -317,9 +317,14 @@ class homeControllers {
                     });
                     if (lowest !== Infinity) bestPrice = lowest;
                 }
+
+                // PRIORITIZE VARIANT NAME: Use the color/variant name as the primary name if it looks like a full name
+                const variantName = p.variants?.[0]?.color || p.variants?.[0]?.name;
+                const finalName = (variantName && variantName.length > 10) ? variantName : p.productName;
+
                 return {
                     ...p,
-                    name: p.productName,
+                    name: finalName,
                     price: bestPrice,
                     discount: 0,
                     rating: p.avgRating || 5,
@@ -374,9 +379,13 @@ class homeControllers {
                 return responseReturn(res, 403, { error: 'Product is pending approval' });
             }
 
+            // PRIORITIZE VARIANT NAME for Product Detail Header
+            const variantName = product.variants?.[0]?.color || product.variants?.[0]?.name;
+            const finalName = (variantName && variantName.length > 10) ? variantName : (product.name || product.productName);
+
             const scrubbedProduct = {
                 _id: product._id,
-                name: product.name || product.productName,
+                name: finalName,
                 slug: product.slug,
                 images: product.images,
                 category: product.category,
@@ -446,8 +455,17 @@ class homeControllers {
                 status: 'active'
             }).select('productName images variants slug _id status');
 
+            const mappedSimilar = similar.map(s => {
+                const variantName = s.variants?.[0]?.color || s.variants?.[0]?.name;
+                const finalName = (variantName && variantName.length > 10) ? variantName : s.productName;
+                return {
+                    ...s.toObject(),
+                    productName: finalName
+                };
+            });
+
             responseReturn(res, 200, {
-                similar
+                similar: mappedSimilar
             })
         } catch (error) {
             responseReturn(res, 200, { similar: [] })

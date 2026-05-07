@@ -314,7 +314,9 @@ class wearCatalogController {
                 updateData.productName = this._formatProductName(updateData.productName, currentVariantColor, isMultiColor);
             }
 
+            console.log(`[Admin] Updating product ${productId} with data:`, JSON.stringify(updateData, null, 2));
             const updatedProduct = await WearProduct.findByIdAndUpdate(productId, updateData, { new: true });
+            console.log(`[Admin] Updated product result:`, updatedProduct?.productName, updatedProduct?.variants?.[0]?.color);
 
             responseReturn(res, 200, { success: true, message: 'Catalog group updated successfully', data: updatedProduct });
         } catch (error) {
@@ -497,13 +499,16 @@ class wearCatalogController {
                 { $sort: { "mainProduct.createdAt": -1 } }
             ]);
 
-            const wearCatalogs = groupedCatalogs.map(g => ({
-                ...g.mainProduct,
-                _id: g.mainProduct._id,
-                catalogId: g.mainProduct.catalogId || g._id, // Assign accurate catalogId
-                similarProductsCount: g.count,
-                similarProducts: g.allProducts
-            }));
+            const wearCatalogs = groupedCatalogs.map(g => {
+                console.log(`[Inventory] Catalog ${g._id} has ${g.allProducts.length} items. First item color: ${g.allProducts[0]?.variants?.[0]?.color}`);
+                return {
+                    ...g.mainProduct,
+                    _id: g.mainProduct._id,
+                    catalogId: g.mainProduct.catalogId || g._id, // Assign accurate catalogId
+                    similarProductsCount: g.count,
+                    similarProducts: g.allProducts
+                };
+            });
 
             // 2. Get Legacy Products for this seller
             const legacyProductsRaw = await productModel.find({ sellerId: new mongoose.Types.ObjectId(sellerId) }).sort({ createdAt: -1 }).lean();
@@ -995,6 +1000,7 @@ class wearCatalogController {
                 };
 
                 if (item._id && mongoose.Types.ObjectId.isValid(item._id)) {
+                    console.log(`[SupplierEdit] Updating item ${item._id} with name: ${finalName} and color: ${item.color}`);
                     const updated = await WearProduct.findByIdAndUpdate(item._id, updatePayload, { new: true });
                     if (updated) saved.push(updated);
                 }

@@ -513,7 +513,7 @@ class orderController {
                 recentOrders: recentOrdersRaw.map(o => {
                     const mappedProducts = (o.products || []).map(p => {
                         const variantName = p.variants?.[0]?.color || p.variants?.[0]?.name || p.color;
-                        const finalName = (variantName && variantName.length > 10) ? variantName : (p.productName || p.name);
+                        const finalName = variantName || (p.productName || p.name);
                         return { ...p, productName: finalName, name: finalName };
                     });
                     return {
@@ -559,7 +559,7 @@ class orderController {
                 orders: ordersRaw.map(o => {
                     const mappedProducts = (o.products || []).map(p => {
                         const variantName = p.variants?.[0]?.color || p.variants?.[0]?.name || p.color;
-                        const finalName = (variantName && variantName.length > 10) ? variantName : (p.productName || p.name);
+                        const finalName = variantName || (p.productName || p.name);
                         return { ...p, productName: finalName, name: finalName };
                     });
                     return {
@@ -600,7 +600,7 @@ class orderController {
                 order[0].suborders = order[0].suborders.map(so => {
                     const mappedProducts = (so.products || []).map(p => {
                         const variantName = p.variants?.[0]?.color || p.variants?.[0]?.name || p.color;
-                        const finalName = (variantName && variantName.length > 10) ? variantName : (p.productName || p.name);
+                        const finalName = variantName || (p.productName || p.name);
                         return { ...p, productName: finalName, name: finalName };
                     });
                     return {

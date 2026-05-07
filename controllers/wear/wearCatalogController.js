@@ -233,9 +233,9 @@ class wearCatalogController {
             ]);
 
             const wearCatalogs = groupedCatalogs.map(g => {
-                // PRIORITIZE VARIANT NAME for Inventory Header
+                // ALWAYS PRIORITIZE VARIANT NAME for Inventory Header
                 const variantName = g.mainProduct.variants?.[0]?.color || g.mainProduct.variants?.[0]?.name;
-                const finalName = (variantName && variantName.length > 10) ? variantName : g.mainProduct.productName;
+                const finalName = variantName || g.mainProduct.productName;
 
                 return {
                     _id: g._id, 
@@ -693,7 +693,7 @@ class wearCatalogController {
 
             const wearCatalogs = groupedCatalogs.map(g => {
                 const variantName = g.mainProduct.variants?.[0]?.color || g.mainProduct.variants?.[0]?.name;
-                const finalName = (variantName && variantName.length > 10) ? variantName : g.mainProduct.productName;
+                const finalName = variantName || g.mainProduct.productName;
 
                 return {
                     ...g.mainProduct,

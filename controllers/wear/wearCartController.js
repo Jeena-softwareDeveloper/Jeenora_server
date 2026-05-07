@@ -51,9 +51,9 @@ const wearCartController = {
                 const product = item.productId;
                 if (!product) return item;
 
-                // PRIORITIZE VARIANT NAME for Cart Items
+                // ALWAYS PRIORITIZE VARIANT NAME for Cart Items
                 const variantName = product.variants?.[0]?.color || product.variants?.[0]?.name;
-                const finalName = (variantName && variantName.length > 10) ? variantName : product.productName;
+                const finalName = variantName || product.productName;
 
                 return {
                     ...item.toObject(),

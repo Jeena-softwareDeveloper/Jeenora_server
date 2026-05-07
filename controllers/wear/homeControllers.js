@@ -150,9 +150,9 @@ class homeControllers {
                 }
 
                 if (!catalogMap.has(key)) {
-                    // PRIORITIZE VARIANT NAME: Use the color/variant name as the primary name if it looks like a full name
+                    // ALWAYS PRIORITIZE VARIANT NAME: Use the color/variant name as the primary name if it exists
                     const variantName = p.variants?.[0]?.color || p.variants?.[0]?.name;
-                    const finalName = (variantName && variantName.length > 10) ? variantName : p.productName;
+                    const finalName = variantName || p.productName;
 
                     catalogMap.set(key, {
                         ...p,
@@ -318,9 +318,9 @@ class homeControllers {
                     if (lowest !== Infinity) bestPrice = lowest;
                 }
 
-                // PRIORITIZE VARIANT NAME: Use the color/variant name as the primary name if it looks like a full name
+                // ALWAYS PRIORITIZE VARIANT NAME: Use the color/variant name as the primary name if it exists
                 const variantName = p.variants?.[0]?.color || p.variants?.[0]?.name;
-                const finalName = (variantName && variantName.length > 10) ? variantName : p.productName;
+                const finalName = variantName || p.productName;
 
                 return {
                     ...p,
@@ -379,9 +379,9 @@ class homeControllers {
                 return responseReturn(res, 403, { error: 'Product is pending approval' });
             }
 
-            // PRIORITIZE VARIANT NAME for Product Detail Header
+            // ALWAYS PRIORITIZE VARIANT NAME for Product Detail Header
             const variantName = product.variants?.[0]?.color || product.variants?.[0]?.name;
-            const finalName = (variantName && variantName.length > 10) ? variantName : (product.name || product.productName);
+            const finalName = variantName || (product.name || product.productName);
 
             const scrubbedProduct = {
                 _id: product._id,
@@ -457,7 +457,7 @@ class homeControllers {
 
             const mappedSimilar = similar.map(s => {
                 const variantName = s.variants?.[0]?.color || s.variants?.[0]?.name;
-                const finalName = (variantName && variantName.length > 10) ? variantName : s.productName;
+                const finalName = variantName || s.productName;
                 return {
                     ...s.toObject(),
                     productName: finalName

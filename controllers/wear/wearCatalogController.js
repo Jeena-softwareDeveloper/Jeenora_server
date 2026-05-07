@@ -232,17 +232,23 @@ class wearCatalogController {
                 { $sort: { "mainProduct.createdAt": -1 } }
             ]);
 
-            const wearCatalogs = groupedCatalogs.map(g => ({
-                _id: g._id, // Use the grouped ID (catalogId) as the primary ID
-                catalogId: g._id,
-                productName: g.mainProduct.productName,
-                category: g.mainProduct.category,
-                images: [g.mainProduct.images?.[0]],
-                status: g.mainProduct.status,
-                hsnCode: g.mainProduct.hsnCode,
-                similarProductsCount: g.count,
-                createdAt: g.mainProduct.createdAt
-            }));
+            const wearCatalogs = groupedCatalogs.map(g => {
+                // PRIORITIZE VARIANT NAME for Inventory Header
+                const variantName = g.mainProduct.variants?.[0]?.color || g.mainProduct.variants?.[0]?.name;
+                const finalName = (variantName && variantName.length > 10) ? variantName : g.mainProduct.productName;
+
+                return {
+                    _id: g._id, 
+                    catalogId: g._id,
+                    productName: finalName,
+                    category: g.mainProduct.category,
+                    images: [g.mainProduct.images?.[0]],
+                    status: g.mainProduct.status,
+                    hsnCode: g.mainProduct.hsnCode,
+                    similarProductsCount: g.count,
+                    createdAt: g.mainProduct.createdAt
+                };
+            });
 
             // 2. Get Legacy Products for this seller
             const legacyProductsRaw = await productModel.find({ sellerId: sellerObjectId }).sort({ createdAt: -1 }).lean();
@@ -685,14 +691,20 @@ class wearCatalogController {
                 }
             ]);
 
-            const wearCatalogs = groupedCatalogs.map(g => ({
-                ...g.mainProduct,
-                catalogId: g._id,
-                reviewCount: g.reviewCount,
-                avgRating: g.avgRating ? Number(g.avgRating.toFixed(1)) : 0,
-                similarProductsCount: g.count,
-                similarProducts: g.allProducts
-            }));
+            const wearCatalogs = groupedCatalogs.map(g => {
+                const variantName = g.mainProduct.variants?.[0]?.color || g.mainProduct.variants?.[0]?.name;
+                const finalName = (variantName && variantName.length > 10) ? variantName : g.mainProduct.productName;
+
+                return {
+                    ...g.mainProduct,
+                    productName: finalName,
+                    catalogId: g._id,
+                    reviewCount: g.reviewCount,
+                    avgRating: g.avgRating ? Number(g.avgRating.toFixed(1)) : 0,
+                    similarProductsCount: g.count,
+                    similarProducts: g.allProducts
+                };
+            });
 
             // 2. Fetch Legacy Products (If no complex filters are present that legacy doesn't support)
             const legacyProductModel = require('../../models/wear/productModel');

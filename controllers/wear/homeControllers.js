@@ -150,9 +150,13 @@ class homeControllers {
                 }
 
                 if (!catalogMap.has(key)) {
+                    // PRIORITIZE VARIANT NAME: Use the color/variant name as the primary name if it looks like a full name
+                    const variantName = p.variants?.[0]?.color || p.variants?.[0]?.name;
+                    const finalName = (variantName && variantName.length > 10) ? variantName : p.productName;
+
                     catalogMap.set(key, {
                         ...p,
-                        name: p.productName,
+                        name: finalName,
                         price: bestPrice,
                         discount: 0,
                         rating: p.avgRating || 5,

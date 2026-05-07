@@ -214,9 +214,13 @@ class homeControllers {
                     });
                     if (lowest !== Infinity) bestPrice = lowest;
                 }
+                // ALWAYS PRIORITIZE VARIANT NAME: Use the color/variant name as the primary name if it exists
+                const variantName = p.variants?.[0]?.color || p.variants?.[0]?.name;
+                const finalName = variantName || p.productName;
+
                 return {
                     ...p,
-                    name: p.productName,
+                    name: finalName,
                     price: bestPrice,
                     discount: 0,
                     rating: p.avgRating || 5,

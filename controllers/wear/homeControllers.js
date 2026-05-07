@@ -438,6 +438,7 @@ class homeControllers {
                 const finalName = variantName || p.productName;
                 return {
                     ...p.toObject(),
+                    name: finalName,
                     productName: finalName
                 };
             });
@@ -473,6 +474,7 @@ class homeControllers {
                 const finalName = variantName || s.productName;
                 return {
                     ...s.toObject(),
+                    name: finalName,
                     productName: finalName
                 };
             });

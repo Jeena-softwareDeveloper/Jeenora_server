@@ -64,21 +64,32 @@ class dashboardController {
             // Fetch supplier info for the header
             const supplier = await sellerModel.findById(id);
 
-            // Define statuses that count as valid active business
-            const validStatuses = ['pending', 'confirmed', 'processing', 'shipped', 'delivered', 'returned'];
+            // Define statuses that count as valid for dashboard metrics
+            const validStatuses = ['pending', 'confirmed', 'processing', 'shipped', 'delivered'];
             
             const statsAggregation = await authOrder.aggregate([
                 {
                     $match: {
                         sellerId: new ObjectId(id),
-                        delivery_status: { $in: validStatuses }
+                        delivery_status: { $in: validStatuses },
+                        payment_status: { $ne: 'unpaid' } 
                     }
                 },
                 {
                     $group: {
                         _id: null,
-                        totalSales: { $sum: '$price' },
-                        totalOrders: { $sum: 1 },
+                        // Only sum price for confirmed/shipped/delivered (exclude pending)
+                        totalSales: { 
+                            $sum: { 
+                                $cond: [{ $in: ['$delivery_status', ['confirmed', 'processing', 'shipped', 'delivered']] }, '$price', 0] 
+                            } 
+                        },
+                        // Only count confirmed/shipped/delivered (exclude pending)
+                        totalOrders: { 
+                            $sum: { 
+                                $cond: [{ $in: ['$delivery_status', ['confirmed', 'processing', 'shipped', 'delivered']] }, 1, 0] 
+                            } 
+                        },
                         pendingConfirmation: {
                             $sum: { $cond: [{ $eq: ['$delivery_status', 'pending'] }, 1, 0] }
                         },
@@ -92,7 +103,10 @@ class dashboardController {
                 }
             ]);
 
-            const dashboardStats = statsAggregation.length > 0 ? statsAggregation[0] : {
+            const dashboardStats = statsAggregation.length > 0 ? {
+                ...statsAggregation[0],
+                totalSales: Number(statsAggregation[0].totalSales.toFixed(2)) // Round to 2 decimals
+            } : {
                 totalSales: 0,
                 totalOrders: 0,
                 pendingConfirmation: 0,

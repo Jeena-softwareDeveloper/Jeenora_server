@@ -134,7 +134,7 @@ class dashboardController {
                     totalProduct
                 },
                 status: supplier?.status || 'none',
-                shopName: supplier?.shopName || 'Shop',
+                shopName: supplier?.shopName,
                 messages,
                 recentOrders
             })

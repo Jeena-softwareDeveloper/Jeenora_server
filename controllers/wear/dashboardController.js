@@ -71,20 +71,18 @@ class dashboardController {
                 {
                     $match: {
                         sellerId: new ObjectId(id),
-                        delivery_status: { $in: validStatuses },
-                        payment_status: { $ne: 'unpaid' } 
+                        delivery_status: { $in: ['pending', 'confirmed', 'processing', 'shipped', 'delivered'] },
+                        payment_status: 'paid' // Strictly only paid orders
                     }
                 },
                 {
                     $group: {
                         _id: null,
-                        // Only sum price for confirmed/shipped/delivered (exclude pending)
                         totalSales: { 
                             $sum: { 
                                 $cond: [{ $in: ['$delivery_status', ['confirmed', 'processing', 'shipped', 'delivered']] }, '$price', 0] 
                             } 
                         },
-                        // Only count confirmed/shipped/delivered (exclude pending)
                         totalOrders: { 
                             $sum: { 
                                 $cond: [{ $in: ['$delivery_status', ['confirmed', 'processing', 'shipped', 'delivered']] }, 1, 0] 

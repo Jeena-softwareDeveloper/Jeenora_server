@@ -18,7 +18,8 @@ module.exports.otpSendLimiter = rateLimit({
 /**
  * Strict Limiter for OTP Verification
  * Prevents brute-forcing the 6-digit code.
- */
+*/
+
 module.exports.otpVerifyLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
     max: process.env.NODE_ENV === 'development' ? 100000 : 10,

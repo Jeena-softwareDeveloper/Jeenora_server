@@ -23,7 +23,7 @@ class AIMasterController {
 
     getDeepseekClient = () => {
         const key = process.env.DEEPSEEK_API_KEY || '';
-        return axios.create({
+        return axios.create ({
             baseURL: 'https://api.deepseek.com',
             headers: { 'Authorization': `Bearer ${key}`, 'Content-Type': 'application/json' }
         });
@@ -431,10 +431,10 @@ class AIMasterController {
     get_support_languages = async (req, res) => {
         try {
             const languages = [
-                "English", "Tanglish", "தமிழ் (Tamil)", "हिन्दी (Hindi)", 
+                "English", "தமிழ் (Tamil)", "हिन्दी (Hindi)", 
                 "తెలుగు (Telugu)", "ಕನ್ನಡ (Kannada)", "മലയാളം (Malayalam)", 
                 "मराठी (Marathi)", "বাংলা (Bengali)", "ગુજરાતી (Gujarati)",
-                "ਪੰਜਾਬੀ (Punjabi)", "ଓଡ଼ିଆ (Odia)", "অসমীয়া (Assamese)", 
+                "ਪੰਜਾਬੀ (Punjabi)", "ଓଡ଼ிଆ (Odia)", "অসমীয়া (Assamese)", 
                 "اردو (Urdu)", "संस्कृत (Sanskrit)", "सिंधी (Sindhi)",
                 "कोंकணி (Konkani)", "बोगो (Bodo)", "नेपाली (Nepali)"
             ];
@@ -505,6 +505,7 @@ class AIMasterController {
         3. For example, if Payment Status is 'unpaid', explain that the payment hasn't been confirmed yet.
         4. If no Order ID is found in the message but the user is asking about an order, politely ask for their Order ID (starts with # or 24-digit code).
         5. Keep it brief, professional, and friendly.
+        6. CRITICAL LANGUAGE RULE: Look for "Language: [Name]" in the SYSTEM context. You MUST respond ONLY in that specific language using its native script (e.g., if Language is Telugu, respond in Telugu script. If Language is English, respond in English).
 
         RETURN ONLY JSON:
         {
@@ -514,12 +515,13 @@ class AIMasterController {
         return await this.call_deepseek_conversational(prompt);
     }
     track_behavior = async (req, res) => {
-        const { productId, category, referrer, viewDuration } = req.body;
+        const { productId, category, referrer, viewDuration, deviceId } = req.body;
         const userId = req.id || 'Guest';
 
         try {
             await userBehaviorModel.create({
                 userId,
+                deviceId,
                 productId,
                 category,
                 referrer,

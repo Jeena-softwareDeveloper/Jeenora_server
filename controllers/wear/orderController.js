@@ -110,8 +110,9 @@ class orderController {
                         trackingUrl: order.awb_number ? `https://shiprocket.co/tracking/${order.awb_number}` : null
                     });
 
+                    console.log(`[WA_NOTIFICATION] Sending to customer: ${customer.phone}`);
                     await whatsappClient.sendMessage(customer.phone, waMessage);
-
+                    console.log(`[WA_NOTIFICATION] Successfully sent to customer: ${customer.phone}`);
                 } catch (waError) {
                     console.error('[AI Order Notification] Customer WhatsApp failed:', waError.message);
                 }
@@ -174,8 +175,9 @@ class orderController {
                                 itemCount: sub.products.length
                             });
 
+                            console.log(`[WA_NOTIFICATION] Sending to seller: ${seller.phoneNumber}`);
                             await whatsappClient.sendMessage(seller.phoneNumber, sWaMessage);
-
+                            console.log(`[WA_NOTIFICATION] Successfully sent to seller: ${seller.phoneNumber}`);
                         } catch (waError) {
                             console.error('[AI Order Notification] Seller WhatsApp failed:', waError.message);
                         }
@@ -224,12 +226,12 @@ class orderController {
                     name: p.productName || p.name,
                     sku: p._id?.toString() || 'SKU',
                     units: p.quantity || 1,
-                    selling_price: p.price || 0
+                    selling_price: p.discountPrice || p.price || 0
                 })),
                 payment_method: mainOrder.payment_method === 'COD' ? 'Postpaid' : 'Prepaid',
                 sub_total: order.price,
                 // Dimensions (Placeholder - Should ideally come from product data)
-                length: 10, width: 10, height: 10, weight: 0.5
+                length: 10, breadth: 10, height: 10, weight: 0.5
             };
 
             // --- AI ADDRESS SCRUBBING ---
@@ -290,7 +292,8 @@ class orderController {
     paymentCheck = async (id) => {
         try {
             const order = await customerOrder.findById(id)
-            if (order && order.payment_status === 'unpaid') {
+            if (order && order.payment_status === 'unpaid' && order.delivery_status !== 'cancelled') {
+                // Mark as cancelled
                 await customerOrder.findByIdAndUpdate(id, {
                     delivery_status: 'cancelled'
                 })
@@ -300,11 +303,32 @@ class orderController {
                     delivery_status: 'cancelled'
                 })
 
-                // Stock return logic removed - stock is now decreased only at shipping/processing
+                // --- STOCK REVERSION LOGIC ---
+                // If stock was decreased at order time, we must put it back now.
+                if (order.stock_decreased) {
+                    for (const item of order.products) {
+                        const isWear = !!item.variants || !!item.size;
+                        if (isWear) {
+                            await wearProductModel.findOneAndUpdate(
+                                { _id: item._id, "variants.size": item.size },
+                                { $inc: { "variants.$.stock": item.quantity } }
+                            );
+                        } else {
+                            await productModel.findByIdAndUpdate(
+                                item._id,
+                                { $inc: { stock: item.quantity } }
+                            );
+                        }
+                    }
+                    // Mark as reverted
+                    await customerOrder.findByIdAndUpdate(id, { stock_decreased: false });
+                    await authOrderModel.updateMany({ orderId: id }, { stock_decreased: false });
+                    console.log(`[STOCK_REVERT] Inventory restored for expired order: ${id}`);
+                }
             }
             return true
         } catch (error) {
-
+            console.error('[PAYMENT_CHECK_ERROR]', error.message);
         }
     }
     
@@ -331,9 +355,9 @@ class orderController {
         }
 
         try {
-            // --- STOCK AVAILABILITY CHECK ---
-            // We only check if stock is available. We don't decrease it yet.
-            // Stock will be decreased when the supplier processes/couriers the item.
+            // --- ATOMIC STOCK LOCKING ---
+            // We decrease stock immediately to prevent overselling. 
+            // If payment fails or is not completed within 15-30 mins, we will revert it.
             for (let i = 0; i < products.length; i++) {
                 const pro = products[i].products;
                 for (let j = 0; j < pro.length; j++) {
@@ -342,36 +366,44 @@ class orderController {
                     const requestedQty = item.quantity;
                     const isWear = !!productInfo.variants;
 
-                    let availableProduct;
                     if (isWear) {
                         const actualProduct = await wearProductModel.findById(productInfo._id);
                         const isBulk = actualProduct?.isBulkOnly || (actualProduct?.variants || []).some(v => v.priceTiers?.length > 0);
                         
-                        if (isBulk) {
-                            // For bulk products, allow ordering more than stock as long as stock exists (> 0)
-                            availableProduct = await wearProductModel.findOne({
+                        // For bulk products, we still decrease but with less strict check if needed
+                        // For MVP, we stick to standard atomic decrease
+                        const result = await wearProductModel.findOneAndUpdate(
+                            {
                                 _id: productInfo._id,
                                 "variants.size": item.size || productInfo.variants[0].size,
-                                "variants.stock": { $gt: 0 }
-                            });
-                        } else {
-                            availableProduct = await wearProductModel.findOne({
-                                _id: productInfo._id,
-                                "variants.size": item.size || productInfo.variants[0].size,
-                                "variants.stock": { $gte: requestedQty }
+                                "variants.stock": { $gte: isBulk ? 1 : requestedQty } // Allow bulk if at least 1 exists
+                            },
+                            {
+                                $inc: { "variants.$.stock": -requestedQty }
+                            }
+                        );
+
+                        if (!result) {
+                            return responseReturn(res, 400, {
+                                error: `Insufficient stock for ${productInfo.name || productInfo.productName}. Please adjust quantity.`
                             });
                         }
                     } else {
-                        availableProduct = await productModel.findOne({
-                            _id: productInfo._id,
-                            stock: { $gte: requestedQty }
-                        });
-                    }
+                        const result = await productModel.findOneAndUpdate(
+                            {
+                                _id: productInfo._id,
+                                stock: { $gte: requestedQty }
+                            },
+                            {
+                                $inc: { stock: -requestedQty }
+                            }
+                        );
 
-                    if (!availableProduct) {
-                        return responseReturn(res, 400, {
-                            error: `Insufficient stock for ${productInfo.name || productInfo.productName}. Please adjust quantity.`
-                        });
+                        if (!result) {
+                            return responseReturn(res, 400, {
+                                error: `Insufficient stock for ${productInfo.name || productInfo.productName}. Please adjust quantity.`
+                            });
+                        }
                     }
                 }
             }
@@ -423,34 +455,62 @@ class orderController {
                 delivery_status: initial_delivery_status,
                 date: tempDate,
                 totalCommission: totalCommission,
-                cartItemIds: cardId
+                cartItemIds: cardId,
+                stock_decreased: true // Stock already deducted atomically
             });
 
             // Update orderId and stats for suborders
             authorOrderData = authorOrderData.map(o => ({ 
                 ...o, 
                 orderId: order.id, 
-                delivery_status: initial_delivery_status 
+                delivery_status: initial_delivery_status,
+                stock_decreased: true // Stock already deducted atomically
             }));
             await authOrderModel.insertMany(authorOrderData);
             
             if (payment_method === 'COD') {
-                for (let k = 0; k < cardId.length; k++) {
-                    await cardModel.findByIdAndDelete(cardId[k])
-                }
-                
-                // --- RTO RISK CHECK ---
+                // --- RTO RISK CHECK FOR COD ---
+                // For critical/high-risk areas, we only allow UPI/Prepaid
                 try {
                     const risk = await shiprocketService.getRtoRisk(shippingInfo.phone);
                     if (risk && (risk.risk_score > 70 || risk.status === 'high_risk')) {
-                        await customerOrder.findByIdAndUpdate(order._id, { 
-                            is_high_risk: true, 
-                            risk_score: risk.risk_score || 80 
+                        // REVERT STOCK (Because we decreased it earlier in this function)
+                        for (let i = 0; i < products.length; i++) {
+                            const pro = products[i].products;
+                            for (let j = 0; j < pro.length; j++) {
+                                const item = pro[j];
+                                const isWear = !!item.productInfo.variants;
+                                if (isWear) {
+                                    await wearProductModel.findOneAndUpdate(
+                                        { _id: item.productInfo._id, "variants.size": item.size || item.productInfo.variants[0].size },
+                                        { $inc: { "variants.$.stock": item.quantity } }
+                                    );
+                                } else {
+                                    await productModel.findByIdAndUpdate(
+                                        item.productInfo._id,
+                                        { $inc: { stock: item.quantity } }
+                                    );
+                                }
+                            }
+                        }
+                        
+                        return responseReturn(res, 400, { 
+                            error: "COD is not available for this address/phone due to high delivery risk. Please use 'Online Payment' (UPI/Card) to complete your order." 
                         });
-
+                    }
+                    
+                    // If safe, mark it anyway for seller awareness
+                    if (risk) {
+                        order.is_high_risk = false;
+                        order.risk_score = risk.risk_score || 0;
+                        await order.save();
                     }
                 } catch (riskErr) {
+                    // If risk check fails, we allow it (don't block legitimate users)
+                }
 
+                for (let k = 0; k < cardId.length; k++) {
+                    await cardModel.findByIdAndDelete(cardId[k])
                 }
             }
             
@@ -459,6 +519,12 @@ class orderController {
             
             if (payment_method === 'COD') {
                 this.push_to_shiprocket(order._id);
+            } else {
+                // --- AUTO-CANCELLATION TIMER ---
+                // If payment is not completed, revert stock after 20 minutes (15 min window + buffer)
+                setTimeout(() => {
+                    this.paymentCheck(order._id);
+                }, 20 * 60 * 1000);
             }
 
             const successMsg = payment_method === 'ONLINE' ? "Order initiated! Redirecting to payment..." : "Order placed successfully";
@@ -837,8 +903,8 @@ class orderController {
                 delivery_status: status
             })
 
-            // --- INVENTORY COMMITMENT PHASE ---
-            // If the supplier moves the order to 'processing' or 'shipped', we finally decrease stock.
+            // --- INVENTORY PHASE ---
+            // 1. COMMITMENT: If moved to processing/shipped and not already decreased
             if (['processing', 'shipped'].includes(status) && !order.stock_decreased) {
                 for (const item of order.products) {
                     const isWear = !!item.variants || !!item.size;
@@ -854,8 +920,26 @@ class orderController {
                         );
                     }
                 }
-                // Mark sub-order as stock decreased
                 await authOrderModel.findByIdAndUpdate(orderId, { stock_decreased: true });
+            }
+            
+            // 2. RECOVERY: If moved to cancelled and WAS already decreased
+            if (status === 'cancelled' && order.stock_decreased) {
+                for (const item of order.products) {
+                    const isWear = !!item.variants || !!item.size;
+                    if (isWear) {
+                        await wearProductModel.findOneAndUpdate(
+                            { _id: item._id, "variants.size": item.size },
+                            { $inc: { "variants.$.stock": item.quantity } }
+                        );
+                    } else {
+                        await productModel.findByIdAndUpdate(
+                            item._id,
+                            { $inc: { stock: item.quantity } }
+                        );
+                    }
+                }
+                await authOrderModel.findByIdAndUpdate(orderId, { stock_decreased: false });
             }
 
             // SYNC UPWARDS TO MAIN ORDER
@@ -1045,8 +1129,27 @@ class orderController {
                 return responseReturn(res, 400, { message: 'Order cannot be cancelled at this stage' });
             }
 
-            // 2. Return Stock removed here - stock is decreased at processing/shipped stage.
-            // If cancellation is allowed, it means the order is not yet processed/shipped.
+            // 2. Return Stock
+            // If stock was decreased at order time, we must put it back now.
+            if (order.stock_decreased) {
+                for (const item of order.products) {
+                    const isWear = !!item.variants || !!item.size;
+                    if (isWear) {
+                        await wearProductModel.findOneAndUpdate(
+                            { _id: item._id, "variants.size": item.size },
+                            { $inc: { "variants.$.stock": item.quantity } }
+                        );
+                    } else {
+                        await productModel.findByIdAndUpdate(
+                            item._id,
+                            { $inc: { stock: item.quantity } }
+                        );
+                    }
+                }
+                // Mark as reverted
+                await customerOrder.findByIdAndUpdate(orderId, { stock_decreased: false });
+                await authOrderModel.updateMany({ orderId: new ObjectId(orderId) }, { stock_decreased: false });
+            }
 
             // 3. REVERSE WALLET CREDITS / CASHBACK (Deduct on refund logic)
             // If the user earned any cashback from this order, we reverse it
@@ -1092,7 +1195,25 @@ class orderController {
                 return responseReturn(res, 400, { message: 'Order cannot be abandoned in this state' });
             }
 
-            // Return Stock removed - stock is not decreased for pending_payment orders
+            // Return Stock
+            if (order.stock_decreased) {
+                for (const item of order.products) {
+                    const isWear = !!item.variants || !!item.size;
+                    if (isWear) {
+                        await wearProductModel.findOneAndUpdate(
+                            { _id: item._id, "variants.size": item.size },
+                            { $inc: { "variants.$.stock": item.quantity } }
+                        );
+                    } else {
+                        await productModel.findByIdAndUpdate(
+                            item._id,
+                            { $inc: { stock: item.quantity } }
+                        );
+                    }
+                }
+                await customerOrder.findByIdAndUpdate(orderId, { stock_decreased: false });
+            }
+
             await customerOrder.findByIdAndUpdate(orderId, { delivery_status: 'cancelled' });
             await authOrderModel.deleteMany({ orderId: new ObjectId(orderId) });
 
@@ -1211,6 +1332,9 @@ class orderController {
                     year: splitTime[2]
                 });
             }
+
+            // Sync with Shiprocket after successful payment
+            this.push_to_shiprocket(orderId);
 
             this.send_order_notifications(order, 'paid');
 

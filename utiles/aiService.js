@@ -62,7 +62,7 @@ Return only the message text.`;
                 Details: ${JSON.stringify(context)}
                 
                 Rules:
-                1. Use a mix of English and Tanglish (Tamil + English).
+                1. Use a professional tone in English or Tamil.
                 2. Make it EXCITING and PERSONALIZED based on the product purchased.
                 3. Use names like "Hi ${context.name || 'Friend'}".
                 4. If it's a delivery, tell them to get ready for unboxing!
@@ -160,7 +160,7 @@ Return only the message text.`;
 
             Task: Generate a ${type === 'delay' ? 'proactive apology' : 'resolution'} message.
             Tone: Helpful, empathetic, and professional.
-            Language: Use a mix of English and Tanglish (Tamil + English) for a friendly vibe.
+            Language: Use professional English or Tamil based on the context.
             
             Return only the message text (plain text, no markdown).`;
 

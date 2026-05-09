@@ -495,6 +495,7 @@ class homeControllers {
             const thirtyDaysAgo = moment().subtract(30, 'days').toDate();
             
             // Count unique visitors per product in the last 30 days
+            // We consider a visitor unique if they have a unique userId OR a unique deviceId (for guests)
             const viewStats = await userBehaviorModel.aggregate([
                 { 
                     $match: { 
@@ -505,13 +506,21 @@ class homeControllers {
                 { 
                     $group: { 
                         _id: '$productId', 
-                        uniqueUsers: { $addToSet: '$userId' } 
+                        uniqueVisitors: { 
+                            $addToSet: { 
+                                $cond: [
+                                    { $eq: ['$userId', 'Guest'] }, 
+                                    { $ifNull: ['$deviceId', 'UnknownGuest'] }, 
+                                    '$userId'
+                                ] 
+                            } 
+                        } 
                     } 
                 },
                 { 
                     $project: { 
                         _id: 1, 
-                        count: { $size: '$uniqueUsers' } 
+                        count: { $size: '$uniqueVisitors' } 
                     } 
                 }
             ]);
@@ -519,11 +528,15 @@ class homeControllers {
             const stats = {};
             viewStats.forEach(s => { stats[s._id] = s.count; });
 
-            // Fallback: If some products have 0 views, maybe add a small random seed 
-            // to make the social proof look alive (e.g., between 5 and 15)
+            // Dynamic Social Proof Fallback:
+            // If real data is low, we add a base seed that is STABLE per product 
+            // (derived from product ID) so it doesn't change every refresh.
             productIds.forEach(id => {
-                if (!stats[id] || stats[id] < 5) {
-                    stats[id] = Math.floor(Math.random() * 10) + 5;
+                if (!stats[id] || stats[id] < 12) {
+                    // Create a stable random number between 12 and 28 based on ID
+                    const idSum = id.toString().split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+                    const stableSeed = 12 + (idSum % 16); // 12 to 27
+                    stats[id] = (stats[id] || 0) + stableSeed;
                 }
             });
 

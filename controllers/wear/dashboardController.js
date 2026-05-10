@@ -71,8 +71,7 @@ class dashboardController {
                 {
                     $match: {
                         sellerId: new ObjectId(id),
-                        delivery_status: { $in: ['pending', 'confirmed', 'processing', 'shipped', 'delivered'] },
-                        payment_status: 'paid' // Strictly only paid orders
+                        payment_status: 'paid' // Strictly only paid orders for core stats
                     }
                 },
                 {
@@ -80,7 +79,7 @@ class dashboardController {
                         _id: null,
                         totalSales: { 
                             $sum: { 
-                                $cond: [{ $in: ['$delivery_status', ['confirmed', 'processing', 'shipped', 'delivered']] }, '$price', 0] 
+                                $cond: [{ $eq: ['$delivery_status', 'delivered'] }, '$sellerAmount', 0] 
                             } 
                         },
                         totalOrders: { 
@@ -132,7 +131,7 @@ class dashboardController {
                     totalProduct
                 },
                 status: supplier?.status || 'none',
-                shopName: supplier?.shopName,
+                shopName: supplier?.shopInfo?.shopName || supplier?.name || '',
                 messages,
                 recentOrders
             })

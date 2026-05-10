@@ -186,29 +186,58 @@ class supplierController {
             const supplier = await Supplier.findOne({ user: id });
             if (!supplier) return responseReturn(res, 404, { error: 'Supplier not found' });
 
+            // Fetch accurate order stats using aggregation
+            const stats = await authOrderModel.aggregate([
+                {
+                    $match: {
+                        sellerId: supplier._id,
+                        payment_status: 'paid'
+                    }
+                },
+                {
+                    $group: {
+                        _id: null,
+                        totalSales: { 
+                            $sum: { 
+                                $cond: [{ $eq: ['$delivery_status', 'delivered'] }, '$sellerAmount', 0] 
+                            } 
+                        },
+                        totalOrders: { 
+                            $sum: { 
+                                $cond: [{ $in: ['$delivery_status', ['confirmed', 'processing', 'shipped', 'delivered']] }, 1, 0] 
+                            } 
+                        },
+                        pendingShipments: {
+                            $sum: { $cond: [{ $in: ['$delivery_status', ['confirmed', 'processing']] }, 1, 0] }
+                        },
+                        pendingConfirmation: {
+                            $sum: { $cond: [{ $eq: ['$delivery_status', 'pending'] }, 1, 0] }
+                        },
+                        returnsCount: {
+                            $sum: { $cond: [{ $eq: ['$delivery_status', 'returned'] }, 1, 0] }
+                        }
+                    }
+                }
+            ]);
+
+            const dashboardStats = stats[0] || {
+                totalOrders: 0,
+                totalSales: 0,
+                pendingShipments: 0,
+                pendingConfirmation: 0,
+                returnsCount: 0
+            };
+
             const totalCatalogs = await WearProduct.countDocuments({ sellerId: supplier._id });
             const activeCatalogs = await WearProduct.countDocuments({ sellerId: supplier._id, status: 'active' });
             const pendingCatalogs = await WearProduct.countDocuments({ sellerId: supplier._id, status: 'pending' });
-
-            // Fetch real order stats
-            const orders = await authOrderModel.find({ sellerId: supplier._id });
-            const totalOrders = orders.length;
-            const totalSales = orders.reduce((acc, order) => acc + (order.price || 0), 0);
-            const pendingShipments = orders.filter(o => o.delivery_status === 'confirmed').length;
-            const pendingConfirmation = orders.filter(o => o.delivery_status === 'pending').length;
-            const returnsCount = orders.filter(o => o.return_status !== 'none' && o.return_status !== 'completed').length;
 
             responseReturn(res, 200, {
                 success: true,
                 status: supplier.status || 'pending',
                 shopName: supplier.businessDetails?.shopName || '',
                 stats: {
-                    totalOrders,
-                    totalSales,
-                    pendingShipments,
-                    pendingConfirmation,
-                    returnsCount,
-                    totalViews: 0, // Placeholder
+                    ...dashboardStats,
                     catalogs: {
                         total: totalCatalogs,
                         active: activeCatalogs,

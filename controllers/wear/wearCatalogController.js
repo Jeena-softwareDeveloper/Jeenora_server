@@ -37,10 +37,8 @@ class wearCatalogController {
         }
     }
     // --- HELPER: Format Product Name (Simple Version) ---
-    _formatProductName = (baseName, color, isMultiColor) => {
-        // Return the full name exactly as provided by the supplier. 
-        // No more stripping brackets or cleaning descriptions.
-        return baseName || '';
+    _formatProductName = (productName) => {
+        return productName || 'Unnamed Product';
     }
 
 
@@ -96,15 +94,15 @@ class wearCatalogController {
                 const seenCombos = new Set();
                 for (const v of item.variants) {
                     // 1. Same size+color duplicate check
-                    const combo = `${(v.size || '').trim().toLowerCase()}-${(v.color || '').trim().toLowerCase()}`;
+                    const combo = `${(v.size || '').trim().toLowerCase()}-${(v.variantName || '').trim().toLowerCase()}`;
                     if (seenCombos.has(combo)) {
-                        return responseReturn(res, 400, { error: `Duplicate variant detected for "${item.productName}": Size ${v.size}, Color ${v.color}` });
+                        return responseReturn(res, 400, { error: `Duplicate variant detected for "${item.productName}": Size ${v.size}, Variant Name ${v.variantName}` });
                     }
                     seenCombos.add(combo);
 
                     // 2. Stock negative check
                     if (v.stock < 0) {
-                        return responseReturn(res, 400, { error: `Stock cannot be negative for variant ${v.size}/${v.color} in product "${item.productName}".` });
+                        return responseReturn(res, 400, { error: `Stock cannot be negative for variant ${v.size}/${v.variantName} in product "${item.productName}".` });
                     }
                 }
 
@@ -130,9 +128,10 @@ class wearCatalogController {
                     product = await WearProduct.findByIdAndUpdate(item._id, {
                         sellerId: supplier._id,
                         catalogId: sharedCatalogId,
+                        catalogName: item.catalogName,
                         alterSlug: item.alterSlug,
                         tags: item.tags && typeof item.tags === 'string' ? item.tags.split(',').map(t => t.trim()).filter(Boolean) : (Array.isArray(item.tags) ? item.tags : []),
-                        productName: this._formatProductName(item.productName, item.variants?.[0]?.color, productsToCreate.length > 1),
+                        productName: this._formatProductName(item.productName),
                         variants: (item.variants || []).map(v => {
                             const tiers = v.priceTiers || [];
                             const bestPrice = (item.isBulkOnly && tiers.length > 0) 
@@ -153,7 +152,8 @@ class wearCatalogController {
                     product = await WearProduct.create({
                         sellerId: supplier._id,
                         catalogId: sharedCatalogId,
-                        productName: this._formatProductName(item.productName, item.variants?.[0]?.color, productsToCreate.length > 1),
+                        catalogName: item.catalogName,
+                        productName: this._formatProductName(item.productName),
                         description: item.description,
                         miniDescription: item.miniDescription,
                         detailedDescription: item.detailedDescription,
@@ -234,7 +234,7 @@ class wearCatalogController {
 
             const wearCatalogs = groupedCatalogs.map(g => {
                 // ALWAYS PRIORITIZE VARIANT NAME for Inventory Header
-                const variantName = g.mainProduct.variants?.[0]?.color || g.mainProduct.variants?.[0]?.name;
+                const variantName = g.mainProduct.variants?.[0]?.variantName || g.mainProduct.variants?.[0]?.name;
                 const finalName = variantName || g.mainProduct.productName;
 
                 return {
@@ -306,17 +306,17 @@ class wearCatalogController {
             // Apply formatting to name if not explicitly disabled
             if (updateData.productName) {
                 // Determine if this is a multicolor catalog to decide on suffix
-                const isMultiColor = (await WearProduct.countDocuments({ catalogId: productToUpdate.catalogId })) > 1;
+                const isMultiVariant Name = (await WearProduct.countDocuments({ catalogId: productToUpdate.catalogId })) > 1;
                 
                 // CRITICAL FIX: Use the NEW color from updateData if provided, otherwise the existing color
-                const currentVariantColor = updateData.variants?.[0]?.color || productToUpdate.variants?.[0]?.color;
+                const currentVariantVariant Name = updateData.variants?.[0]?.variantName || productToUpdate.variants?.[0]?.variantName;
                 
                 updateData.productName = this._formatProductName(updateData.productName, currentVariantColor, isMultiColor);
             }
 
             console.log(`[Admin] Updating product ${productId} with data:`, JSON.stringify(updateData, null, 2));
             const updatedProduct = await WearProduct.findByIdAndUpdate(productId, updateData, { new: true });
-            console.log(`[Admin] Updated product result:`, updatedProduct?.productName, updatedProduct?.variants?.[0]?.color);
+            console.log(`[Admin] Updated product result:`, updatedProduct?.productName, updatedProduct?.variants?.[0]?.variantName);
 
             responseReturn(res, 200, { success: true, message: 'Catalog group updated successfully', data: updatedProduct });
         } catch (error) {
@@ -409,7 +409,7 @@ class wearCatalogController {
                     listingPrice: p.price,
                     mrp: p.price + (p.discount || 0),
                     size: 'Standard',
-                    color: 'Multi',
+                    variantName: 'Multi',
                     stock: p.stock
                 }],
                 similarProductsCount: 1,
@@ -502,10 +502,10 @@ class wearCatalogController {
             const wearCatalogs = groupedCatalogs.map(g => {
                 console.log(`[Inventory] --- Catalog Group: ${g._id} ---`);
                 g.allProducts.forEach((p, idx) => {
-                    console.log(`  Item ${idx + 1}: ID=${p._id} Name="${p.productName}" Color="${p.variants?.[0]?.color}"`);
+                    console.log(`  Item ${idx + 1}: ID=${p._id} Name="${p.productName}" Color="${p.variants?.[0]?.variantName}"`);
                     
                     // AUTO-FIX: If name is doubled or messy, clean it now
-                    const variantColor = p.variants?.[0]?.color || '';
+                    const variantVariant Name = p.variants?.[0]?.variantName || '';
                     const correctName = this._formatProductName(p.productName, variantColor, g.allProducts.length > 1);
                     
                     if (p.productName !== correctName) {
@@ -513,15 +513,15 @@ class wearCatalogController {
                         p.productName = correctName;
                         
                         // Also clean the variant color if it's messy
-                        let cleanColor = variantColor;
+                        let cleanVariant Name = variantColor;
                         if (variantColor.length > 30) {
-                            cleanColor = variantColor.split('|')[0].replace(/Men's|Formal|Trousers|Slim Fit|Soft Cotton Blend/gi, '').trim();
+                            cleanVariant Name = variantColor.split('|')[0].replace(/Men's|Formal|Trousers|Slim Fit|Soft Cotton Blend/gi, '').trim();
                         }
 
                         // Save to DB in background
                         WearProduct.findByIdAndUpdate(p._id, { 
                             productName: correctName,
-                            "variants.0.color": cleanColor || variantColor
+                            "variants.0.variantName": cleanVariant Name || variantColor
                         }).catch(err => console.error("Fix Save Error:", err));
                     }
                 });
@@ -546,7 +546,7 @@ class wearCatalogController {
                     listingPrice: p.price,
                     mrp: p.price + (p.discount || 0),
                     size: 'Standard',
-                    color: 'Multi',
+                    variantName: 'Multi',
                     stock: p.stock
                 }],
                 similarProductsCount: 1,
@@ -692,7 +692,7 @@ class wearCatalogController {
             ]);
 
             const wearCatalogs = groupedCatalogs.map(g => {
-                const variantName = g.mainProduct.variants?.[0]?.color || g.mainProduct.variants?.[0]?.name;
+                const variantName = g.mainProduct.variants?.[0]?.variantName || g.mainProduct.variants?.[0]?.name;
                 const finalName = variantName || g.mainProduct.productName;
 
                 return {
@@ -732,7 +732,7 @@ class wearCatalogController {
                     listingPrice: p.price,
                     mrp: p.price + (p.discount || 0),
                     size: 'Standard',
-                    color: 'Multi',
+                    variantName: 'Multi',
                     stock: p.stock
                 }],
                 similarProductsCount: 1,
@@ -927,7 +927,7 @@ class wearCatalogController {
                             skuId: v.skuId,
                             stock: v.stock,
                             size: v.size,
-                            color: v.color,
+                            variantName: v.variantName,
                             listingPrice: v.listingPrice,
                             mrp: v.mrp
                         }))
@@ -993,7 +993,7 @@ class wearCatalogController {
                 }
 
                 // Smart naming using helper
-                const finalName = this._formatProductName(info?.productName || item.productName, item.color, updatedProducts.length > 1);
+                const finalName = this._formatProductName(info?.productName || item.productName, item.variantName, updatedProducts.length > 1);
 
                 const updatePayload = {
                     productName: finalName,
@@ -1018,7 +1018,7 @@ class wearCatalogController {
 
                         return {
                             ...v,
-                            color: item.color,
+                            variantName: item.variantName,
                             listingPrice: bestPrice,
                             mrp: parseFloat(v.mrp),
                             stock: parseInt(v.stock),
@@ -1031,7 +1031,7 @@ class wearCatalogController {
                 };
 
                 if (item._id && mongoose.Types.ObjectId.isValid(item._id)) {
-                    console.log(`[SupplierEdit] Updating item ${item._id} with name: ${finalName} and color: ${item.color}`);
+                    console.log(`[SupplierEdit] Updating item ${item._id} with name: ${finalName} and variantName: ${item.variantName}`);
                     const updated = await WearProduct.findByIdAndUpdate(item._id, updatePayload, { new: true });
                     if (updated) saved.push(updated);
                 }

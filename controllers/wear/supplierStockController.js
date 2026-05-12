@@ -44,7 +44,7 @@ const get_stock_list = async (req, res) => {
         // Compute summary per item
         const list = stocks.map(s => {
             const totalStock = s.variants.reduce((sum, v) => sum + v.stock, 0);
-            const colors = [...new Set(s.variants.map(v => v.color))];
+            const colors = [...new Set(s.variants.map(v => v.variantName))];
             const sizes = [...new Set(s.variants.map(v => v.size))];
             const minListingPrice = s.variants.length
                 ? Math.min(...s.variants.map(v => v.listingPrice))
@@ -201,12 +201,12 @@ const request_listing = async (req, res) => {
 const update_variant_stock = async (req, res) => {
     try {
         const supplierId = req.id;
-        const { color, size, newStock } = req.body;
+        const { variantName, size, newStock } = req.body;
 
         const stock = await SupplierStock.findOne({ _id: req.params.id, supplierId });
         if (!stock) return res.status(404).json({ error: 'Stock not found' });
 
-        const variant = stock.variants.find(v => v.color === color && v.size === size);
+        const variant = stock.variants.find(v => v.variantName === color && v.size === size);
         if (!variant) return res.status(404).json({ error: 'Variant not found' });
 
         variant.stock = Math.max(0, Number(newStock));

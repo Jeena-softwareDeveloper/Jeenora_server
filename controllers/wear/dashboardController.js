@@ -59,18 +59,15 @@ class dashboardController {
     }
     //end Method 
     get_seller_dashboard_data = async (req, res) => {
-        const { id } = req
+        const { id, businessId, businessInfo } = req;
         try {
-            // Fetch supplier info for the header
-            const supplier = await sellerModel.findById(id);
-
             // Define statuses that count as valid for dashboard metrics
             const validStatuses = ['pending', 'confirmed', 'processing', 'shipped', 'delivered'];
             
             const statsAggregation = await authOrder.aggregate([
                 {
                     $match: {
-                        sellerId: new ObjectId(id),
+                        sellerId: new ObjectId(businessId),
                         payment_status: 'paid' // Strictly only paid orders for core stats
                     }
                 },
@@ -112,32 +109,44 @@ class dashboardController {
             };
 
             const totalProduct = await productModel.find({
-                sellerId: new ObjectId(id)
-            }).countDocuments()
+                sellerId: new ObjectId(businessId)
+            }).countDocuments();
 
             const messages = await sellerCustomerMessage.find({
                 $or: [{ senderId: id }, { receverId: id }]
-            }).sort({ createdAt: -1 }).limit(3)
+            }).sort({ createdAt: -1 }).limit(3);
 
             const recentOrders = await authOrder.find({
-                sellerId: new ObjectId(id),
+                sellerId: new ObjectId(businessId),
                 delivery_status: { $in: validStatuses }
-            }).sort({ createdAt: -1 }).limit(5)
+            }).sort({ createdAt: -1 }).limit(5);
 
-            // Return in the format expected by Redux vendorReducer
+            // Fetch shopName and status from pre-resolved businessInfo (Supplier) or fallback to Legacy Seller
+            let status = businessInfo?.status || 'none';
+            let shopName = businessInfo?.businessDetails?.shopName || businessInfo?.shopInfo?.shopName || businessInfo?.name || 'My Shop';
+            
+            // If it's a legacy seller and we haven't fetched their info yet, do it now
+            if (!businessInfo && !shopName) {
+                const legacySeller = await sellerModel.findById(id);
+                if (legacySeller) {
+                    status = legacySeller.status;
+                    shopName = legacySeller.shopInfo?.shopName || legacySeller.name;
+                }
+            }
+
             responseReturn(res, 200, {
                 stats: {
                     ...dashboardStats,
                     totalProduct
                 },
-                status: supplier?.status || 'none',
-                shopName: supplier?.shopInfo?.shopName || supplier?.name || '',
+                status,
+                shopName,
                 messages,
                 recentOrders
-            })
+            });
         } catch (error) {
-            console.log('[DASHBOARD_ERROR]', error.message)
-            responseReturn(res, 500, { error: 'Failed to fetch dashboard data' })
+            console.log('[DASHBOARD_ERROR]', error.message);
+            responseReturn(res, 500, { error: 'Failed to fetch dashboard data' });
         }
     }
     //end Method 

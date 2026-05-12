@@ -23,7 +23,21 @@ module.exports.authMiddleware = async (req, res, next) => {
         req.role = deCodeToken.role;
         req.id = deCodeToken.id;
         req.user = deCodeToken;
-        req.token = token; // Attach raw token for logout to blacklist
+        req.token = token;
+
+        // --- ARCHITECTURE TUNE: Resolve Business ID (Supplier/Seller) ---
+        // Many controllers expect an ID that identifies the "Business" entity (Seller or Supplier)
+        // rather than the raw User/Buyer account.
+        const Supplier = require('../models/wear/supplierModel');
+        const supplier = await Supplier.findOne({ user: req.id });
+        
+        if (supplier) {
+            req.businessId = supplier._id.toString();
+            req.businessInfo = supplier;
+        } else {
+            req.businessId = req.id; // Fallback to raw ID (Legacy Seller or Buyer)
+        }
+
         next();
     } catch (error) {
         if (error.name === 'TokenExpiredError') {
@@ -31,6 +45,7 @@ module.exports.authMiddleware = async (req, res, next) => {
         } else if (error.name === 'JsonWebTokenError') {
             return res.status(401).json({ error: 'Invalid session token' });
         } else {
+            console.error('[AUTH_MIDDLEWARE_ERROR]', error.message);
             return res.status(500).json({ error: 'Authentication failed' });
         }
     }

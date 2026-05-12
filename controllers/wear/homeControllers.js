@@ -115,11 +115,11 @@ class homeControllers {
                 andConditions.push({ 'variants.size': { $in: sizeRegexes } });
             }
 
-            // Color Filter
-            if (req.query.color) {
-                const colors = Array.isArray(req.query.color) ? req.query.color : req.query.color.split(',');
+            // Variant Name Filter
+            if (req.query.variantName) {
+                const colors = Array.isArray(req.query.variantName) ? req.query.variantName : req.query.variantName.split(',');
                 const colorRegexes = colors.map(c => new RegExp(`^${c}$`, 'i'));
-                andConditions.push({ 'variants.color': { $in: colorRegexes } });
+                andConditions.push({ 'variants.variantName': { $in: colorRegexes } });
             }
 
             wearMatch = andConditions.length > 1 ? { $and: andConditions } : andConditions[0];
@@ -151,7 +151,7 @@ class homeControllers {
 
                 if (!catalogMap.has(key)) {
                     // ALWAYS PRIORITIZE VARIANT NAME: Use the color/variant name as the primary name if it exists
-                    const variantName = p.variants?.[0]?.color || p.variants?.[0]?.name;
+                    const variantName = p.variants?.[0]?.variantName || p.variants?.[0]?.name;
                     const finalName = variantName || p.productName;
 
                     catalogMap.set(key, {
@@ -167,7 +167,7 @@ class homeControllers {
                 // Collect all unique colors from all products in the same catalog
                 const entry = catalogMap.get(key);
                 const productColors = (p.variants || [])
-                    .map(v => v.color || v.colorName || null)
+                    .map(v => v.variantName || v.variantNameName || null)
                     .filter(Boolean);
                 for (const c of productColors) {
                     if (!entry.allColors.includes(c)) {
@@ -215,7 +215,7 @@ class homeControllers {
                     if (lowest !== Infinity) bestPrice = lowest;
                 }
                 // ALWAYS PRIORITIZE VARIANT NAME: Use the color/variant name as the primary name if it exists
-                const variantName = p.variants?.[0]?.color || p.variants?.[0]?.name;
+                const variantName = p.variants?.[0]?.variantName || p.variants?.[0]?.name;
                 const finalName = variantName || p.productName;
 
                 return {
@@ -323,7 +323,7 @@ class homeControllers {
                 }
 
                 // ALWAYS PRIORITIZE VARIANT NAME: Use the color/variant name as the primary name if it exists
-                const variantName = p.variants?.[0]?.color || p.variants?.[0]?.name;
+                const variantName = p.variants?.[0]?.variantName || p.variants?.[0]?.name;
                 const finalName = variantName || p.productName;
 
                 return {
@@ -384,7 +384,7 @@ class homeControllers {
             }
 
             // ALWAYS PRIORITIZE VARIANT NAME for Product Detail Header
-            const variantName = product.variants?.[0]?.color || product.variants?.[0]?.name;
+            const variantName = product.variants?.[0]?.variantName || product.variants?.[0]?.name;
             const finalName = variantName || (product.name || product.productName);
 
             const scrubbedProduct = {
@@ -434,7 +434,7 @@ class homeControllers {
             }).limit(12).select('name images price discount slug _id');
 
             const mappedRelated = related.map(p => {
-                const variantName = p.variants?.[0]?.color || p.variants?.[0]?.name;
+                const variantName = p.variants?.[0]?.variantName || p.variants?.[0]?.name;
                 const finalName = variantName || p.productName;
                 return {
                     ...p.toObject(),
@@ -470,7 +470,7 @@ class homeControllers {
             }).select('productName images variants slug _id status');
 
             const mappedSimilar = similar.map(s => {
-                const variantName = s.variants?.[0]?.color || s.variants?.[0]?.name;
+                const variantName = s.variants?.[0]?.variantName || s.variants?.[0]?.name;
                 const finalName = variantName || s.productName;
                 return {
                     ...s.toObject(),

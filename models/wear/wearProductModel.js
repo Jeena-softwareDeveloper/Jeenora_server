@@ -10,6 +10,9 @@ const wearProductSchema = new mongoose.Schema({
         type: String, // Random ID to group similar products together
         index: true
     },
+    catalogName: {
+        type: String, // Internal reference name for the supplier
+    },
     productName: {
         type: String,
         required: true
@@ -88,10 +91,10 @@ const wearProductSchema = new mongoose.Schema({
         type: { type: String, default: 'text' } // 'text' or 'number'
     }],
 
-    // Variants (Size/Color/Price/Stock)
+    // Variants (Size/VariantName/Price/Stock)
     variants: [{
         size: { type: String }, // S, M, L, XL, Free Size
-        color: { type: String },
+        variantName: { type: String },
         listingPrice: { type: Number, required: true }, // Default/Single item price
         mrp: { type: Number }, // Original price
         stock: { type: Number, required: true, default: 0 },

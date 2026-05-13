@@ -306,10 +306,10 @@ class wearCatalogController {
             // Apply formatting to name if not explicitly disabled
             if (updateData.productName) {
                 // Determine if this is a multicolor catalog to decide on suffix
-                const isMultiVariant Name = (await WearProduct.countDocuments({ catalogId: productToUpdate.catalogId })) > 1;
+                const isMultiColor = (await WearProduct.countDocuments({ catalogId: productToUpdate.catalogId })) > 1;
                 
-                // CRITICAL FIX: Use the NEW color from updateData if provided, otherwise the existing color
-                const currentVariantVariant Name = updateData.variants?.[0]?.variantName || productToUpdate.variants?.[0]?.variantName;
+                // CRITICAL FIX: Use the NEW variantName from updateData if provided, otherwise the existing variantName
+                const currentVariantColor = updateData.variants?.[0]?.variantName || productToUpdate.variants?.[0]?.variantName;
                 
                 updateData.productName = this._formatProductName(updateData.productName, currentVariantColor, isMultiColor);
             }
@@ -502,10 +502,10 @@ class wearCatalogController {
             const wearCatalogs = groupedCatalogs.map(g => {
                 console.log(`[Inventory] --- Catalog Group: ${g._id} ---`);
                 g.allProducts.forEach((p, idx) => {
-                    console.log(`  Item ${idx + 1}: ID=${p._id} Name="${p.productName}" Color="${p.variants?.[0]?.variantName}"`);
+                    console.log(`  Item ${idx + 1}: ID=${p._id} Name="${p.productName}" VariantName="${p.variants?.[0]?.variantName}"`);
                     
                     // AUTO-FIX: If name is doubled or messy, clean it now
-                    const variantVariant Name = p.variants?.[0]?.variantName || '';
+                    const variantColor = p.variants?.[0]?.variantName || '';
                     const correctName = this._formatProductName(p.productName, variantColor, g.allProducts.length > 1);
                     
                     if (p.productName !== correctName) {
@@ -513,15 +513,15 @@ class wearCatalogController {
                         p.productName = correctName;
                         
                         // Also clean the variant color if it's messy
-                        let cleanVariant Name = variantColor;
+                        let cleanColor = variantColor;
                         if (variantColor.length > 30) {
-                            cleanVariant Name = variantColor.split('|')[0].replace(/Men's|Formal|Trousers|Slim Fit|Soft Cotton Blend/gi, '').trim();
+                            cleanColor = variantColor.split('|')[0].replace(/Men's|Formal|Trousers|Slim Fit|Soft Cotton Blend/gi, '').trim();
                         }
 
                         // Save to DB in background
                         WearProduct.findByIdAndUpdate(p._id, { 
                             productName: correctName,
-                            "variants.0.variantName": cleanVariant Name || variantColor
+                            "variants.0.variantName": cleanColor || variantColor
                         }).catch(err => console.error("Fix Save Error:", err));
                     }
                 });

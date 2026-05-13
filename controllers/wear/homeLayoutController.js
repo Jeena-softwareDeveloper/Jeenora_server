@@ -97,6 +97,7 @@ class homeLayoutController {
 
             // Run queries in parallel for maximum speed
             const [products, wearProducts] = await Promise.all([
+                productModel.find({
                     name: { $regex: q, $options: 'i' },
                     status: 'active'
                 }).limit(5).select('name images price discount slug').lean(),

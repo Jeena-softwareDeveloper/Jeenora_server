@@ -191,6 +191,21 @@ class ChatController {
     }
     // End Method 
 
+    get_customer_seller_message = async (req, res) => {
+        const { customerId } = req.params;
+        const { id } = req;
+        try {
+            const messages = await sellerCustomerMessage.find({
+                $or: [
+                    {
+                        $and: [{ receverId: { $eq: customerId } }, { senderId: { $eq: id } }]
+                    },
+                    {
+                        $and: [{ receverId: { $eq: id } }, { senderId: { $eq: customerId } }]
+                    }
+                ]
+            });
+
             const currentCustomer = await customerModel.findById(customerId).select('name image phone');
             responseReturn(res, 200, {
                 messages,

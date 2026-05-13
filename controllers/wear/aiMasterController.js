@@ -545,14 +545,12 @@ class AIMasterController {
 
             const viewedCategories = [...new Set(history.map(h => h.category))];
 
+            const { formatWearProductForClient } = require('../../utiles/productFormatter');
+
             if (viewedCategories.length === 0) {
                 // Return top products if no history
                 const productsRaw = await wearProductModel.find({ status: 'active' }).limit(8).lean();
-                const products = productsRaw.map(p => {
-                    const variantName = p.variants?.[0]?.color || p.variants?.[0]?.name;
-                    const finalName = variantName || p.productName;
-                    return { ...p, name: finalName, productName: finalName };
-                });
+                const products = productsRaw.map(formatWearProductForClient).filter(Boolean);
                 return responseReturn(res, 200, { products });
             }
 
@@ -571,11 +569,7 @@ class AIMasterController {
                 status: 'active'
             }).limit(12).lean();
 
-            const products = productsRaw.map(p => {
-                const variantName = p.variants?.[0]?.color || p.variants?.[0]?.name;
-                const finalName = variantName || p.productName;
-                return { ...p, name: finalName, productName: finalName };
-            });
+            const products = productsRaw.map(formatWearProductForClient).filter(Boolean);
 
             return responseReturn(res, 200, { 
                 products,

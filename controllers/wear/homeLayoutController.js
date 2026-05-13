@@ -16,30 +16,35 @@ class homeLayoutController {
             const wearProductModel = require("../../models/wear/wearProductModel");
             let sections = [];
 
+            const { formatWearProductForClient } = require('../../utiles/productFormatter');
+
             if (activeSections.includes("New Arrivals")) {
-                const products = await wearProductModel.find({ status: 'active' }).sort({ createdAt: -1 }).limit(10).lean();
+                let products = await wearProductModel.find({ status: 'active' }).sort({ createdAt: -1 }).limit(10).lean();
+                if (products.length === 0) products = await productModel.find({ status: 'active' }).sort({ createdAt: -1 }).limit(10).lean();
                 sections.push({
                     title: 'New Arrivals',
                     type: 'horizontal_list',
-                    products: products.length > 0 ? products : await productModel.find({ status: 'active' }).sort({ createdAt: -1 }).limit(10).lean()
+                    products: products.map(formatWearProductForClient).filter(Boolean)
                 });
             }
 
             if (activeSections.includes("Flash Sale")) {
-                const products = await wearProductModel.find({ status: 'active', discount: { $gt: 0 } }).limit(4).lean();
+                let products = await wearProductModel.find({ status: 'active', discount: { $gt: 0 } }).limit(4).lean();
+                if (products.length === 0) products = await productModel.find({ status: 'active', discount: { $gt: 0 } }).limit(4).lean();
                 sections.push({
                     title: 'Flash Sale',
                     type: 'grid',
-                    products: products.length > 0 ? products : await productModel.find({ status: 'active', discount: { $gt: 0 } }).limit(4).lean()
+                    products: products.map(formatWearProductForClient).filter(Boolean)
                 });
             }
 
             if (activeSections.includes("Recommended")) {
-                const products = await wearProductModel.find({ status: 'active', isFeatured: true }).limit(10).lean();
+                let products = await wearProductModel.find({ status: 'active', isFeatured: true }).limit(10).lean();
+                if (products.length === 0) products = await productModel.find({ status: 'active', rating: { $gt: 4 } }).limit(10).lean();
                 sections.push({
                     title: 'Recommended for You',
                     type: 'vertical_list',
-                    products: products.length > 0 ? products : await productModel.find({ status: 'active', rating: { $gt: 4 } }).limit(10).lean()
+                    products: products.map(formatWearProductForClient).filter(Boolean)
                 });
             }
 
@@ -117,13 +122,16 @@ class homeLayoutController {
                     discount: p.discount,
                     type: 'standard'
                 })),
-                ...wearProducts.map(p => ({
-                    _id: p._id,
-                    name: p.productName,
-                    image: p.images && p.images.length > 0 ? p.images[0] : '',
+                ...wearProducts.map(p => {
+                    const variantName = p.variants?.[0]?.variantName || p.variants?.[0]?.color || p.variants?.[0]?.name;
+                    return {
+                        _id: p._id,
+                        name: variantName || p.productName,
+                        image: p.images && p.images.length > 0 ? p.images[0] : '',
                     price: p.variants?.[0]?.listingPrice || 0,
                     type: 'wear'
-                }))
+                    };
+                })
             ];
 
             responseReturn(res, 200, { suggestions });

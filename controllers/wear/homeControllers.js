@@ -150,16 +150,26 @@ class homeControllers {
                 }
 
                 if (!catalogMap.has(key)) {
-                    // ALWAYS PRIORITIZE VARIANT NAME: Use the color/variant name as the primary name if it exists
-                    const variantName = p.variants?.[0]?.variantName || p.variants?.[0]?.name;
+                    // ALWAYS PRIORITIZE VARIANT NAME: Check for variantName, legacy 'color', or 'name'
+                    const variantName = p.variants?.[0]?.variantName || p.variants?.[0]?.color || p.variants?.[0]?.name;
                     const finalName = variantName || p.productName;
 
                     catalogMap.set(key, {
-                        ...p,
+                        _id: p._id,
                         name: finalName,
                         price: bestPrice,
-                        discount: 0,
-                        rating: p.avgRating || 5,
+                        mrp: p.variants?.[0]?.mrp || p.originalPrice || bestPrice + 100,
+                        discount: p.discount || 0,
+                        rating: p.avgRating || p.rating || 5,
+                        reviewCount: p.reviewCount || 0,
+                        images: p.images,
+                        isBulkOnly: p.isBulkOnly,
+                        slug: p.slug,
+                        category: p.category,
+                        variants: p.variants?.map(v => ({
+                            size: v.size,
+                            variantName: v.variantName || v.color || v.name
+                        })) || [],
                         type: 'wear',
                         allColors: []
                     });
@@ -167,7 +177,7 @@ class homeControllers {
                 // Collect all unique colors from all products in the same catalog
                 const entry = catalogMap.get(key);
                 const productColors = (p.variants || [])
-                    .map(v => v.variantName || v.variantNameName || null)
+                    .map(v => v.variantName || v.color || v.name || null)
                     .filter(Boolean);
                 for (const c of productColors) {
                     if (!entry.allColors.includes(c)) {
@@ -214,16 +224,26 @@ class homeControllers {
                     });
                     if (lowest !== Infinity) bestPrice = lowest;
                 }
-                // ALWAYS PRIORITIZE VARIANT NAME: Use the color/variant name as the primary name if it exists
-                const variantName = p.variants?.[0]?.variantName || p.variants?.[0]?.name;
+                // ALWAYS PRIORITIZE VARIANT NAME: Check for variantName, legacy 'color', or 'name'
+                const variantName = p.variants?.[0]?.variantName || p.variants?.[0]?.color || p.variants?.[0]?.name;
                 const finalName = variantName || p.productName;
 
                 return {
-                    ...p,
+                    _id: p._id,
                     name: finalName,
                     price: bestPrice,
-                    discount: 0,
-                    rating: p.avgRating || 5,
+                    mrp: p.variants?.[0]?.mrp || p.originalPrice || bestPrice + 100,
+                    discount: p.discount || 0,
+                    rating: p.avgRating || p.rating || 5,
+                    reviewCount: p.reviewCount || 0,
+                    images: p.images,
+                    isBulkOnly: p.isBulkOnly,
+                    slug: p.slug,
+                    category: p.category,
+                    variants: p.variants?.map(v => ({
+                        size: v.size,
+                        variantName: v.variantName || v.color || v.name
+                    })) || [],
                     type: 'wear'
                 };
             });
@@ -322,16 +342,26 @@ class homeControllers {
                     if (lowest !== Infinity) bestPrice = lowest;
                 }
 
-                // ALWAYS PRIORITIZE VARIANT NAME: Use the color/variant name as the primary name if it exists
-                const variantName = p.variants?.[0]?.variantName || p.variants?.[0]?.name;
+                // ALWAYS PRIORITIZE VARIANT NAME: Check for variantName, legacy 'color', or 'name'
+                const variantName = p.variants?.[0]?.variantName || p.variants?.[0]?.color || p.variants?.[0]?.name;
                 const finalName = variantName || p.productName;
 
                 return {
-                    ...p,
+                    _id: p._id,
                     name: finalName,
                     price: bestPrice,
-                    discount: 0,
-                    rating: p.avgRating || 5,
+                    mrp: p.variants?.[0]?.mrp || p.originalPrice || bestPrice + 100,
+                    discount: p.discount || 0,
+                    rating: p.avgRating || p.rating || 5,
+                    reviewCount: p.reviewCount || 0,
+                    images: p.images,
+                    isBulkOnly: p.isBulkOnly,
+                    slug: p.slug,
+                    category: p.category,
+                    variants: p.variants?.map(v => ({
+                        size: v.size,
+                        variantName: v.variantName || v.color || v.name
+                    })) || [],
                     type: 'wear'
                 };
             });

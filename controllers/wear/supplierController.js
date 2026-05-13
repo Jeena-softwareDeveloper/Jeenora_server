@@ -274,10 +274,36 @@ class supplierController {
                         order.shippingInfo = {};
                     }
                 }
-                return order;
+                
+                // Format Products to be extremely clean
+                const cleanedProducts = order.products.map(p => {
+                    const variantName = p.variants?.[0]?.variantName || p.variants?.[0]?.color || p.variants?.[0]?.name;
+                    return {
+                        _id: p._id,
+                        name: variantName || p.productName || p.name,
+                        images: p.images || [],
+                        price: p.price,
+                        quantity: p.quantity,
+                        skuId: p.variants?.[0]?.skuId || ''
+                    };
+                });
+
+                return {
+                    _id: order._id,
+                    orderId: order.orderId,
+                    products: cleanedProducts,
+                    price: order.price,
+                    sellerAmount: order.sellerAmount,
+                    payment_status: order.payment_status,
+                    delivery_status: order.delivery_status,
+                    date: order.date,
+                    createdAt: order.createdAt,
+                    shippingInfo: order.shippingInfo
+                };
             }));
 
-            responseReturn(res, 200, { success: true, orders, supplier });
+            // Do not send the full supplier object since app already has it via token
+            responseReturn(res, 200, { success: true, orders });
         } catch (error) {
             responseReturn(res, 500, { error: error.message });
         }

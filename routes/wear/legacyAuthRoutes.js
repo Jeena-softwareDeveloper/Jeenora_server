@@ -17,10 +17,6 @@ router.post('/admin-login', authLimiter, authControllers.admin_login)
 router.post('/seller-register', authLimiter, authControllers.seller_register)
 router.post('/seller-login', authLimiter, authControllers.seller_login)
 
-// Hire routes
-router.post('/hire-register', authLimiter, authControllers.hire_register)
-router.post('/hire-login', authLimiter, authControllers.hire_login)
-
 // Common routes (for all user types)
 router.get('/get-user', authMiddleware, authControllers.getUser)
 router.post('/profile-image-upload', authMiddleware, authControllers.profile_image_upload)

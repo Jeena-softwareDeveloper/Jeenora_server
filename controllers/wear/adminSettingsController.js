@@ -1,5 +1,5 @@
 const adminSettingsModel = require('../../models/adminSettingsModel');
-const { responseReturn } = require('../../utiles/response');
+const { responseReturn } = require('../../utils/response');
 
 class adminSettingsController {
     // Get a setting by key

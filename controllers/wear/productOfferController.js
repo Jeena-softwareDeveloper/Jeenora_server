@@ -1,5 +1,5 @@
 const ProductOffer = require('../../models/wear/productOfferModel');
-const { responseReturn } = require('../../utiles/response');
+const { responseReturn } = require('../../utils/response');
 
 class productOfferController {
     // Add Offer

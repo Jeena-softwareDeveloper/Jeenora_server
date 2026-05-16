@@ -1,7 +1,7 @@
 const formidable = require("formidable")
-const { responseReturn } = require("../../utiles/response")
+const { responseReturn } = require("../../utils/response")
 const cloudinary = require('cloudinary').v2
-const productModel = require('../../models/wear/productModel')
+const productModel = require('../../models/wear/Product')
 
 cloudinary.config({
     cloud_name: process.env.CLOUDINARY_CLOUD_NAME,

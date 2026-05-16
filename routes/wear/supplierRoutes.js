@@ -7,17 +7,28 @@ const catalogMaintenanceController = require('../../controllers/wear/catalogMain
 const supportCommunicationController = require('../../controllers/wear/supportCommunicationController');
 const securityController = require('../../controllers/wear/securityController');
 const supplierStockController = require('../../controllers/wear/supplierStockController');
+const b2bOrderController = require('../../controllers/wear/b2bOrderController');
 const { authMiddleware } = require('../../middlewares/authMiddleware');
+
+// ==================== B2B ORDER ROUTES ====================
+router.get('/b2b/orders', authMiddleware, b2bOrderController.get_seller_b2b_orders);
+router.get('/b2b/orders/:orderId', authMiddleware, b2bOrderController.get_seller_b2b_order);
+router.post('/b2b/orders/:orderId/accept', authMiddleware, b2bOrderController.accept_order);
+router.post('/b2b/orders/:orderId/reject', authMiddleware, b2bOrderController.reject_order);
+router.patch('/b2b/orders/:orderId/status', authMiddleware, b2bOrderController.update_b2b_status);
+router.get('/b2b/rejection-reasons', b2bOrderController.get_rejection_reasons);
 
 // ==================== SUPPLIER STOCK (ERP) ROUTES ====================
 router.get('/stock/hsn-gst', supplierStockController.get_hsn_gst); // Public — no auth needed
 router.get('/stock/list', authMiddleware, supplierStockController.get_stock_list);
+router.get('/stock/alerts', authMiddleware, supplierStockController.get_inventory_alerts);
 router.get('/stock/:id', authMiddleware, supplierStockController.get_stock_detail);
 router.post('/stock/add', authMiddleware, supplierStockController.add_stock);
 router.patch('/stock/:id', authMiddleware, supplierStockController.update_stock);
 router.post('/stock/:id/request-listing', authMiddleware, supplierStockController.request_listing);
 router.patch('/stock/:id/stock-update', authMiddleware, supplierStockController.update_variant_stock);
-
+router.patch('/stock/:id/bulk-stock-update', authMiddleware, supplierStockController.bulk_update_variant_stock);
+router.patch('/stock/:id/warehouse', authMiddleware, supplierStockController.update_warehouse_location);
 
 router.post('/apply', authMiddleware, supplierController.apply_supplier);
 router.post('/add', authMiddleware, supplierController.add_supplier);
@@ -115,6 +126,10 @@ router.get('/security/settings', authMiddleware, securityController.get_security
 router.put('/security/settings', authMiddleware, securityController.update_security_settings);
 
 const wearCatalogController = require('../../controllers/wear/wearCatalogController');
+// Admin: Supplier Stock AI Summary
+router.get('/stock/admin/ai-summary', authMiddleware, supplierStockController.admin_get_ai_summary);
+router.get('/stock/admin/b2b-summary', authMiddleware, b2bOrderController.get_admin_b2b_summary);
+
 const aiMasterController = require('../../controllers/wear/aiMasterController');
 router.get('/catalog/list', wearCatalogController.get_public_catalogs); // Public
 router.post('/catalog/add', authMiddleware, wearCatalogController.add_catalog);
@@ -141,6 +156,7 @@ router.delete('/delete/:supplierId', authMiddleware, supplierController.delete_s
 
 // ==================== PRICING MANAGEMENT ROUTES ====================
 router.get('/pricing/data', authMiddleware, supplierController.get_pricing_data);
+router.get('/pricing/dashboard', authMiddleware, supplierController.get_pricing_data);
 router.put('/pricing/update-price', authMiddleware, supplierController.update_product_price);
 
 // ==================== WAREHOUSE MANAGEMENT ROUTES ====================
@@ -159,4 +175,5 @@ router.get('/price-recommendations', authMiddleware, supplierController.get_pric
 // ==================== QUALITY DASHBOARD ROUTES ====================
 router.get('/quality-dashboard/data', authMiddleware, supplierController.get_quality_dashboard_data);
 
+// ── Final Cleanup ──
 module.exports = router;

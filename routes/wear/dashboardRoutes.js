@@ -23,6 +23,7 @@ router.get('/admin/ai/logs', authMiddleware, aiMasterController.get_ai_logs) // 
 // Supplier AI Endpoints
 router.post('/supplier/ai-observe-image', authMiddleware, aiMasterController.ai_observe_image)
 router.post('/supplier/ai-recommend', authMiddleware, aiMasterController.generate_ai_recommendation)
+router.post('/supplier/ai-write-from-image', authMiddleware, aiMasterController.ai_write_from_image)
 router.post('/supplier/ai-advise-price', authMiddleware, aiMasterController.advise_price)
 router.post('/supplier/ai-seo-tags', authMiddleware, aiMasterController.generate_seo_tags)
 router.post('/supplier/ai-suggest-gst', authMiddleware, aiMasterController.ai_suggest_gst)

@@ -1,5 +1,5 @@
-const { responseReturn } = require("../../utiles/response");
-const whatsappClient = require("../../utiles/whatsappClient");
+const { responseReturn } = require("../../utils/response");
+const whatsappClient = require("../../utils/whatsappClient");
 
 class wearWhatsAppController {
     getStatus = async (req, res) => {

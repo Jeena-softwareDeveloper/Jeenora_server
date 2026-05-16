@@ -1,8 +1,8 @@
 const ReturnRequest = require('../../models/wear/returnRequestModel');
 const RTO = require('../../models/wear/rtoModel');
-const Supplier = require('../../models/wear/supplierModel');
-const AuthOrder = require('../../models/wear/authOrder');
-const { responseReturn } = require('../../utiles/response');
+const Supplier = require('../../models/wear/Supplier');
+const AuthOrder = require('../../models/wear/AuthOrder');
+const { responseReturn } = require('../../utils/response');
 const mongoose = require('mongoose');
 
 class ReturnRTOCController {

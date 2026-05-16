@@ -1,17 +1,17 @@
 const WearBuyer = require('../../models/wear/wearBuyerModel');
-const WearLog = require('../../models/wear/wearLogModel');
-const WearOtp = require('../../models/wear/wearOtpModel');
+const WearLog = require('../../models/wear/WearLog');
+const WearOtp = require('../../models/wear/WearOtp');
 const WearSession = require('../../models/wear/wearSessionModel');
-const Customer = require('../../models/wear/customerModel');
+const Customer = require('../../models/wear/Customer');
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 const bcrypt = require('bcrypt');
 const formidable = require('formidable');
 const cloudinary = require('cloudinary').v2;
-const { responseReturn } = require('../../utiles/response');
+const { responseReturn } = require('../../utils/response');
 
 const { sendSMS } = require('../../services/smsService');
-const whatsappClient = require('../../utiles/whatsappClient');
+const whatsappClient = require('../../utils/whatsappClient');
 
 // Global Cloudinary Config (initialized once at startup, not inside functions)
 cloudinary.config({
@@ -401,7 +401,7 @@ exports.email_signup = async (req, res) => {
         }
 
         try {
-            const { sendEmail } = require('../../utiles/emailSender');
+            const { sendEmail } = require('../../utils/emailSender');
             const frontendUrl = process.env.FRONTEND_URL || 'https://www.jeenora.com';
             const verifyUrl = `${frontendUrl}/verify-email?token=${verifyToken}&id=${user._id}`;
             const html = `<div style="font-family:Arial;padding:20px;"><h2>Verify Email</h2><a href="${verifyUrl}">Click here to verify</a></div>`;
@@ -430,7 +430,7 @@ exports.resend_verification_email = async (req, res) => {
         user.emailVerifyToken = verifyToken;
         await user.save();
 
-        const { sendEmail } = require('../../utiles/emailSender');
+        const { sendEmail } = require('../../utils/emailSender');
         const frontendUrl = process.env.FRONTEND_URL || 'https://www.jeenora.com';
         const verifyUrl = `${frontendUrl}/verify-email?token=${verifyToken}&id=${user._id}`;
         const html = `<div style="font-family:Arial;padding:20px;"><h2>Verify Email</h2><a href="${verifyUrl}">Click here to verify</a></div>`;
@@ -490,7 +490,7 @@ exports.forgot_password = async (req, res) => {
             console.error('[WhatsApp Forgot Password Error]', waErr.message);
         }
 
-        const { sendEmail } = require('../../utiles/emailSender');
+        const { sendEmail } = require('../../utils/emailSender');
         const frontendUrl = process.env.FRONTEND_URL || 'https://www.jeenora.com';
         const resetUrl = `${frontendUrl}/reset-password?token=${resetToken}&id=${user._id}`;
         const html = `<div style="font-family:Arial;padding:20px;"><h2>Reset Password</h2><a href="${resetUrl}">Click here to reset</a></div>`;

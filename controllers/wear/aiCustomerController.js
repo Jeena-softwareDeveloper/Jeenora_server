@@ -1,4 +1,4 @@
-const { responseReturn } = require('../../utiles/response');
+const { responseReturn } = require('../../utils/response');
 const axios = require('axios');
 
 class AICustomerController {

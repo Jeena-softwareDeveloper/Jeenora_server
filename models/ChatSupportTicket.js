@@ -1,68 +1,27 @@
-const mongoose = require('mongoose');
+const { Schema, model } = require('mongoose');
 
-const chatSchema = new mongoose.Schema({
-    senderId: {
-        type: mongoose.Schema.Types.ObjectId,
-        required: true
-    },
-    senderModel: {
-        type: String,
+const chatSupportTicketSchema = new Schema({
+    userId: {
+        type: Schema.Types.ObjectId,
         required: true,
-        enum: ['HireUser', 'admins']
+        ref: 'Customer'
+    },
+    subject: {
+        type: String,
+        required: true
     },
     message: {
         type: String,
         required: true
     },
-    timestamp: {
-        type: Date,
-        default: Date.now
-    }
-});
-
-const chatSupportTicketSchema = new mongoose.Schema({
-    userId: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'HireUser',
-        required: true
-    },
-    // Optional: if assignment to specific admin is needed
-    assignedTo: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'admins'
-    },
-    subject: {
+    type: {
         type: String,
-        default: 'Support Request'
+        default: 'support'
     },
     status: {
         type: String,
-        default: 'open',
-        enum: ['open', 'closed', 'pending', 'on-hold']
-    },
-    priority: {
-        type: String,
-        default: 'medium',
-        enum: ['lowest', 'low', 'medium', 'high', 'highest', 'critical']
-    },
-    department: {
-        type: String,
-        default: 'General'
-    },
-    tags: [String],
-    messages: [chatSchema],
-    lastMessageAt: {
-        type: Date,
-        default: Date.now
-    },
-    createdAt: {
-        type: Date,
-        default: Date.now
-    },
-    updatedAt: {
-        type: Date,
-        default: Date.now
+        default: 'pending'
     }
-});
+}, { timestamps: true });
 
-module.exports = mongoose.model('ChatSupportTicket', chatSupportTicketSchema);
+module.exports = model('ChatSupportTicket', chatSupportTicketSchema);

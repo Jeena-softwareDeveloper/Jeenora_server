@@ -1,6 +1,6 @@
 const wearSearchHistoryModel = require('../../models/wear/wearSearchHistoryModel');
-const wearProductModel = require('../../models/wear/wearProductModel');
-const { responseReturn } = require('../../utiles/response');
+const wearProductModel = require('../../models/wear/WearProduct');
+const { responseReturn } = require('../../utils/response');
 const moment = require('moment');
 
 class searchController {

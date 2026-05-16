@@ -1,5 +1,5 @@
-const customerModel = require("../../models/wear/customerModel");
-const { responseReturn } = require("../../utiles/response");
+const customerModel = require("../../models/wear/Customer");
+const { responseReturn } = require("../../utils/response");
 
 class walletController {
 

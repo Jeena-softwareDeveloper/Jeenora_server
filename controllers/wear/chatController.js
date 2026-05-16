@@ -1,9 +1,9 @@
-const sellerModel = require('../../models/wear/sellerModel')
-const customerModel = require('../../models/wear/customerModel')
+const sellerModel = require('../../models/wear/Seller')
+const customerModel = require('../../models/wear/Customer')
 const sellerCustomerModel = require('../../models/chat/sellerCustomerModel')
 const sellerCustomerMessage = require('../../models/chat/sellerCustomerMessage')
 const adminSellerMessage = require('../../models/chat/adminSellerMessage')
-const { responseReturn } = require('../../utiles/response')
+const { responseReturn } = require('../../utils/response')
 class ChatController {
 
     add_customer_friend = async (req, res) => {

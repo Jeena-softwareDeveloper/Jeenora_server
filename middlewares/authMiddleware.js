@@ -28,7 +28,7 @@ module.exports.authMiddleware = async (req, res, next) => {
         // --- ARCHITECTURE TUNE: Resolve Business ID (Supplier/Seller) ---
         // Many controllers expect an ID that identifies the "Business" entity (Seller or Supplier)
         // rather than the raw User/Buyer account.
-        const Supplier = require('../models/wear/supplierModel');
+        const Supplier = require('../models/wear/Supplier');
         const supplier = await Supplier.findOne({ user: req.id });
         
         if (supplier) {

@@ -1,7 +1,7 @@
 const adminModel = require('../../models/adminModel');
 const wearBuyerModel = require('../../models/wear/wearBuyerModel');
-const wearLogModel = require('../../models/wear/wearLogModel');
-const { responseReturn } = require('../../utiles/response');
+const wearLogModel = require('../../models/wear/WearLog');
+const { responseReturn } = require('../../utils/response');
 
 class adminRiskController {
     get_risk_report = async (req, res) => {

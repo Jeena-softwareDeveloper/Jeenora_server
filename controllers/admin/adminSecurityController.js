@@ -1,5 +1,5 @@
 const wearSessionModel = require('../../models/wear/wearSessionModel');
-const { responseReturn } = require('../../utiles/response');
+const { responseReturn } = require('../../utils/response');
 
 class adminSecurityController {
     force_logout = async (req, res) => {

@@ -1,6 +1,6 @@
 const wearBannerModel = require("../../models/wear/wearBannerModel");
-const wearCategoryModel = require("../../models/wear/wearCategoryModel");
-const { responseReturn } = require("../../utiles/response");
+const wearCategoryModel = require("../../models/wear/WearCategory");
+const { responseReturn } = require("../../utils/response");
 const cloudinary = require('cloudinary').v2;
 const formidable = require("formidable");
 

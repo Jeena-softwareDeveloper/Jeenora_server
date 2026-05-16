@@ -1,9 +1,9 @@
 const axios = require('axios');
-const { responseReturn } = require("../../utiles/response");
-const productModel = require('../../models/wear/productModel');
-const wearProductModel = require('../../models/wear/wearProductModel');
-const supplierModel = require('../../models/wear/supplierModel');
-const shiprocketService = require("../../utiles/shiprocketService");
+const { responseReturn } = require("../../utils/response");
+const productModel = require('../../models/wear/Product');
+const wearProductModel = require('../../models/wear/WearProduct');
+const supplierModel = require('../../models/wear/Supplier');
+const shiprocketService = require("../../utils/shiprocketService");
 
 class deliveryController {
     // 1. Get Pincode from Latitude and Longitude

@@ -1,6 +1,6 @@
 const couponModel = require("../../models/couponModel");
-const productModel = require("../../models/wear/productModel");
-const { responseReturn } = require("../../utiles/response");
+const productModel = require("../../models/wear/Product");
+const { responseReturn } = require("../../utils/response");
 
 class checkoutController {
     calculate_checkout = async (req, res) => {

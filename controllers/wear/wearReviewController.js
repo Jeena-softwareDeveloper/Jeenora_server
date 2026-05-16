@@ -1,6 +1,6 @@
 const WearReview = require('../../models/wear/wearReviewModel');
-const WearProduct = require('../../models/wear/wearProductModel');
-const { responseReturn } = require('../../utiles/response');
+const WearProduct = require('../../models/wear/WearProduct');
+const { responseReturn } = require('../../utils/response');
 
 class wearReviewController {
 
@@ -17,7 +17,7 @@ class wearReviewController {
             }
 
             // Fetch User Details to get correct name
-            const user = await require('../../models/wear/customerModel').findById(id);
+            const user = await require('../../models/wear/Customer').findById(id);
             const userName = user?.name || providedName || 'Customer';
 
             const review = await WearReview.create({

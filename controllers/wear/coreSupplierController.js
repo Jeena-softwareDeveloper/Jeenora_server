@@ -1,5 +1,5 @@
-const sellerModel = require("../../models/wear/sellerModel");
-const { responseReturn } = require("../../utiles/response");
+const sellerModel = require("../../models/wear/Seller");
+const { responseReturn } = require("../../utils/response");
 
 class supplierController {
     apply_supplier = async (req, res) => {

@@ -52,8 +52,8 @@ const cors = require("cors");
 const cookieParser = require("cookie-parser");
 const http = require("http");
 const socket = require("socket.io");
-const socketHelper = require("./utiles/socket");
-const { dbConnect } = require("./utiles/db");
+const socketHelper = require("./utils/socket");
+const { dbConnect } = require("./utils/db");
 const rateLimit = require("express-rate-limit");
 const mongoSanitize = require("express-mongo-sanitize");
 const xss = require("xss-clean");
@@ -234,7 +234,7 @@ const io = socket(server, {
   allowEIO3: true // Support older clients if needed
 });
 socketHelper.init(io);
-require('./utiles/socketHandlers').initHandlers(io);
+require('./utils/socketHandlers').initHandlers(io);
 console.log('✅ Socket.io initialized (WS prioritized)');
 
 
@@ -250,9 +250,22 @@ setInterval(() => {
 const cron = require('node-cron');
 const aiMasterController = require('./controllers/wear/aiMasterController');
 const orderController = require('./controllers/wear/orderController');
-const whatsappClient = require('./utiles/whatsappClient');
+const inventoryAiService = require('./services/wear/inventoryAiService');
+const b2bOrderController = require('./controllers/wear/b2bOrderController');
+const whatsappClient = require('./utils/whatsappClient');
 // 🚀 Initialize WhatsApp Client on startup (attempts auto-reconnect if session exists)
 whatsappClient.initialize();
+
+// 📦 Smart Inventory AI — runs every day at 1:00 AM IST (19:30 UTC)
+cron.schedule('30 19 * * *', async () => {
+  try {
+    console.log('[CRON] ⏰ 1:00 AM IST — Starting Smart Inventory Stockout Prediction...');
+    const inventoryAiService = require('./services/wear/inventoryAiService');
+    await inventoryAiService.updateStockoutPredictions();
+  } catch (error) {
+    console.error('[CRON] ❌ Inventory AI crashed:', error.message);
+  }
+}, { timezone: 'Asia/Kolkata' });
 
 // 📦 Smart Logistics AI Tracking — runs every 6 hours
 cron.schedule('0 */6 * * *', async () => {
@@ -306,32 +319,68 @@ cron.schedule(`${reportMinute} ${reportHour} * * *`, async () => {
   }
 }, { timezone: 'Asia/Kolkata' });
 
-console.log('[CRON] ✅ AI Predictive & Performance Crons registered.');
+// 📦 Inventory AI Pipeline — runs every day at 2:00 AM IST
+cron.schedule('0 23 * * *', async () => {
+    try {
+        console.log('[CRON] ⏰ 2:00 AM IST — Starting Inventory AI Pipeline...');
+        await inventoryAiService.runFullPipeline();
+    } catch (error) {
+        console.error('[CRON] ❌ Inventory AI Pipeline crashed:', error.message);
+    }
+}, { timezone: 'Asia/Kolkata' });
+
+// 🚩 Dead Stock Identification — runs every Sunday at 3:00 AM IST
+cron.schedule('0 0 * * 0', async () => {
+    try {
+        console.log('[CRON] ⏰ Sunday 3:00 AM IST — Running Dead Stock Detection...');
+        const count = await inventoryAiService.identifyDeadStock();
+        console.log(`[CRON] ✅ Dead stock detection complete. ${count} items flagged.`);
+    } catch (error) {
+        console.error('[CRON] ❌ Dead stock detection crashed:', error.message);
+    }
+}, { timezone: 'Asia/Kolkata' });
+
+// 🔔 Restock Alerts — runs every day at 8:00 AM IST
+cron.schedule('0 2 * * *', async () => {
+    try {
+        console.log('[CRON] ⏰ 8:00 AM IST — Sending Restock Alerts...');
+        const count = await inventoryAiService.sendRestockAlerts();
+        console.log(`[CRON] ✅ ${count} Restock alerts sent.`);
+    } catch (error) {
+        console.error('[CRON] ❌ Restock alerts crashed:', error.message);
+    }
+}, { timezone: 'Asia/Kolkata' });
+
+// 📦 Dead Stock Alerts — runs every Monday at 9:00 AM IST
+cron.schedule('30 3 * * 1', async () => {
+    try {
+        console.log('[CRON] ⏰ Monday 9:00 AM IST — Sending Dead Stock Alerts...');
+        const count = await inventoryAiService.sendDeadStockAlerts();
+        console.log(`[CRON] ✅ ${count} Dead stock alerts sent.`);
+    } catch (error) {
+        console.error('[CRON] ❌ Dead stock alerts crashed:', error.message);
+    }
+}, { timezone: 'Asia/Kolkata' });
+
+// ⏱ B2B Order Auto-Cancel — runs every 5 minutes
+cron.schedule('*/5 * * * *', async () => {
+    try {
+        const count = await b2bOrderController.auto_cancel_expired_orders();
+        if (count > 0) {
+            console.log(`[CRON_B2B] ✅ ${count} B2B orders auto-cancelled (48hr deadline).`);
+        }
+    } catch (error) {
+        console.error('[CRON_B2B] ❌ Auto-cancel check failed:', error.message);
+    }
+});
+
+console.log('[CRON] ✅ AI Predictive, Performance & Inventory Crons registered.');
 
 // --- API ROUTES ---
 app.use("/api", require("./routes/apiRoutes"));
 app.use("/api/v1", require("./routes/apiRoutes")); // Legacy/Versioned Compatibility
 
-// --- AWARENESS & ANALYTICS ---
-app.use("/api/awareness", require("./routes/Awareness/bannerRoutes"));
-app.use("/api/awareness", require("./routes/Awareness/pointRoutes"));
-app.use("/api/awareness", require("./routes/Awareness/imageRoutes"));
-app.use("/api/awareness", require("./routes/Awareness/socialCampaignRoutes"));
-app.use("/api/awareness/rewards", require("./routes/Awareness/rewardRoutes"));
-app.use("/api/awareness", require("./routes/Awareness/emailCampaignRoutes"));
-app.use("/api/awareness", require("./routes/Awareness/successStoryRoutes"));
-// Proxy/Alias for misspelled frontend request
-app.use("/api/awareness/successstorys", require("./routes/Awareness/successStoryRoutes"));
 
-app.use("/api/awareness", require("./routes/Awareness/guideRoutes"));
-app.use("/api/awareness", require("./routes/Awareness/videoRoutes"));
-app.use("/api/awareness", require("./routes/Awareness/accountsRoutes"));
-app.use("/api/awareness", require("./routes/Awareness/communityRoutes"));
-app.use("/api/awareness", require("./routes/Awareness/aiDoctorRoutes"));
-app.use("/api/awareness", require("./routes/Awareness/statsRoutes"));
-app.use("/api/awareness", require("./routes/Awareness/pesticideRoutes"));
-app.use("/api/awareness", require("./routes/Awareness/tickerRoutes"));
-app.use("/api/awareness", require("./routes/Awareness/homeContentRoutes"));
 
 app.get("/api/test", (req, res) => {
   res.json({ message: "✅ API is working", version: "2.1" });

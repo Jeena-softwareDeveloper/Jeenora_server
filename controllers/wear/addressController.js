@@ -1,5 +1,5 @@
 const addressModel = require("../../models/addressModel");
-const { responseReturn } = require("../../utiles/response");
+const { responseReturn } = require("../../utils/response");
 
 class addressController {
     get_addresses = async (req, res) => {

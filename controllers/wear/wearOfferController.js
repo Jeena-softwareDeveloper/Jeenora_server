@@ -1,12 +1,12 @@
 const WearOfferCampaign = require("../../models/wear/wearOfferCampaignModel");
-const WearNotification = require("../../models/wear/wearNotificationModel");
-const Supplier = require("../../models/wear/supplierModel");
+const WearNotification = require("../../models/wear/WearNotification");
+const Supplier = require("../../models/wear/Supplier");
 const WearProductOffer = require("../../models/wear/productOfferModel");
-const WearProduct = require("../../models/wear/wearProductModel");
-const { responseReturn } = require("../../utiles/response");
-const { getIo } = require("../../utiles/socket");
+const WearProduct = require("../../models/wear/WearProduct");
+const { responseReturn } = require("../../utils/response");
+const { getIo } = require("../../utils/socket");
 const formidable = require("formidable");
-const { sendEmail } = require("../../utiles/emailSender");
+const { sendEmail } = require("../../utils/emailSender");
 
 class wearOfferController {
 

@@ -1,5 +1,5 @@
 const jwt = require('jsonwebtoken');
-const Customer = require('../../models/wear/customerModel');
+const Customer = require('../../models/wear/Customer');
 
 /**
  * Google Login Controller

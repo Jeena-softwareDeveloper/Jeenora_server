@@ -1,5 +1,5 @@
 const { Schema, model } = require('mongoose')
-const { isValidTransition } = require('../../utiles/orderValidators')
+const { isValidTransition } = require('../../utils/orderValidators')
 
 const customerOrder = new Schema({
     customerId: {

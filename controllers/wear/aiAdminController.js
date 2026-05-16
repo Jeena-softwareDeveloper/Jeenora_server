@@ -1,7 +1,7 @@
-const { responseReturn } = require('../../utiles/response');
+const { responseReturn } = require('../../utils/response');
 const customerOrder = require('../../models/wear/customerOrder');
 const wearReviewModel = require('../../models/wear/wearReviewModel');
-const wearProductModel = require('../../models/wear/wearProductModel');
+const wearProductModel = require('../../models/wear/WearProduct');
 const axios = require('axios');
 
 class AIAdminController {

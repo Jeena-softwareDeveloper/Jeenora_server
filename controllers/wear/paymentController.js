@@ -1,7 +1,7 @@
-const sellerModel = require('../../models/wear/sellerModel')
+const Seller = require('../../models/wear/Seller')
 const sellerWallet = require('../../models/wear/sellerWallet')
-const withdrowRequest = require('../../models/withdrowRequest')
-const { responseReturn } = require('../../utiles/response')
+const WithdrawRequest = require('../../models/WithdrawRequest')
+const { responseReturn } = require('../../utils/response')
 const { mongo: { ObjectId } } = require('mongoose')
 
 class paymentController {
@@ -19,7 +19,7 @@ class paymentController {
         try {
             const payments = await sellerWallet.find({ sellerId })
 
-            const pendingWithdrows = await withdrowRequest.find({
+            const pendingWithdraws = await WithdrawRequest.find({
                 $and: [
                     {
                         sellerId: {
@@ -33,7 +33,7 @@ class paymentController {
                     }
                 ]
             })
-            const successWithdrows = await withdrowRequest.find({
+            const successWithdraws = await WithdrawRequest.find({
                 $and: [
                     {
                         sellerId: {
@@ -47,13 +47,13 @@ class paymentController {
                     }
                 ]
             })
-            const pendingAmount = this.sumAmount(pendingWithdrows)
-            const withdrowAmount = this.sumAmount(successWithdrows)
+            const pendingAmount = this.sumAmount(pendingWithdraws)
+            const withdrawAmount = this.sumAmount(successWithdraws)
             const totalAmount = this.sumAmount(payments)
 
             let availableAmount = 0;
             if (totalAmount > 0) {
-                availableAmount = (totalAmount - (pendingAmount + withdrowAmount))
+                availableAmount = (totalAmount - (pendingAmount + withdrawAmount))
             }
 
             const mapRequest = (reqs) => reqs.map(r => ({
@@ -66,10 +66,10 @@ class paymentController {
             responseReturn(res, 200, {
                 totalAmount,
                 pendingAmount,
-                withdrowAmount,
+                withdrawAmount,
                 availableAmount,
-                pendingWithdrows: mapRequest(pendingWithdrows),
-                successWithdrows: mapRequest(successWithdrows)
+                pendingWithdraws: mapRequest(pendingWithdraws),
+                successWithdraws: mapRequest(successWithdraws)
             })
 
         } catch (error) {
@@ -78,14 +78,14 @@ class paymentController {
     }
     // End Method 
 
-    withdrowal_request = async (req, res) => {
+    withdrawal_request = async (req, res) => {
         const { amount, sellerId } = req.body
         try {
-            const withdrowal = await withdrowRequest.create({
+            const withdrawal = await WithdrawRequest.create({
                 sellerId,
                 amount: parseInt(amount)
             })
-            responseReturn(res, 200, { withdrowal, message: 'Withdrowal Request Send' })
+            responseReturn(res, 200, { withdrawal, message: 'Withdrawal Request Sent' })
         } catch (error) {
             responseReturn(res, 500, { message: 'Internal Server Error' })
         }
@@ -93,8 +93,8 @@ class paymentController {
     // End Method 
     get_payment_request = async (req, res) => {
         try {
-            const withdrowalRequest = await withdrowRequest.find({ status: 'pending' })
-            responseReturn(res, 200, { withdrowalRequest })
+            const withdrawalRequest = await WithdrawRequest.find({ status: 'pending' })
+            responseReturn(res, 200, { withdrawalRequest })
         } catch (error) {
             responseReturn(res, 500, { message: 'Internal Server Error' })
         }
@@ -105,9 +105,9 @@ class paymentController {
         const { paymentId } = req.body;
         try {
             // Update withdrawal request status to success
-            await withdrowRequest.findByIdAndUpdate(paymentId, { status: 'success' });
+            await WithdrawRequest.findByIdAndUpdate(paymentId, { status: 'success' });
 
-            const payment = await withdrowRequest.findById(paymentId);
+            const payment = await WithdrawRequest.findById(paymentId);
             responseReturn(res, 200, { payment, message: 'Request Confirm Success' });
         } catch (error) {
             console.log(error);

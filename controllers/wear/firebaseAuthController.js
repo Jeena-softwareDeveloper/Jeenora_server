@@ -1,5 +1,5 @@
 const jwt = require('jsonwebtoken');
-const Customer = require('../../models/wear/customerModel');
+const Customer = require('../../models/wear/Customer');
 const crypto = require('crypto');
 const WearSession = require('../../models/wear/wearSessionModel');
 

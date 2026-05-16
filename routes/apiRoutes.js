@@ -1,16 +1,7 @@
 const router = require('express').Router();
 const aiMasterController = require('../controllers/wear/aiMasterController');
 
-// TEMPORARY TEST ROUTE (DELETE AFTER USE)
-router.get('/temp-test-report', async (req, res) => {
-    try {
-        console.log('📊 Manually Triggering Supplier Daily Report via API...');
-        await aiMasterController.generate_supplier_daily_report();
-        res.send('✅ Report triggered. Check WhatsApp/Email.');
-    } catch (err) {
-        res.status(500).send(err.message);
-    }
-});
+
 
 
 const { authMiddleware, authOptional } = require('../middlewares/authMiddleware');
@@ -41,15 +32,9 @@ router.get('/admin/settings/wear_config', authMiddleware, (req,res,next)=>{req.p
 router.get('/admin/settings', authMiddleware, adminSettingsController.getAllSettings);
 router.get('/admin/settings/:key', authMiddleware, adminSettingsController.getSetting);
 
-router.use('/admin/jobs', require('./admin/adminJobRoutes'));
-router.use('/admin/applications', require('./admin/adminApplicationRoutes'));
-router.use('/admin/resumes', require('./admin/adminResumeRoutes'));
-router.use('/admin/chat-support', require('./admin/chatSupportRoutes'));
 
-router.use('/hire', require('./hire/jobRoutes')); // Proxy for all hire routes
-router.use('/hire/payment', require('./hire/paymentRoutes'));
+
 router.use('/analytics', require('./analytics/index'));
-router.use('/market', require('./Awareness/marketRoutes'));
 router.use('/search', require('./wear/searchRoutes'));
 
 router.use('/wear/home', require('./wear/homeRoutes'));
@@ -104,7 +89,7 @@ router.use('/wear/logs', require('./wear/wearLogRoutes'));
 router.use('/wear/dashboard', require('./wear/dashboardRoutes'));
 
 router.use('/wear/whatsapp', require('./wear/wearWhatsAppRoutes'));
-router.use('/hire/whatsapp', require('./wear/wearWhatsAppRoutes')); // Mirror for Dashboard compatibility
+
 router.use('/', require('./wear/productOfferRoutes'));
 router.get('/wear/buyers', authMiddleware, adminWearController.get_wear_buyers);
 

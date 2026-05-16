@@ -1,15 +1,14 @@
 const adminModel = require('../../models/adminModel')
-const sellerModel = require('../../models/wear/sellerModel')
+const sellerModel = require('../../models/wear/Seller')
 const sellerCustomerModel = require('../../models/chat/sellerCustomerModel')
-const hireUserModel = require('../../models/hire/hireUserModel')
-const OTP = require('../../models/hire/otpModel')
-const { responseReturn } = require('../../utiles/response')
+const OTP = require('../../models/wear/WearOtp')
+const { responseReturn } = require('../../utils/response')
 const bcrypt = require('bcrypt');
-const { createToken } = require('../../utiles/tokenCreate')
+const { createToken } = require('../../utils/tokenCreate')
 const formidable = require("formidable")
 const cloudinary = require('cloudinary').v2
-const { generateOTP, sendOTPEmail } = require('../../services/emailService')
 const { checkAccountLock, recordFailedLogin, clearFailedLogins, blacklistToken } = require('../../middlewares/authMiddleware');
+
 class authControllers {
 
     admin_login = async (req, res) => {
@@ -125,134 +124,6 @@ class authControllers {
         }
     }
 
-    hire_register = async (req, res) => {
-        const { name, email, phone, password, skill, location, experience } = req.body;
-
-        try {
-            const existingUser = await hireUserModel.findOne({ email });
-            if (existingUser) {
-                return responseReturn(res, 400, { error: 'Email already exists' });
-            }
-
-            // Verify if OTP was verified for this email
-            const otpRecord = await OTP.findOne({
-                email,
-                purpose: 'signup',
-                verified: true
-            }).sort({ createdAt: -1 });
-
-            if (!otpRecord) {
-                return responseReturn(res, 400, { error: 'Please verify your email with OTP first' });
-            }
-
-            // Optional: Check if OTP is too old (e.g. verified > 10 mins ago)
-            if (Date.now() - new Date(otpRecord.updatedAt).getTime() > 10 * 60 * 1000) { // 10 minutes
-                return responseReturn(res, 400, { error: 'OTP verification expired. Please verify again.' });
-            }
-
-            const hashedPassword = await bcrypt.hash(password, 10);
-
-            const user = await hireUserModel.create({
-                name,
-                email,
-                phone,
-                skill: skill || null,
-                location: location || null,
-                experience: experience || null,
-                password: hashedPassword,
-            });
-
-            const token = await createToken({
-                id: user._id,
-                role: user.role
-            });
-
-            res.cookie('accessToken', token, {
-                expires: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-                httpOnly: true,
-                secure: process.env.NODE_ENV === 'production',
-                sameSite: 'strict'
-            });
-
-            responseReturn(res, 201, {
-                token,
-                message: 'Hire user registered successfully',
-                userInfo: {
-                    id: user._id,
-                    name: user.name,
-                    email: user.email,
-                    phone: user.phone,
-                    skill: user.skill,
-                    location: user.location,
-                    experience: user.experience,
-                    role: user.role
-                }
-            });
-
-        } catch (error) {
-            console.error(error);
-            responseReturn(res, 500, { error: 'Internal server error' });
-        }
-    }
-
-
-
-    hire_login = async (req, res) => {
-        const { email, password } = req.body;
-        const ip = req.ip || req.connection.remoteAddress;
-
-        try {
-            // Check account lockout
-            const lockStatus = await checkAccountLock(email);
-            if (lockStatus.locked) {
-                return responseReturn(res, 429, {
-                    error: `Account temporarily locked. Try again in ${lockStatus.remaining} minute(s).`
-                });
-            }
-
-            const user = await hireUserModel.findOne({ email }).select('+password');
-            if (!user) {
-                return responseReturn(res, 401, { error: 'Invalid credentials' });
-            }
-
-            const match = await bcrypt.compare(password, user.password);
-            if (!match) {
-                await recordFailedLogin(email, ip);
-                return responseReturn(res, 401, { error: 'Invalid credentials' });
-            }
-
-            await clearFailedLogins(email);
-            const token = await createToken({ id: user._id, role: user.role });
-
-            res.cookie('accessToken', token, {
-                expires: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-                httpOnly: true,
-                secure: process.env.NODE_ENV === 'production',
-                sameSite: 'strict'
-            });
-
-            responseReturn(res, 200, {
-                token,
-                message: 'Login successful',
-                userInfo: {
-                    id: user._id,
-                    name: user.name,
-                    email: user.email,
-                    phone: user.phone,
-                    skill: user.skill,
-                    location: user.location,
-                    experience: user.experience,
-                    resumeUrl: user.resumeUrl,
-                    subscription: user.subscription,
-                    role: user.role
-                }
-            });
-
-        } catch (error) {
-            responseReturn(res, 500, { error: 'Internal server error' });
-        }
-    }
-
     getUser = async (req, res) => {
         const { id, role } = req;
 
@@ -262,8 +133,6 @@ class authControllers {
                 user = await adminModel.findById(id);
             } else if (role === 'seller') {
                 user = await sellerModel.findById(id);
-            } else if (role === 'hireUser') {
-                user = await hireUserModel.findById(id);
             }
 
             if (!user) {
@@ -349,12 +218,6 @@ class authControllers {
                             })
                             const userInfo = await adminModel.findById(id)
                             responseReturn(res, 201, { message: 'Profile Image Upload Successfully', userInfo })
-                        } else if (role === 'hire' || role === 'hireUser') {
-                            await hireUserModel.findByIdAndUpdate(id, {
-                                image: result.url
-                            })
-                            const userInfo = await hireUserModel.findById(id)
-                            responseReturn(res, 201, { message: 'Profile Image Upload Successfully', userInfo })
                         } else {
                             console.error('Invalid role:', role)
                             responseReturn(res, 400, { error: 'Invalid user role for image upload' })
@@ -405,14 +268,6 @@ class authControllers {
                     // Admin might have different fields, adjust as needed
                 });
                 userInfo = await adminModel.findById(id);
-            } else if (role === 'hire') {
-                // Update hire user info
-                await hireUserModel.findByIdAndUpdate(id, {
-                    name: name,
-                    phone: phone,
-                    address: address
-                });
-                userInfo = await hireUserModel.findById(id);
             } else {
                 return responseReturn(res, 400, { error: 'Invalid user role' });
             }
@@ -421,23 +276,6 @@ class authControllers {
         } catch (error) {
             console.error('Profile update error:', error);
             responseReturn(res, 500, { error: error.message });
-        }
-    }
-
-    hire_profile_info_update = async (req, res) => {
-        const { skill, location, experience } = req.body;
-        const { id } = req;
-
-        try {
-            await hireUserModel.findByIdAndUpdate(id, {
-                skill,
-                location,
-                experience
-            })
-            const userInfo = await hireUserModel.findById(id)
-            responseReturn(res, 201, { message: 'Profile info updated successfully', userInfo })
-        } catch (error) {
-            responseReturn(res, 500, { error: error.message })
         }
     }
 
@@ -523,13 +361,11 @@ class authControllers {
         try {
             const otpCode = Math.floor(1000 + Math.random() * 9000).toString(); // 4 digit OTP
 
-            // Upsert OTP record
             await OTP.findOneAndUpdate(
-                { phone, purpose: 'login' },
+                { phone },
                 {
                     otp: otpCode,
-                    expiresAt: new Date(Date.now() + 5 * 60 * 1000), // 5 minutes
-                    verified: false
+                    createdAt: new Date()
                 },
                 { upsert: true, new: true }
             );
@@ -551,23 +387,21 @@ class authControllers {
         if (!phone || !otp) return responseReturn(res, 400, { error: 'Phone and OTP are required' });
 
         try {
-            const otpRecord = await OTP.findOne({ phone, otp, purpose: 'login' });
+            const otpRecord = await OTP.findOne({ phone, otp });
 
-            if (!otpRecord || otpRecord.expiresAt < new Date()) {
+            if (!otpRecord) {
                 return responseReturn(res, 400, { error: 'Invalid or expired OTP' });
             }
 
-            // Mark verified
-            otpRecord.verified = true;
-            await otpRecord.save();
+            await OTP.deleteOne({ _id: otpRecord._id });
 
             // Find or create customer
-            let customer = await require('../../models/wear/customerModel').findOne({ phone });
+            let customer = await require('../../models/wear/Customer').findOne({ phone });
             let userType = 'Existing';
 
             if (!customer) {
                 userType = 'New';
-                customer = await require('../../models/wear/customerModel').create({
+                customer = await require('../../models/wear/Customer').create({
                     name: 'Guest',
                     phone,
                     email: `user_${Date.now()}@jeenora.com`,
@@ -613,7 +447,7 @@ class authControllers {
         const { id } = req;
 
         try {
-            const customer = await require('../../models/wear/customerModel').findByIdAndUpdate(id, {
+            const customer = await require('../../models/wear/Customer').findByIdAndUpdate(id, {
                 onboarding: { language, gender, ageGroup }
             }, { new: true });
 

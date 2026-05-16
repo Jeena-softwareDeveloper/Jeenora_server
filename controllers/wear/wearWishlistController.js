@@ -1,5 +1,5 @@
 const Wishlist = require('../../models/wear/wishlistModel');
-const { responseReturn } = require('../../utiles/response');
+const { responseReturn } = require('../../utils/response');
 const mongoose = require('mongoose');
 
 class wearWishlistController {

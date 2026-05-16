@@ -1,8 +1,8 @@
 const bannerModel = require("../../models/wear/bannerModel");
-const categoryModel = require("../../models/wear/categoryModel");
-const productModel = require("../../models/wear/productModel");
+const categoryModel = require("../../models/wear/Category");
+const productModel = require("../../models/wear/Product");
 const adminSettingsModel = require("../../models/adminSettingsModel");
-const { responseReturn } = require("../../utiles/response");
+const { responseReturn } = require("../../utils/response");
 
 class homeLayoutController {
     get_home_layout = async (req, res) => {
@@ -13,10 +13,10 @@ class homeLayoutController {
             const categories = activeSections.includes("Categories") ? await categoryModel.find({}).limit(14) : [];
             const banners = activeSections.includes("Banner") ? await bannerModel.find({}).limit(5) : [];
 
-            const wearProductModel = require("../../models/wear/wearProductModel");
+            const wearProductModel = require("../../models/wear/WearProduct");
             let sections = [];
 
-            const { formatWearProductForClient } = require('../../utiles/productFormatter');
+            const { formatWearProductForClient } = require('../../utils/productFormatter');
 
             if (activeSections.includes("New Arrivals")) {
                 let products = await wearProductModel.find({ status: 'active' }).sort({ createdAt: -1 }).limit(10).lean();
@@ -98,7 +98,7 @@ class homeLayoutController {
         try {
             if (!q) return responseReturn(res, 200, { suggestions: [] });
 
-            const wearProductModel = require("../../models/wear/wearProductModel");
+            const wearProductModel = require("../../models/wear/WearProduct");
 
             // Run queries in parallel for maximum speed
             const [products, wearProducts] = await Promise.all([
@@ -191,7 +191,7 @@ class homeLayoutController {
     get_trending_data = async (req, res) => {
         try {
             const wearSearchHistoryModel = require("../../models/wear/wearSearchHistoryModel");
-            const wearProductModel = require("../../models/wear/wearProductModel");
+            const wearProductModel = require("../../models/wear/WearProduct");
             const customerOrder = require("../../models/wear/customerOrder");
 
             // 1. Trending Search Queries (Most frequent in last 7 days)

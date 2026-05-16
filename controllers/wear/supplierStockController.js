@@ -1,5 +1,8 @@
-const SupplierStock = require('../../models/wear/supplierStockModel');
-const Seller = require('../../models/wear/sellerModel');
+const SupplierStock = require('../../models/wear/SupplierStock');
+const Seller = require('../../models/wear/Seller');
+const Supplier = require('../../models/wear/Supplier');
+const authOrderModel = require('../../models/wear/AuthOrder');
+const moment = require('moment');
 
 // ─── HSN → GST lookup (common garment codes) ─────────────────────────────────
 const HSN_GST_MAP = {
@@ -31,26 +34,28 @@ const get_hsn_gst = async (req, res) => {
 // GET /wear/supplier/stock/list
 const get_stock_list = async (req, res) => {
     try {
-        const supplierId = req.id;
-        const { status } = req.query; // optional filter
+        const supplier = await Supplier.findOne({ user: req.id });
+        if (!supplier) return res.status(404).json({ error: 'Supplier identity not found' });
 
-        const filter = { supplierId };
+        const filter = { sellerId: supplier._id };
         if (status && status !== 'all') filter.status = status;
 
         const stocks = await SupplierStock.find(filter)
-            .select('styleName styleCode category status variants images hsnCode gstPercent createdAt listingRequestedAt')
+            .select('styleName styleCode category status variants images hsnCode gstPercent createdAt listingRequestedAt reorderLevel warehouseLocation stockoutDate isDeadStock salesVelocity')
             .sort({ createdAt: -1 });
 
         // Compute summary per item
         const list = stocks.map(s => {
             const totalStock = s.variants.reduce((sum, v) => sum + v.stock, 0);
+            const totalReserved = s.variants.reduce((sum, v) => sum + (v.reservedStock || 0), 0);
+            const availableStock = totalStock - totalReserved;
             const colors = [...new Set(s.variants.map(v => v.variantName))];
             const sizes = [...new Set(s.variants.map(v => v.size))];
             const minListingPrice = s.variants.length
                 ? Math.min(...s.variants.map(v => v.listingPrice))
                 : 0;
-            const hasLowStock = s.variants.some(v => v.stock > 0 && v.stock <= 5);
-            const hasOutOfStock = s.variants.some(v => v.stock === 0);
+            const hasLowStock = s.variants.some(v => (v.stock - (v.reservedStock || 0)) > 0 && (v.stock - (v.reservedStock || 0)) <= s.reorderLevel);
+            const hasOutOfStock = s.variants.some(v => (v.stock - (v.reservedStock || 0)) <= 0);
             return {
                 _id: s._id,
                 styleName: s.styleName,
@@ -58,6 +63,8 @@ const get_stock_list = async (req, res) => {
                 category: s.category,
                 status: s.status,
                 totalStock,
+                totalReserved,
+                availableStock,
                 colors,
                 sizes,
                 minListingPrice,
@@ -66,6 +73,11 @@ const get_stock_list = async (req, res) => {
                 gstPercent: s.gstPercent,
                 hasLowStock,
                 hasOutOfStock,
+                reorderLevel: s.reorderLevel,
+                warehouseLocation: s.warehouseLocation,
+                stockoutDate: s.stockoutDate,
+                salesVelocity: s.salesVelocity,
+                isDeadStock: s.isDeadStock,
                 createdAt: s.createdAt,
                 listingRequestedAt: s.listingRequestedAt
             };
@@ -77,11 +89,12 @@ const get_stock_list = async (req, res) => {
     }
 };
 
-// GET /wear/supplier/stock/:id
 const get_stock_detail = async (req, res) => {
     try {
-        const supplierId = req.id;
-        const stock = await SupplierStock.findOne({ _id: req.params.id, supplierId });
+        const supplier = await Supplier.findOne({ user: req.id });
+        if (!supplier) return res.status(404).json({ error: 'Supplier identity not found' });
+
+        const stock = await SupplierStock.findOne({ _id: req.params.id, sellerId: supplier._id });
         if (!stock) return res.status(404).json({ error: 'Stock not found' });
         return res.json({ success: true, stock });
     } catch (err) {
@@ -92,13 +105,16 @@ const get_stock_detail = async (req, res) => {
 // POST /wear/supplier/stock/add
 const add_stock = async (req, res) => {
     try {
-        const supplierId = req.id;
+        const supplier = await Supplier.findOne({ user: req.id });
+        if (!supplier) return res.status(404).json({ error: 'Supplier identity not found' });
+
         const {
             styleName, styleCode, category, subCategory,
             hsnCode, variants,
             weightGrams, lengthCm, widthCm, heightCm,
             piecesPerCarton, minOrderQty,
-            images, washCare, fabricDetails
+            images, washCare, fabricDetails,
+            reorderLevel, warehouseLocation
         } = req.body;
 
         if (!styleName || !styleCode || !hsnCode || !variants?.length) {
@@ -110,21 +126,31 @@ const add_stock = async (req, res) => {
         const gstPercent = HSN_GST_MAP[prefix] || 5;
 
         // Check duplicate styleCode for this supplier
-        const existing = await SupplierStock.findOne({ supplierId, styleCode });
+        const existing = await SupplierStock.findOne({ sellerId: supplier._id, styleCode });
         if (existing) {
             return res.status(400).json({ error: `Style code "${styleCode}" already exists` });
         }
 
+        // Set lastMovementAt on creation
+        const now = new Date();
+
         const newStock = new SupplierStock({
-            supplierId, styleName, styleCode, category,
+            sellerId: supplier._id, styleName, styleCode, category,
             subCategory: subCategory || '',
             hsnCode, gstPercent,
-            variants, weightGrams, lengthCm, widthCm, heightCm,
+            variants: variants.map(v => ({
+                ...v,
+                reservedStock: 0 // Always start with 0 reserved
+            })),
+            weightGrams, lengthCm, widthCm, heightCm,
             piecesPerCarton, minOrderQty,
             images: images || [],
             washCare: washCare || '',
             fabricDetails: fabricDetails || '',
-            status: 'private'
+            status: 'private',
+            reorderLevel: reorderLevel || 5,
+            warehouseLocation: warehouseLocation || '',
+            lastMovementAt: now
         });
 
         await newStock.save();
@@ -137,8 +163,10 @@ const add_stock = async (req, res) => {
 // PATCH /wear/supplier/stock/:id — update fields while private
 const update_stock = async (req, res) => {
     try {
-        const supplierId = req.id;
-        const stock = await SupplierStock.findOne({ _id: req.params.id, supplierId });
+        const supplier = await Supplier.findOne({ user: req.id });
+        if (!supplier) return res.status(404).json({ error: 'Supplier identity not found' });
+
+        const stock = await SupplierStock.findOne({ _id: req.params.id, sellerId: supplier._id });
         if (!stock) return res.status(404).json({ error: 'Stock not found' });
 
         if (!['private', 'rejected'].includes(stock.status)) {
@@ -148,12 +176,21 @@ const update_stock = async (req, res) => {
         const allowedFields = [
             'styleName', 'category', 'subCategory', 'variants',
             'weightGrams', 'lengthCm', 'widthCm', 'heightCm',
-            'piecesPerCarton', 'minOrderQty', 'images', 'washCare', 'fabricDetails'
+            'piecesPerCarton', 'minOrderQty', 'images', 'washCare', 'fabricDetails',
+            'reorderLevel', 'warehouseLocation'
         ];
 
         allowedFields.forEach(field => {
             if (req.body[field] !== undefined) stock[field] = req.body[field];
         });
+
+        // Ensure reservedStock on any new variants added
+        if (req.body.variants) {
+            stock.variants = stock.variants.map(v => ({
+                ...v.toObject(),
+                reservedStock: v.reservedStock || 0
+            }));
+        }
 
         // If HSN changed, recalculate GST
         if (req.body.hsnCode && req.body.hsnCode !== stock.hsnCode) {
@@ -172,10 +209,12 @@ const update_stock = async (req, res) => {
 // POST /wear/supplier/stock/:id/request-listing
 const request_listing = async (req, res) => {
     try {
-        const supplierId = req.id;
+        const supplier = await Supplier.findOne({ user: req.id });
+        if (!supplier) return res.status(404).json({ error: 'Supplier identity not found' });
+
         const { supplierNote } = req.body;
 
-        const stock = await SupplierStock.findOne({ _id: req.params.id, supplierId });
+        const stock = await SupplierStock.findOne({ _id: req.params.id, sellerId: supplier._id });
         if (!stock) return res.status(404).json({ error: 'Stock not found' });
 
         if (!['private', 'rejected'].includes(stock.status)) {
@@ -200,19 +239,169 @@ const request_listing = async (req, res) => {
 // PATCH /wear/supplier/stock/:id/stock-update — update qty for a variant
 const update_variant_stock = async (req, res) => {
     try {
-        const supplierId = req.id;
-        const { variantName, size, newStock } = req.body;
+        const supplier = await Supplier.findOne({ user: req.id });
+        if (!supplier) return res.status(404).json({ error: 'Supplier identity not found' });
 
-        const stock = await SupplierStock.findOne({ _id: req.params.id, supplierId });
+        const { color, size, newStock } = req.body;
+
+        const stock = await SupplierStock.findOne({ _id: req.params.id, sellerId: supplier._id });
         if (!stock) return res.status(404).json({ error: 'Stock not found' });
 
-        const variant = stock.variants.find(v => v.variantName === color && v.size === size);
+        const variant = stock.variants.find(v => v.color === color && v.size === size);
         if (!variant) return res.status(404).json({ error: 'Variant not found' });
 
+        const oldStock = variant.stock;
         variant.stock = Math.max(0, Number(newStock));
+
+        // 🔹 Track movement: if stock increased, update lastMovementAt
+        if (Number(newStock) > oldStock) {
+            stock.lastMovementAt = new Date();
+        }
+
         await stock.save();
 
         return res.json({ success: true, message: 'Stock updated' });
+    } catch (err) {
+        return res.status(500).json({ error: err.message });
+    }
+};
+
+// ── NEW: Bulk stock update endpoint ─────────────────────────────────────────
+
+// PATCH /wear/supplier/stock/:id/bulk-stock-update
+const bulk_update_variant_stock = async (req, res) => {
+    try {
+        const supplier = await Supplier.findOne({ user: req.id });
+        if (!supplier) return res.status(404).json({ error: 'Supplier identity not found' });
+
+        const { updates } = req.body; // Array of { color, size, newStock }
+
+        if (!Array.isArray(updates) || updates.length === 0) {
+            return res.status(400).json({ error: 'updates array required' });
+        }
+
+        const stock = await SupplierStock.findOne({ _id: req.params.id, sellerId: supplier._id });
+        if (!stock) return res.status(404).json({ error: 'Stock not found' });
+
+        let hasIncrease = false;
+        for (const u of updates) {
+            const variant = stock.variants.find(v => v.color === u.color && v.size === u.size);
+            if (!variant) continue;
+            const oldStock = variant.stock;
+            variant.stock = Math.max(0, Number(u.newStock));
+            if (Number(u.newStock) > oldStock) hasIncrease = true;
+        }
+
+        if (hasIncrease) stock.lastMovementAt = new Date();
+        await stock.save();
+
+        return res.json({ success: true, message: `${updates.length} variants updated` });
+    } catch (err) {
+        return res.status(500).json({ error: err.message });
+    }
+};
+
+// ── NEW: Inventory Alert Check ──────────────────────────────────────────────
+
+// GET /wear/supplier/stock/alerts — returns low stock & restock-needed items
+const get_inventory_alerts = async (req, res) => {
+    try {
+        const supplier = await Supplier.findOne({ user: req.id });
+        if (!supplier) return res.status(404).json({ error: 'Supplier identity not found' });
+
+        const stocks = await SupplierStock.find({ sellerId: supplier._id })
+            .select('styleName styleCode variants reorderLevel stockoutDate isDeadStock lastMovementAt images');
+
+        const alerts = [];
+        const now = new Date();
+
+        for (const stock of stocks) {
+            for (const v of (stock.variants || [])) {
+                const available = (v.stock || 0) - (v.reservedStock || 0);
+                
+                // Low stock alert
+                if (available > 0 && available <= stock.reorderLevel) {
+                    alerts.push({
+                        type: 'low_stock',
+                        stockId: stock._id,
+                        styleName: stock.styleName,
+                        styleCode: stock.styleCode,
+                        color: v.color,
+                        size: v.size,
+                        available,
+                        reorderLevel: stock.reorderLevel,
+                        image: stock.images?.[0] || null
+                    });
+                }
+
+                // Out of stock alert
+                if (available <= 0) {
+                    alerts.push({
+                        type: 'out_of_stock',
+                        stockId: stock._id,
+                        styleName: stock.styleName,
+                        styleCode: stock.styleCode,
+                        color: v.color,
+                        size: v.size,
+                        available: 0,
+                        image: stock.images?.[0] || null
+                    });
+                }
+            }
+
+            // Stockout prediction alert (within 5 days)
+            if (stock.stockoutDate) {
+                const daysUntilStockout = moment(stock.stockoutDate).diff(now, 'days');
+                if (daysUntilStockout >= 0 && daysUntilStockout <= 5) {
+                    alerts.push({
+                        type: 'stockout_soon',
+                        stockId: stock._id,
+                        styleName: stock.styleName,
+                        styleCode: stock.styleCode,
+                        daysUntilStockout,
+                        predictedDate: stock.stockoutDate,
+                        image: stock.images?.[0] || null
+                    });
+                }
+            }
+
+            // Dead stock alert
+            if (stock.isDeadStock) {
+                alerts.push({
+                    type: 'dead_stock',
+                    stockId: stock._id,
+                    styleName: stock.styleName,
+                    styleCode: stock.styleCode,
+                    lastMovementAt: stock.lastMovementAt,
+                    image: stock.images?.[0] || null
+                });
+            }
+        }
+
+        return res.json({ success: true, alerts, alertCount: alerts.length });
+    } catch (err) {
+        console.error('[GET_INVENTORY_ALERTS_ERROR]', err);
+        return res.status(500).json({ error: err.message });
+    }
+};
+
+// ── NEW: Warehouse location update ──────────────────────────────────────────
+
+// PATCH /wear/supplier/stock/:id/warehouse
+const update_warehouse_location = async (req, res) => {
+    try {
+        const supplier = await Supplier.findOne({ user: req.id });
+        if (!supplier) return res.status(404).json({ error: 'Supplier identity not found' });
+
+        const { warehouseLocation } = req.body;
+
+        const stock = await SupplierStock.findOne({ _id: req.params.id, sellerId: supplier._id });
+        if (!stock) return res.status(404).json({ error: 'Stock not found' });
+
+        stock.warehouseLocation = warehouseLocation || '';
+        await stock.save();
+
+        return res.json({ success: true, message: 'Warehouse location updated' });
     } catch (err) {
         return res.status(500).json({ error: err.message });
     }
@@ -225,7 +414,7 @@ const admin_get_pending_stocks = async (req, res) => {
     try {
         const { status = 'pending_approval' } = req.query;
         const stocks = await SupplierStock.find({ status })
-            .populate('supplierId', 'shopName name email phone')
+            .populate('sellerId', 'shopName name email phone')
             .sort({ listingRequestedAt: 1 });
         return res.json({ success: true, stocks });
     } catch (err) {
@@ -258,6 +447,44 @@ const admin_review_stock = async (req, res) => {
     }
 };
 
+// ── ADMIN: AI Inventory Dashboard ──────────────────────────────────────────
+
+// GET /wear/admin/supplier-stock/ai-summary
+const admin_get_ai_summary = async (req, res) => {
+    try {
+        const deadStockCount = await SupplierStock.countDocuments({ isDeadStock: true, status: 'active' });
+        const lowStockCount = await SupplierStock.countDocuments({
+            status: 'active',
+            $expr: {
+                $gt: [{ $size: { $filter: {
+                    input: '$variants',
+                    as: 'v',
+                    cond: { $and: [
+                        { $gt: [{ $subtract: ['$$v.stock', { $ifNull: ['$$v.reservedStock', 0] }] }, 0] },
+                        { $lte: [{ $subtract: ['$$v.stock', { $ifNull: ['$$v.reservedStock', 0] }] }, '$reorderLevel'] }
+                    ]}
+                }}}, 0]
+            }
+        });
+        const stockoutSoonCount = await SupplierStock.countDocuments({
+            status: 'active',
+            stockoutDate: { $gte: new Date(), $lte: moment().add(5, 'days').toDate() }
+        });
+
+        return res.json({
+            success: true,
+            summary: {
+                deadStockCount,
+                lowStockCount,
+                stockoutSoonCount,
+                totalActive: await SupplierStock.countDocuments({ status: 'active' })
+            }
+        });
+    } catch (err) {
+        return res.status(500).json({ error: err.message });
+    }
+};
+
 module.exports = {
     get_hsn_gst,
     get_stock_list,
@@ -266,6 +493,10 @@ module.exports = {
     update_stock,
     request_listing,
     update_variant_stock,
+    bulk_update_variant_stock,
+    get_inventory_alerts,
+    update_warehouse_location,
     admin_get_pending_stocks,
-    admin_review_stock
+    admin_review_stock,
+    admin_get_ai_summary
 };

@@ -1,5 +1,5 @@
 const WearCart = require('../../models/wear/wearCartModel');
-const WearProduct = require('../../models/wear/wearProductModel');
+const WearProduct = require('../../models/wear/WearProduct');
 
 const wearCartController = {
     // 1. Add to Cart

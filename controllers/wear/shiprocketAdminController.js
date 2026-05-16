@@ -1,5 +1,5 @@
-const { responseReturn } = require("../../utiles/response");
-const shiprocketService = require("../../utiles/shiprocketService");
+const { responseReturn } = require("../../utils/response");
+const shiprocketService = require("../../utils/shiprocketService");
 
 class shiprocketAdminController {
     get_wallet_balance = async (req, res) => {

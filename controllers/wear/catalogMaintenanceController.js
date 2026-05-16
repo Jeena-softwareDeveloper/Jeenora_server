@@ -1,6 +1,6 @@
-const WearProduct = require('../../models/wear/wearProductModel');
-const Supplier = require('../../models/wear/supplierModel');
-const { responseReturn } = require('../../utiles/response');
+const WearProduct = require('../../models/wear/WearProduct');
+const Supplier = require('../../models/wear/Supplier');
+const { responseReturn } = require('../../utils/response');
 const mongoose = require('mongoose');
 
 class CatalogMaintenanceController {
@@ -18,7 +18,7 @@ class CatalogMaintenanceController {
             }
             
             // Get all supplier products
-            const products = await WearProduct.find({ supplierId: supplier._id });
+            const products = await WearProduct.find({ sellerId: supplier._id });
             
             // Calculate sync status
             const totalProducts = products.length;
@@ -81,7 +81,7 @@ class CatalogMaintenanceController {
             const syncStart = new Date();
             
             // Get products to sync
-            const query = { supplierId: supplier._id };
+            const query = { sellerId: supplier._id };
             
             if (syncType === 'pending') {
                 query.status = 'pending';
@@ -204,7 +204,7 @@ class CatalogMaintenanceController {
                 try {
                     const product = await WearProduct.findOne({
                         _id: update.productId,
-                        supplierId: supplier._id
+                        sellerId: supplier._id
                     });
                     
                     if (!product) {
@@ -326,7 +326,7 @@ class CatalogMaintenanceController {
             
             // Get products
             const products = await WearProduct.find({
-                supplierId: supplier._id,
+                sellerId: supplier._id,
                 createdAt: { $gte: start, $lte: end }
             });
             
@@ -373,7 +373,7 @@ class CatalogMaintenanceController {
             }
             
             // Build query
-            const query = { supplierId: supplier._id };
+            const query = { sellerId: supplier._id };
             
             if (include === 'active') {
                 query.status = 'active';

@@ -1,7 +1,7 @@
-const customerModel = require("../../models/wear/customerModel");
+const customerModel = require("../../models/wear/Customer");
 const WearBuyer = require("../../models/wear/wearBuyerModel");
 const chatSupportTicket = require("../../models/ChatSupportTicket");
-const { responseReturn } = require("../../utiles/response");
+const { responseReturn } = require("../../utils/response");
 
 class profileController {
     get_profile = async (req, res) => {
@@ -27,7 +27,7 @@ class profileController {
             }
     
             // Check if user is a Supplier (Strict fetch)
-            const Supplier = require('../../models/wear/supplierModel');
+            const Supplier = require('../../models/wear/Supplier');
             const supplierInfo = await Supplier.findOne({ user: user._id }).select('status businessDetails.shopName').lean();
     
             // Explicitly build response object (Whitelist only)
@@ -86,7 +86,7 @@ class profileController {
         const { id } = req;
         try {
             // Check Supplier first
-            const Supplier = require('../../models/wear/supplierModel');
+            const Supplier = require('../../models/wear/Supplier');
             const supplier = await Supplier.findOne({ user: id }).select('bankDetails');
 
             if (supplier && supplier.bankDetails) {

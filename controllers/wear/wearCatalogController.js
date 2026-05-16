@@ -1,10 +1,10 @@
-const WearProduct = require('../../models/wear/wearProductModel');
-const Supplier = require('../../models/wear/supplierModel');
-const Seller = require('../../models/wear/sellerModel');
-const { responseReturn } = require('../../utiles/response');
+const WearProduct = require('../../models/wear/WearProduct');
+const Supplier = require('../../models/wear/Supplier');
+const Seller = require('../../models/wear/Seller');
+const { responseReturn } = require('../../utils/response');
 const { v4: uuidv4 } = require('uuid');
 const mongoose = require('mongoose');
-const cloudinary = require('../../utiles/cloudinary');
+const cloudinary = require('../../utils/cloudinary');
 
 class wearCatalogController {
     // Helper to upload images to Cloudinary with optional background removal
@@ -107,7 +107,7 @@ class wearCatalogController {
                 }
 
                 // --- CATEGORY ID RESOLUTION ---
-                const WearCategory = require('../../models/wear/wearCategoryModel');
+                const WearCategory = require('../../models/wear/WearCategory');
                 let catDoc = null;
                 let subCatDoc = null;
 
@@ -209,7 +209,7 @@ class wearCatalogController {
             }
 
             const sellerObjectId = new mongoose.Types.ObjectId(String(supplier._id));
-            const productModel = require('../../models/wear/productModel');
+            const productModel = require('../../models/wear/Product');
 
             // 1. Get Grouped Wear Catalogs (aggregated by catalogId)
             const groupedCatalogs = await WearProduct.aggregate([
@@ -327,7 +327,7 @@ class wearCatalogController {
     // Admin: Get all catalogs from all suppliers - Grouped by catalogId
     get_all_catalogs = async (req, res) => {
         try {
-            const productModel = require('../../models/wear/productModel');
+            const productModel = require('../../models/wear/Product');
 
             // 1. Get Grouped Wear Catalogs (Meesho Flow)
             const groupedCatalogs = await WearProduct.aggregate([
@@ -476,7 +476,7 @@ class wearCatalogController {
         const { sellerId } = req.query;
         try {
             if (!sellerId) return responseReturn(res, 400, { error: 'sellerId is required' });
-            const productModel = require('../../models/wear/productModel');
+            const productModel = require('../../models/wear/Product');
 
             // 1. Get Grouped Wear Catalogs
             const groupedCatalogs = await WearProduct.aggregate([
@@ -707,7 +707,7 @@ class wearCatalogController {
             });
 
             // 2. Fetch Legacy Products (If no complex filters are present that legacy doesn't support)
-            const legacyProductModel = require('../../models/wear/productModel');
+            const legacyProductModel = require('../../models/wear/Product');
             let legacyMatch = { status: 'active' };
             if (category) {
                 if (categoryRegexes.length > 0) {
@@ -774,7 +774,7 @@ class wearCatalogController {
             let isWearProduct = true;
 
             if (!productToUpdate) {
-                const legacyProductModel = require('../../models/wear/productModel');
+                const legacyProductModel = require('../../models/wear/Product');
                 productToUpdate = await legacyProductModel.findById(productId);
                 isWearProduct = false;
             }
@@ -831,12 +831,23 @@ class wearCatalogController {
     delete_catalog = async (req, res) => {
         const { productId } = req.params;
         try {
-            await WearProduct.findByIdAndDelete(productId);
-            const legacyProductModel = require('../../models/wear/productModel');
-            await legacyProductModel.findByIdAndDelete(productId);
+            console.log(`[Catalog] Deleting product with ID: ${productId}`);
+            const wearRes = await WearProduct.deleteOne({ _id: productId });
+            console.log(`[Catalog] WearProduct delete result:`, wearRes);
+
+            const legacyProductModel = require('../../models/wear/Product');
+            const legacyRes = await legacyProductModel.deleteOne({ _id: productId });
+            console.log(`[Catalog] LegacyProduct delete result:`, legacyRes);
+
+            if (wearRes.deletedCount === 0 && legacyRes.deletedCount === 0) {
+                // Not found in either DB but we don't throw an error necessarily, 
+                // just log it. Maybe it was already deleted.
+                console.warn(`[Catalog] Product ID ${productId} was not found in any collection to delete.`);
+            }
 
             responseReturn(res, 200, { success: true, message: 'Catalog deleted successfully' });
         } catch (error) {
+            console.error('[Catalog] Delete Error:', error);
             responseReturn(res, 500, { error: error.message });
         }
     }
@@ -1051,7 +1062,7 @@ class wearCatalogController {
     // Public: Get real HSN code + GST rate for a category (set by admin in WearCategory)
     get_hsn_tax_data = async (req, res) => {
         try {
-            const WearCategory = require('../../models/wear/wearCategoryModel');
+            const WearCategory = require('../../models/wear/WearCategory');
             const { category } = req.query;
 
             if (category) {

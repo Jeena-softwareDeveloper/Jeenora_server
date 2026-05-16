@@ -1,6 +1,6 @@
-const WearProduct = require('../../models/wear/wearProductModel');
-const Product = require('../../models/wear/productModel');
-const { responseReturn } = require('../../utiles/response');
+const WearProduct = require('../../models/wear/WearProduct');
+const Product = require('../../models/wear/Product');
+const { responseReturn } = require('../../utils/response');
 
 class CatalogOffersController {
     update_catalog_offers = async (req, res) => {

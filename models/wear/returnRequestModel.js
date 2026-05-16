@@ -19,7 +19,7 @@ const ReturnRequestSchema = new Schema({
   },
   
   // Supplier & Customer References
-  supplierId: { 
+  sellerId: { 
     type: Schema.Types.ObjectId, 
     ref: 'Supplier',
     required: true 
@@ -136,7 +136,7 @@ const ReturnRequestSchema = new Schema({
 });
 
 // Indexes for faster queries
-ReturnRequestSchema.index({ supplierId: 1, status: 1 });
+ReturnRequestSchema.index({ sellerId: 1, status: 1 });
 ReturnRequestSchema.index({ orderId: 1 });
 ReturnRequestSchema.index({ catalogId: 1 });
 ReturnRequestSchema.index({ createdAt: -1 });
@@ -149,9 +149,9 @@ ReturnRequestSchema.pre('save', function(next) {
 });
 
 // Static method to get return statistics for supplier
-ReturnRequestSchema.statics.getSupplierStats = async function(supplierId) {
+ReturnRequestSchema.statics.getSupplierStats = async function(sellerId) {
   const stats = await this.aggregate([
-    { $match: { supplierId: new mongoose.Types.ObjectId(supplierId) } },
+    { $match: { sellerId: new mongoose.Types.ObjectId(sellerId) } },
     {
       $group: {
         _id: '$status',

@@ -1,4 +1,4 @@
-const authOrderModel = require('../../models/wear/authOrder')
+const authOrderModel = require('../../models/wear/AuthOrder')
 const customerOrder = require('../../models/wear/customerOrder')
 
 const myShopWallet = require('../../models/wear/myShopWallet')
@@ -6,20 +6,20 @@ const sellerWallet = require('../../models/wear/sellerWallet')
 
 const cardModel = require('../../models/wear/cardModel')
 const moment = require("moment")
-const { responseReturn } = require('../../utiles/response')
+const { responseReturn } = require('../../utils/response')
 const { mongo: { ObjectId } } = require('mongoose')
-const productModel = require('../../models/wear/productModel')
-const wearProductModel = require('../../models/wear/wearProductModel')
-const { ORDER_STATUS, isValidTransition } = require('../../utiles/orderValidators')
-const customerModel = require('../../models/wear/customerModel')
+const productModel = require('../../models/wear/Product')
+const wearProductModel = require('../../models/wear/WearProduct')
+const { ORDER_STATUS, isValidTransition } = require('../../utils/orderValidators')
+const customerModel = require('../../models/wear/Customer')
 const wearAuditLogModel = require('../../models/wear/wearAuditLogModel')
-const WearNotification = require('../../models/wear/wearNotificationModel');
-const shiprocketService = require('../../utiles/shiprocketService');
+const WearNotification = require('../../models/wear/WearNotification');
+const shiprocketService = require('../../utils/shiprocketService');
 
-const { sendEmail } = require('../../utiles/emailSender');
-const sellerModel = require('../../models/wear/sellerModel');
-const aiService = require('../../utiles/aiService');
-const whatsappClient = require('../../utiles/whatsappClient');
+const { sendEmail } = require('../../utils/emailSender');
+const sellerModel = require('../../models/wear/Seller');
+const aiService = require('../../utils/aiService');
+const whatsappClient = require('../../utils/whatsappClient');
 const { Cashfree, CFEnvironment } = require('cashfree-pg');
 const WearBuyer = require('../../models/wear/wearBuyerModel');
 
@@ -125,7 +125,7 @@ class orderController {
                 const subOrders = await authOrderModel.find({ orderId: order._id });
                 for (const sub of subOrders) {
                     const seller = await sellerModel.findById(sub.sellerId);
-                    const supplier = await require('../../models/wear/supplierModel').findById(sub.sellerId);
+                    const supplier = await require('../../models/wear/Supplier').findById(sub.sellerId);
                     
                     // Fetch Seller's main account for settings
                     let sellerAccount = null;
@@ -303,27 +303,27 @@ class orderController {
                     delivery_status: 'cancelled'
                 })
 
-                // --- STOCK REVERSION LOGIC ---
-                // If stock was decreased at order time, we must put it back now.
+                // --- STOCK REVERSION LOGIC (RESERVED STOCK) ---
+                // If reserved stock was increased at order time, we must release it now.
                 if (order.stock_decreased) {
                     for (const item of order.products) {
                         const isWear = !!item.variants || !!item.size;
                         if (isWear) {
                             await wearProductModel.findOneAndUpdate(
                                 { _id: item._id, "variants.size": item.size },
-                                { $inc: { "variants.$.stock": item.quantity } }
+                                { $inc: { "variants.$.reservedStock": -item.quantity } }
                             );
                         } else {
                             await productModel.findByIdAndUpdate(
                                 item._id,
-                                { $inc: { stock: item.quantity } }
+                                { $inc: { reservedStock: -item.quantity } }
                             );
                         }
                     }
                     // Mark as reverted
                     await customerOrder.findByIdAndUpdate(id, { stock_decreased: false });
                     await authOrderModel.updateMany({ orderId: id }, { stock_decreased: false });
-                    console.log(`[STOCK_REVERT] Inventory restored for expired order: ${id}`);
+                    console.log(`[STOCK_REVERT] Reserved inventory released for expired order: ${id}`);
                 }
             }
             return true
@@ -367,20 +367,30 @@ class orderController {
                     const isWear = !!productInfo.variants;
 
                     if (isWear) {
+                        // ATOMIC-ISH STOCK CHECK
                         const actualProduct = await wearProductModel.findById(productInfo._id);
-                        const isBulk = actualProduct?.isBulkOnly || (actualProduct?.variants || []).some(v => v.priceTiers?.length > 0);
+                        if (!actualProduct) {
+                            return responseReturn(res, 404, { error: `Product not found: ${productInfo.productName}` });
+                        }
+
+                        const size = item.size || productInfo.variants[0].size;
+                        const variant = (actualProduct.variants || []).find(v => v.size === size);
                         
-                        // For bulk products, we still decrease but with less strict check if needed
-                        // For MVP, we stick to standard atomic decrease
+                        if (!variant || (variant.stock - (variant.reservedStock || 0)) < requestedQty) {
+                            return responseReturn(res, 400, {
+                                error: `Insufficient stock for ${productInfo.productName} (Size: ${size}). Available: ${variant ? variant.stock - (variant.reservedStock || 0) : 0}`
+                            });
+                        }
+
                         const result = await wearProductModel.findOneAndUpdate(
                             {
                                 _id: productInfo._id,
-                                "variants.size": item.size || productInfo.variants[0].size,
-                                "variants.stock": { $gte: isBulk ? 1 : requestedQty } // Allow bulk if at least 1 exists
+                                "variants.size": size,
                             },
                             {
-                                $inc: { "variants.$.stock": -requestedQty }
-                            }
+                                $inc: { "variants.$.reservedStock": requestedQty }
+                            },
+                            { new: true }
                         );
 
                         if (!result) {
@@ -389,14 +399,21 @@ class orderController {
                             });
                         }
                     } else {
+                        // ATOMIC STOCK CHECK FOR LEGACY PRODUCT
                         const result = await productModel.findOneAndUpdate(
                             {
                                 _id: productInfo._id,
-                                stock: { $gte: requestedQty }
+                                $expr: {
+                                    $gte: [
+                                        { $subtract: ["$stock", { $ifNull: ["$reservedStock", 0] }] },
+                                        requestedQty
+                                    ]
+                                }
                             },
                             {
-                                $inc: { stock: -requestedQty }
-                            }
+                                $inc: { reservedStock: requestedQty }
+                            },
+                            { new: true }
                         );
 
                         if (!result) {
@@ -474,7 +491,7 @@ class orderController {
                 try {
                     const risk = await shiprocketService.getRtoRisk(shippingInfo.phone);
                     if (risk && (risk.risk_score > 70 || risk.status === 'high_risk')) {
-                        // REVERT STOCK (Because we decreased it earlier in this function)
+                        // REVERT RESERVED STOCK
                         for (let i = 0; i < products.length; i++) {
                             const pro = products[i].products;
                             for (let j = 0; j < pro.length; j++) {
@@ -483,12 +500,12 @@ class orderController {
                                 if (isWear) {
                                     await wearProductModel.findOneAndUpdate(
                                         { _id: item.productInfo._id, "variants.size": item.size || item.productInfo.variants[0].size },
-                                        { $inc: { "variants.$.stock": item.quantity } }
+                                        { $inc: { "variants.$.reservedStock": -item.quantity } }
                                     );
                                 } else {
                                     await productModel.findByIdAndUpdate(
                                         item.productInfo._id,
-                                        { $inc: { stock: item.quantity } }
+                                        { $inc: { reservedStock: -item.quantity } }
                                     );
                                 }
                             }
@@ -719,9 +736,6 @@ class orderController {
             } else {
                 const orders = await customerOrder.aggregate([
                     {
-                        $match: { delivery_status: { $ne: 'pending_payment' } }
-                    },
-                    {
                         $lookup: {
                             from: 'authororders',
                             localField: "_id",
@@ -731,9 +745,6 @@ class orderController {
                     }
                 ]).skip(skipPage).limit(parPage).sort({ createdAt: -1 })
                 const totalOrder = await customerOrder.aggregate([
-                    {
-                        $match: { delivery_status: { $ne: 'pending_payment' } }
-                    },
                     {
                         $lookup: {
                             from: 'authororders',
@@ -785,26 +796,63 @@ class orderController {
                 })
             }
 
-            // If transition to cancelled, return stock for each suborder that was already processed
-            if (status === 'cancelled' && order.delivery_status !== 'cancelled') {
+            // --- INVENTORY PHASE (SYNCED) ---
+            if (status === 'delivered') {
                 const subOrders = await authOrderModel.find({ orderId: new ObjectId(orderId) });
                 for (const sub of subOrders) {
-                    if (sub.stock_decreased) {
-                        for (const item of sub.products) {
-                            const isWear = !!item.variants || !!item.size;
-                            if (isWear) {
-                                await wearProductModel.findOneAndUpdate(
-                                    { _id: item._id, "variants.size": item.size },
-                                    { $inc: { "variants.$.stock": item.quantity } }
-                                );
-                            } else {
-                                await productModel.findByIdAndUpdate(
-                                    item._id,
-                                    { $inc: { stock: item.quantity } }
-                                );
-                            }
+                    for (const item of sub.products) {
+                        const isWear = !!item.variants || !!item.size;
+                        if (isWear) {
+                            await wearProductModel.findOneAndUpdate(
+                                { _id: item._id, "variants.size": item.size },
+                                { $inc: { "variants.$.stock": -item.quantity, "variants.$.reservedStock": -item.quantity } }
+                            );
+                        } else {
+                            await productModel.findByIdAndUpdate(
+                                item._id,
+                                { $inc: { stock: -item.quantity, reservedStock: -item.quantity } }
+                            );
                         }
-                        await authOrderModel.findByIdAndUpdate(sub._id, { stock_decreased: false });
+                    }
+                }
+            }
+
+            if (status === 'cancelled' || status === 'rto') {
+                const subOrders = await authOrderModel.find({ orderId: new ObjectId(orderId) });
+                for (const sub of subOrders) {
+                    for (const item of sub.products) {
+                        const isWear = !!item.variants || !!item.size;
+                        if (isWear) {
+                            await wearProductModel.findOneAndUpdate(
+                                { _id: item._id, "variants.size": item.size },
+                                { $inc: { "variants.$.reservedStock": -item.quantity } }
+                            );
+                        } else {
+                            await productModel.findByIdAndUpdate(
+                                item._id,
+                                { $inc: { reservedStock: -item.quantity } }
+                            );
+                        }
+                    }
+                }
+            }
+
+            if (status === 'returned') {
+                const subOrders = await authOrderModel.find({ orderId: new ObjectId(orderId) });
+                for (const sub of subOrders) {
+                    for (const item of sub.products) {
+                        const isWear = !!item.variants || !!item.size;
+                        if (isWear) {
+                            await wearProductModel.findOneAndUpdate(
+                                { _id: item._id, "variants.size": item.size },
+                                { $inc: { "variants.$.stock": item.quantity } }
+                            );
+                        } else {
+                            await productModel.findByIdAndUpdate(
+                                item._id,
+                                { $inc: { stock: item.quantity } }
+                            );
+                        }
                     }
                 }
             }
@@ -844,12 +892,10 @@ class orderController {
 
             } else {
                 const orders = await authOrderModel.find({
-                    sellerId,
-                    delivery_status: { $ne: 'pending_payment' }
+                    sellerId
                 }).skip(skipPage).limit(parPage).sort({ createdAt: -1 })
                 const totalOrder = await authOrderModel.find({
-                    sellerId,
-                    delivery_status: { $ne: 'pending_payment' }
+                    sellerId
                 }).countDocuments()
                 responseReturn(res, 200, { orders, totalOrder })
             }
@@ -903,31 +949,54 @@ class orderController {
                 delivery_status: status
             })
 
-            // --- INVENTORY PHASE ---
-            // 1. COMMITMENT: If moved to processing/shipped and not already decreased
-            if (['processing', 'shipped'].includes(status) && !order.stock_decreased) {
+            // --- INVENTORY PHASE (ADVANCED) ---
+            // 1. RESERVATION (Accepting): Handled at place_order for MVP simplicity
+            
+            // 2. DELIVERY COMMITMENT: If moved to delivered
+            if (status === 'delivered') {
                 for (const item of order.products) {
                     const isWear = !!item.variants || !!item.size;
                     if (isWear) {
+                        // Permanently remove from both Total and Reserved
                         await wearProductModel.findOneAndUpdate(
                             { _id: item._id, "variants.size": item.size },
-                            { $inc: { "variants.$.stock": -item.quantity } }
+                            { $inc: { "variants.$.stock": -item.quantity, "variants.$.reservedStock": -item.quantity } }
                         );
                     } else {
                         await productModel.findByIdAndUpdate(
                             item._id,
-                            { $inc: { stock: -item.quantity } }
+                            { $inc: { stock: -item.quantity, reservedStock: -item.quantity } }
                         );
                     }
                 }
-                await authOrderModel.findByIdAndUpdate(orderId, { stock_decreased: true });
             }
             
-            // 2. RECOVERY: If moved to cancelled and WAS already decreased
-            if (status === 'cancelled' && order.stock_decreased) {
+            // 3. RECOVERY: If moved to cancelled or RTO
+            if (status === 'cancelled' || status === 'rto') {
                 for (const item of order.products) {
                     const isWear = !!item.variants || !!item.size;
                     if (isWear) {
+                        // Release from Reserved only
+                        await wearProductModel.findOneAndUpdate(
+                            { _id: item._id, "variants.size": item.size },
+                            { $inc: { "variants.$.reservedStock": -item.quantity } }
+                        );
+                    } else {
+                        await productModel.findByIdAndUpdate(
+                            item._id,
+                            { $inc: { reservedStock: -item.quantity } }
+                        );
+                    }
+                }
+                await authOrderModel.findByIdAndUpdate(orderId, { stock_decreased: false });
+            }
+
+            // 4. RETURN (RTO): If returned back to inventory
+            if (status === 'returned') {
+                for (const item of order.products) {
+                    const isWear = !!item.variants || !!item.size;
+                    if (isWear) {
+                        // Add back to Total
                         await wearProductModel.findOneAndUpdate(
                             { _id: item._id, "variants.size": item.size },
                             { $inc: { "variants.$.stock": item.quantity } }
@@ -939,7 +1008,6 @@ class orderController {
                         );
                     }
                 }
-                await authOrderModel.findByIdAndUpdate(orderId, { stock_decreased: false });
             }
 
             // SYNC UPWARDS TO MAIN ORDER
@@ -1026,16 +1094,14 @@ class orderController {
             let result;
 
             if (isWearProduct) {
-                // If it's a Wear product with variants, we must decrease stock for that specific size
-                // We use findOneAndUpdate with a query that ONLY matches if stock is >= quantity
+                // We increment reservedStock instead of decreasing stock
                 result = await wearProductModel.findOneAndUpdate(
                     {
                         _id: productId,
-                        "variants.size": size,
-                        "variants.stock": { $gte: quantity }
+                        "variants.size": size
                     },
                     {
-                        $inc: { "variants.$.stock": -quantity }
+                        $inc: { "variants.$.reservedStock": quantity }
                     },
                     { new: true }
                 );
@@ -1043,11 +1109,10 @@ class orderController {
                 // For standard products
                 result = await productModel.findOneAndUpdate(
                     {
-                        _id: productId,
-                        stock: { $gte: quantity }
+                        _id: productId
                     },
                     {
-                        $inc: { stock: -quantity }
+                        $inc: { reservedStock: quantity }
                     },
                     { new: true }
                 );
@@ -1084,7 +1149,7 @@ class orderController {
             if (isWearProduct) {
                 result = await wearProductModel.findByIdAndUpdate(
                     productId,
-                    { $inc: { "variants.$[elem].stock": quantity } },
+                    { $inc: { "variants.$[elem].reservedStock": -quantity } },
                     {
                         arrayFilters: [{ "elem.size": size }],
                         new: true
@@ -1093,7 +1158,7 @@ class orderController {
             } else {
                 result = await productModel.findByIdAndUpdate(
                     productId,
-                    { $inc: { stock: quantity } },
+                    { $inc: { reservedStock: -quantity } },
                     { new: true }
                 );
             }
@@ -1129,20 +1194,19 @@ class orderController {
                 return responseReturn(res, 400, { message: 'Order cannot be cancelled at this stage' });
             }
 
-            // 2. Return Stock
-            // If stock was decreased at order time, we must put it back now.
+            // 2. Release Reserved Stock
             if (order.stock_decreased) {
                 for (const item of order.products) {
                     const isWear = !!item.variants || !!item.size;
                     if (isWear) {
                         await wearProductModel.findOneAndUpdate(
                             { _id: item._id, "variants.size": item.size },
-                            { $inc: { "variants.$.stock": item.quantity } }
+                            { $inc: { "variants.$.reservedStock": -item.quantity } }
                         );
                     } else {
                         await productModel.findByIdAndUpdate(
                             item._id,
-                            { $inc: { stock: item.quantity } }
+                            { $inc: { reservedStock: -item.quantity } }
                         );
                     }
                 }
@@ -1195,19 +1259,19 @@ class orderController {
                 return responseReturn(res, 400, { message: 'Order cannot be abandoned in this state' });
             }
 
-            // Return Stock
+            // Release Reserved Stock
             if (order.stock_decreased) {
                 for (const item of order.products) {
                     const isWear = !!item.variants || !!item.size;
                     if (isWear) {
                         await wearProductModel.findOneAndUpdate(
                             { _id: item._id, "variants.size": item.size },
-                            { $inc: { "variants.$.stock": item.quantity } }
+                            { $inc: { "variants.$.reservedStock": -item.quantity } }
                         );
                     } else {
                         await productModel.findByIdAndUpdate(
                             item._id,
-                            { $inc: { stock: item.quantity } }
+                            { $inc: { reservedStock: -item.quantity } }
                         );
                     }
                 }
@@ -1410,7 +1474,7 @@ class orderController {
     check_rto_risk = async (req, res) => {
         const { mobile } = req.params;
         try {
-            const shiprocketService = require('../../utiles/shiprocketService');
+            const shiprocketService = require('../../utils/shiprocketService');
             // Shiprocket returns something like: { risk_score: 0.8, reason: "High return rate" }
             const riskData = await shiprocketService.getRtoRisk(mobile);
             responseReturn(res, 200, { success: true, data: riskData });
@@ -1426,7 +1490,7 @@ class orderController {
         const { weight = 0.5, cod = 0 } = req.query;
         try {
             console.log(`[SHIPPING_CHECK] Pincode: ${pincode}, Weight: ${weight}, COD: ${cod}`);
-            const shiprocketService = require('../../utiles/shiprocketService');
+            const shiprocketService = require('../../utils/shiprocketService');
             const rateData = await shiprocketService.getShippingRate('641001', pincode, Number(weight), Number(cod));
             
             if (rateData) {

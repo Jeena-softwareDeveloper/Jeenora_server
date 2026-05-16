@@ -1,8 +1,8 @@
-const Supplier = require('../../models/wear/supplierModel');
-const AuthOrder = require('../../models/wear/authOrder');
+const Supplier = require('../../models/wear/Supplier');
+const AuthOrder = require('../../models/wear/AuthOrder');
 const ReturnRequest = require('../../models/wear/returnRequestModel');
 const RTO = require('../../models/wear/rtoModel');
-const { responseReturn } = require('../../utiles/response');
+const { responseReturn } = require('../../utils/response');
 const mongoose = require('mongoose');
 
 class SettlementController {
@@ -28,7 +28,7 @@ class SettlementController {
             
             // Get delivered orders in period
             const deliveredOrders = await AuthOrder.find({
-                sellerId: id,
+                sellerId: supplier._id,
                 delivery_status: 'delivered',
                 updatedAt: { $gte: start, $lte: end }
             });
@@ -64,7 +64,7 @@ class SettlementController {
             
             if (includeReturns) {
                 const returns = await ReturnRequest.find({
-                    supplierId: supplier._id,
+                    sellerId: supplier._id,
                     status: { $in: ['refund_completed', 'exchange_completed'] },
                     updatedAt: { $gte: start, $lte: end }
                 });
@@ -90,7 +90,7 @@ class SettlementController {
             
             if (includeRTOs) {
                 const rtos = await RTO.find({
-                    supplierId: supplier._id,
+                    sellerId: supplier._id,
                     status: { $in: ['restocked', 'disposed', 'lost'] },
                     updatedAt: { $gte: start, $lte: end }
                 });
@@ -167,7 +167,7 @@ class SettlementController {
             
             const statement = {
                 statementId: `STMT-${Date.now()}-${supplier._id.toString().slice(-6)}`,
-                supplierId: supplier._id,
+                sellerId: supplier._id,
                 supplierName: supplier.businessDetails?.shopName || 'Unknown',
                 period: period || 'Monthly',
                 generatedAt: new Date(),
@@ -308,7 +308,7 @@ class SettlementController {
             
             const payout = {
                 payoutId,
-                supplierId: supplier._id,
+                sellerId: supplier._id,
                 supplierName: supplier.businessDetails?.shopName || 'Unknown',
                 bankDetails: {
                     accountNumber: supplier.bankDetails?.accountNumber?.slice(-4) || '****',
@@ -370,7 +370,7 @@ class SettlementController {
             // Create payout request
             const payoutRequest = {
                 requestId: `REQ-${Date.now()}-${supplier._id.toString().slice(-6)}`,
-                supplierId: supplier._id,
+                sellerId: supplier._id,
                 supplierName: supplier.businessDetails?.shopName || 'Unknown',
                 amount,
                 requestedAt: new Date(),
@@ -524,7 +524,7 @@ class SettlementController {
             
             // Calculate return deductions
             const returns = await ReturnRequest.find({
-                supplierId: supplierId,
+                sellerId: supplierId,
                 status: { $in: ['refund_completed', 'exchange_completed'] },
                 updatedAt: { $gte: startDate, $lte: endDate }
             });
@@ -536,7 +536,7 @@ class SettlementController {
             
             // Calculate RTO deductions
             const rtos = await RTO.find({
-                supplierId: supplierId,
+                sellerId: supplierId,
                 status: { $in: ['restocked', 'disposed', 'lost'] },
                 updatedAt: { $gte: startDate, $lte: endDate }
             });

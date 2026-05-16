@@ -1,12 +1,12 @@
-const category = require('../../models/wear/categoryModel')
-const { responseReturn } = require("../../utiles/response")
-const productModel = require('../../models/wear/productModel')
-const queryProducts = require('../../utiles/queryProducts')
+const category = require('../../models/wear/Category')
+const { responseReturn } = require("../../utils/response")
+const productModel = require('../../models/wear/Product')
+const queryProducts = require('../../utils/queryProducts')
 const moment = require('moment')
 const reviewModel = require('../../models/reviewModel')
 const { mongo: { ObjectId } } = require('mongoose')
-const customerModel = require('../../models/wear/customerModel')
-const wearProductModel = require('../../models/wear/wearProductModel')
+const customerModel = require('../../models/wear/Customer')
+const wearProductModel = require('../../models/wear/WearProduct')
 const productOfferModel = require('../../models/wear/productOfferModel')
 const customerOrderModel = require('../../models/wear/customerOrder')
 const adminSettingsModel = require('../../models/adminSettingsModel')
@@ -38,7 +38,7 @@ class homeControllers {
 
     get_categorys = async (req, res) => {
         try {
-            const wearCategoryModel = require('../../models/wear/wearCategoryModel');
+            const wearCategoryModel = require('../../models/wear/WearCategory');
             // Show ONLY Active Main Categories (Level 0) on home page
             const categories = await wearCategoryModel.find({ level: 0, status: 'active' }).sort({ priority: 1 });
             responseReturn(res, 200, {
@@ -157,8 +157,8 @@ class homeControllers {
                     catalogMap.set(key, {
                         _id: p._id,
                         name: finalName,
-                        price: bestPrice,
-                        mrp: p.variants?.[0]?.mrp || p.originalPrice || bestPrice + 100,
+                        price: Math.ceil(bestPrice),
+                        mrp: Math.ceil(p.variants?.[0]?.mrp || p.originalPrice || bestPrice + 100),
                         discount: p.discount || 0,
                         rating: p.avgRating || p.rating || 5,
                         reviewCount: p.reviewCount || 0,
@@ -231,8 +231,8 @@ class homeControllers {
                 return {
                     _id: p._id,
                     name: finalName,
-                    price: bestPrice,
-                    mrp: p.variants?.[0]?.mrp || p.originalPrice || bestPrice + 100,
+                    price: Math.ceil(bestPrice),
+                    mrp: Math.ceil(p.variants?.[0]?.mrp || p.originalPrice || bestPrice + 100),
                     discount: p.discount || 0,
                     rating: p.avgRating || p.rating || 5,
                     reviewCount: p.reviewCount || 0,
@@ -349,8 +349,8 @@ class homeControllers {
                 return {
                     _id: p._id,
                     name: finalName,
-                    price: bestPrice,
-                    mrp: p.variants?.[0]?.mrp || p.originalPrice || bestPrice + 100,
+                    price: Math.ceil(bestPrice),
+                    mrp: Math.ceil(p.variants?.[0]?.mrp || p.originalPrice || bestPrice + 100),
                     discount: p.discount || 0,
                     rating: p.avgRating || p.rating || 5,
                     reviewCount: p.reviewCount || 0,
@@ -396,10 +396,26 @@ class homeControllers {
                 product = await wearProductModel.findOne({ slug })
                     .populate({ path: 'offers', match: { status: 'active' } })
                     .populate('sellerId', sellerSelection);
+
                 if (!product && ObjectId.isValid(slug)) {
+                    // 1. Try finding by direct Product ID
                     product = await wearProductModel.findById(slug)
                         .populate({ path: 'offers', match: { status: 'active' } })
                         .populate('sellerId', sellerSelection);
+                    
+                    // 2. NEW FALLBACK: Try finding as a Catalog ID (Return primary product of catalog)
+                    if (!product) {
+                        product = await wearProductModel.findOne({ catalogId: slug, isPrimary: true })
+                            .populate({ path: 'offers', match: { status: 'active' } })
+                            .populate('sellerId', sellerSelection);
+                        
+                        // 3. Last resort: Any product from that catalog
+                        if (!product) {
+                            product = await wearProductModel.findOne({ catalogId: slug })
+                                .populate({ path: 'offers', match: { status: 'active' } })
+                                .populate('sellerId', sellerSelection);
+                        }
+                    }
                 }
                 if (product) isWearProduct = true;
             }
@@ -409,7 +425,8 @@ class homeControllers {
             }
 
             // ENFORCE STATUS CHECK: If customer is viewing, must be active
-            if (product.status !== 'active') {
+            // Allow if demo=true (supplier preview from inventory)
+            if (product.status !== 'active' && req.query.demo !== 'true') {
                 return responseReturn(res, 403, { error: 'Product is pending approval' });
             }
 
@@ -424,15 +441,25 @@ class homeControllers {
                 images: product.images,
                 category: product.category,
                 subCategory: product.subCategory,
-                price: product.price || product.variants?.[0]?.listingPrice,
-                originalPrice: product.originalPrice || product.variants?.[0]?.mrp,
+                price: Math.ceil(product.price || product.variants?.[0]?.listingPrice),
+                originalPrice: Math.ceil(product.originalPrice || product.variants?.[0]?.mrp),
                 discount: product.discount || 0,
                 rating: product.rating || 5,
                 description: product.description,
                 brand: product.brand,
                 shopName: product.sellerId?.businessDetails?.shopName || product.sellerId?.shopInfo?.shopName || product.shopName,
-                sellerId: product.sellerId, // Return full object if needed, or at least the part frontend needs
-                variants: product.variants || [],
+                sellerId: product.sellerId,
+                variants: (product.variants || []).map(v => ({
+                    ...v,
+                    listingPrice: Math.ceil(v.listingPrice),
+                    mrp: Math.ceil(v.mrp),
+                    priceTiers: (v.priceTiers || []).map(t => ({
+                        ...t,
+                        price: Math.ceil(t.price),
+                        unitPrice: Math.ceil(t.unitPrice || t.price),
+                        finalPrice: Math.ceil(t.finalPrice || t.price)
+                    }))
+                })),
                 offers: product.offers || [],
                 catalogId: product.catalogId,
                 type: isWearProduct ? 'wear' : 'legacy'

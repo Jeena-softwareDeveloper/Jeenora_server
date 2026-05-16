@@ -1,6 +1,6 @@
-const WearLog = require('../../models/wear/wearLogModel');
+const WearLog = require('../../models/wear/WearLog');
 const WearBuyer = require('../../models/wear/wearBuyerModel');
-const { responseReturn } = require('../../utiles/response');
+const { responseReturn } = require('../../utils/response');
 const fs = require('fs');
 const path = require('path');
 const logFile = path.join(__dirname, 'wear_debug.log');
@@ -28,7 +28,7 @@ class wearLogController {
             if (userId) {
                 let userFetch = await WearBuyer.findById(userId);
                 if (!userFetch) {
-                    const customerModel = require('../../models/wear/customerModel');
+                    const customerModel = require('../../models/wear/Customer');
                     userFetch = await customerModel.findById(userId);
                 }
                 if (userFetch) phone = userFetch.phone;

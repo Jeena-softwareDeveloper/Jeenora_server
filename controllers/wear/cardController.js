@@ -1,5 +1,5 @@
 const cardModel = require("../../models/wear/cardModel")
-const { responseReturn } = require("../../utiles/response")
+const { responseReturn } = require("../../utils/response")
 const { mongo: { ObjectId } } = require('mongoose')
 const wishlistModel = require('../../models/wear/coreWishlistModel')
 

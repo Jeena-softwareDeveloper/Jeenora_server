@@ -1,8 +1,8 @@
 const sellerCustomerModel = require("../../models/chat/sellerCustomerModel")
-const customerModel = require('../../models/wear/customerModel')
-const { responseReturn } = require("../../utiles/response")
+const customerModel = require('../../models/wear/Customer')
+const { responseReturn } = require("../../utils/response")
 const bcrypt = require('bcrypt')
-const { createToken } = require('../../utiles/tokenCreate')
+const { createToken } = require('../../utils/tokenCreate')
 
 
 class customerAuthController {

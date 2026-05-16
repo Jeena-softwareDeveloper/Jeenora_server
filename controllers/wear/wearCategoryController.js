@@ -1,7 +1,7 @@
 const formidable = require("formidable");
-const { responseReturn } = require("../../utiles/response");
+const { responseReturn } = require("../../utils/response");
 const cloudinary = require('cloudinary').v2;
-const wearCategoryModel = require('../../models/wear/wearCategoryModel');
+const wearCategoryModel = require('../../models/wear/WearCategory');
 
 class WearCategoryController {
 

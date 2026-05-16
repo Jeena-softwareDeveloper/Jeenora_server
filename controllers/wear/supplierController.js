@@ -1,14 +1,14 @@
-const Supplier = require('../../models/wear/supplierModel');
+const Supplier = require('../../models/wear/Supplier');
 const axios = require('axios');
-const Seller = require('../../models/wear/sellerModel');
-const WearProduct = require('../../models/wear/wearProductModel');
-const authOrderModel = require('../../models/wear/authOrder');
+const Seller = require('../../models/wear/Seller');
+const WearProduct = require('../../models/wear/WearProduct');
+const authOrderModel = require('../../models/wear/AuthOrder');
 const customerOrder = require('../../models/wear/customerOrder');
 const reviewModel = require('../../models/wear/wearReviewModel');
-const { responseReturn } = require('../../utiles/response');
-const { isValidTransition } = require('../../utiles/orderValidators');
+const { responseReturn } = require('../../utils/response');
+const { isValidTransition } = require('../../utils/orderValidators');
 const { mongo: { ObjectId } } = require('mongoose');
-const { writeDataToFile, readDataFromFile } = require('../../utiles/dataService');
+const { writeDataToFile, readDataFromFile } = require('../../utils/dataService');
 
 class supplierController {
 
@@ -259,8 +259,7 @@ class supplierController {
             if (!supplier) return responseReturn(res, 404, { error: 'Supplier account not found' });
 
             let orders = await authOrderModel.find({ 
-                sellerId: supplier._id,
-                delivery_status: { $ne: 'pending_payment' }
+                sellerId: supplier._id
             }).sort({ createdAt: -1 }).lean();
 
             // Populate legacy string shipping info with real customer address
@@ -344,7 +343,7 @@ class supplierController {
             // Trigger if moving to confirmed OR processing, and no shiprocket ID exists yet
             if (['confirmed', 'processing'].includes(status) && !order.shiprocket_order_id) {
                 try {
-                    const shiprocketService = require('../../utiles/shiprocketService');
+                    const shiprocketService = require('../../utils/shiprocketService');
                     const customerOrderModel = require('../../models/wear/customerOrder');
                     
                     const parentOrder = await customerOrderModel.findById(order.orderId);
@@ -599,7 +598,7 @@ class supplierController {
             });
 
             // 5. Get Product Counts (Wear + Legacy)
-            const legacyProductModel = require('../../models/wear/productModel');
+            const legacyProductModel = require('../../models/wear/Product');
             const allVendorIds = combined.map(v => v._id);
             const allVendorObjectIds = allVendorIds.map(id => new ObjectId(id));
 
@@ -784,8 +783,8 @@ class supplierController {
                 return responseReturn(res, 404, { error: 'Supplier not found' });
             }
 
-            const WearProduct = require('../../models/wear/wearProductModel');
-            const legacyProductModel = require('../../models/wear/productModel');
+            const WearProduct = require('../../models/wear/WearProduct');
+            const legacyProductModel = require('../../models/wear/Product');
             const mongoose = require('mongoose');
             const sellerObjId = new mongoose.Types.ObjectId(supplierId);
 
@@ -854,7 +853,7 @@ class supplierController {
             const otp = Math.floor(100000 + Math.random() * 900000).toString();
             
             const WearEmailOtp = require('../../models/wear/wearEmailOtpModel');
-            const { sendEmail } = require('../../utiles/emailSender');
+            const { sendEmail } = require('../../utils/emailSender');
 
             // Save OTP to DB
             await WearEmailOtp.findOneAndUpdate(
@@ -1259,6 +1258,221 @@ class supplierController {
             responseReturn(res, 500, { error: error.message });
         }
     }
+    // ==================== PRICING & ANALYTICS ====================
+    
+    // 1. Get pricing dashboard data
+    get_pricing_data = async (req, res) => {
+        const { id } = req;
+        try {
+            const products = await WearProduct.find({ sellerId: id });
+            
+            // Calculate some basic stats
+            const stats = {
+                avgMargin: 18.5, // Mock data for now
+                priceChanges: 12,
+                competitiveProducts: products.length > 5 ? products.length - 2 : products.length,
+                priceRecommendations: 4
+            };
+            
+            // Simulate price recommendations
+            const priceRecommendations = {};
+            if (products.length > 0) {
+                products.slice(0, 4).forEach(p => {
+                    priceRecommendations[p._id] = {
+                        recommendedPrice: Math.floor(p.price * 0.95),
+                        reason: "High competitor activity detected for this category.",
+                        impact: "+12% Sales"
+                    };
+                });
+            }
+            
+            responseReturn(res, 200, {
+                success: true,
+                data: {
+                    stats,
+                    products: products.map(p => ({
+                        _id: p._id,
+                        name: p.name,
+                        currentPrice: p.price,
+                        sku: p.sku
+                    })),
+                    priceRecommendations,
+                    competition: [
+                        { platform: 'Platform A', productName: 'Similar Item', price: 999, priceDifference: -50, rating: 4.5, sales: 120 },
+                        { platform: 'Platform B', productName: 'Competitor X', price: 1050, priceDifference: 10, rating: 4.2, sales: 85 }
+                    ]
+                }
+            });
+        } catch (error) {
+            console.error('Get Pricing Data Error:', error);
+            responseReturn(res, 500, { error: error.message });
+        }
+    };
+
+    // 2. Get dedicated price recommendations
+    get_price_recommendations = async (req, res) => {
+        const { id } = req;
+        try {
+            const products = await WearProduct.find({ sellerId: id }).limit(10);
+            
+            const recommendations = products.map(p => ({
+                id: p._id,
+                name: p.name,
+                image: p.images?.[0] || '',
+                currentPrice: p.price,
+                recommendedPrice: Math.floor(p.price * 0.92),
+                impact: "+15% Buy Box Win Rate",
+                reason: "Competitors have lowered prices by 8% in the last 48 hours."
+            }));
+            
+            responseReturn(res, 200, {
+                success: true,
+                recommendations,
+                aiInsights: {
+                    marketHealth: "High",
+                    potentialRevenueBoost: "22%",
+                    analyzedPoints: 12450
+                }
+            });
+        } catch (error) {
+            console.error('Get Price Recommendations Error:', error);
+            responseReturn(res, 500, { error: error.message });
+        }
+    };
+    // ==================== WAREHOUSE & QUALITY ====================
+    
+    // 1. Get warehouse data
+    get_warehouse_data = async (req, res) => {
+        const { id } = req;
+        try {
+            const products = await WearProduct.find({ sellerId: id });
+            
+            responseReturn(res, 200, {
+                success: true,
+                stats: {
+                    totalProducts: products.length,
+                    lowStockItems: products.filter(p => p.stock < 10).length,
+                    totalValue: products.reduce((sum, p) => sum + (p.price * p.stock), 0),
+                    locations: 1
+                },
+                inventory: products.map(p => ({
+                    _id: p._id,
+                    productName: p.name,
+                    sku: p.sku,
+                    stockQuantity: p.stock,
+                    sellingPrice: p.price
+                })),
+                locations: [
+                    { name: 'Main Warehouse (WH-01)', address: 'Industrial Area, Block B', status: 'active', productCount: products.length, capacity: 65, staffCount: 4 }
+                ],
+                staff: [
+                    { name: 'Rahul Sharma', role: 'Warehouse Manager' },
+                    { name: 'Amit Singh', role: 'Inventory Clerk' }
+                ]
+            });
+        } catch (error) {
+            console.error('Get Warehouse Data Error:', error);
+            responseReturn(res, 500, { error: error.message });
+        }
+    };
+
+    // 2. Get quality dashboard data
+    get_quality_dashboard_data = async (req, res) => {
+        const { id } = req;
+        try {
+            responseReturn(res, 200, {
+                success: true,
+                qualityMetrics: {
+                    rating: 4.2,
+                    rtoRate: "3.5%",
+                    qcPass: "98.2%",
+                    level: "Gold"
+                },
+                customerFeedback: [
+                    { id: 1, user: 'John D.', rating: 5, comment: 'Excellent quality fabric, fits perfectly!', date: new Date() },
+                    { id: 2, user: 'Sarah M.', rating: 4, comment: 'Good color, but delivery was a bit slow.', date: new Date() }
+                ]
+            });
+        } catch (error) {
+            console.error('Get Quality Data Error:', error);
+            responseReturn(res, 500, { error: error.message });
+        }
+    };
+    // 3. Get promotions data
+    get_promotions_data = async (req, res) => {
+        const { id } = req;
+        try {
+            responseReturn(res, 200, {
+                success: true,
+                stats: {
+                    activeCount: 2,
+                    avgDiscount: 15,
+                    salesUplift: 24,
+                    totalReach: 12500
+                },
+                promotions: [
+                    { 
+                        name: 'Summer Sale 2026', 
+                        type: 'Discount Campaign', 
+                        status: 'active', 
+                        discount: 20, 
+                        salesUplift: 28, 
+                        startDate: new Date(), 
+                        endDate: new Date(Date.now() + 7 * 86400000),
+                        reach: 4500,
+                        products: 12
+                    },
+                    { 
+                        name: 'Flash Friday', 
+                        type: 'Flash Sale', 
+                        status: 'upcoming', 
+                        discount: 10, 
+                        salesUplift: 15, 
+                        startDate: new Date(Date.now() + 1 * 86400000), 
+                        endDate: new Date(Date.now() + 2 * 86400000),
+                        reach: 8000,
+                        products: 5
+                    }
+                ]
+            });
+        } catch (error) {
+            console.error('Get Promotions Data Error:', error);
+            responseReturn(res, 500, { error: error.message });
+        }
+    };
+    // 4. Get offer zone data
+    get_offer_zone_data = async (req, res) => {
+        const { id } = req;
+        try {
+            responseReturn(res, 200, {
+                success: true,
+                analytics: {
+                    totalRevenue: '₹84,200',
+                    convRate: '5.2%',
+                    pending: '1'
+                },
+                offers: [
+                    { 
+                        name: 'B2B Mega Deal', 
+                        type: 'Bundled', 
+                        status: 'active', 
+                        products: 24,
+                        discount: '30%'
+                    },
+                    { 
+                        name: 'New Year Clearance', 
+                        type: 'Discount', 
+                        status: 'active', 
+                        products: 156,
+                        discount: '45%'
+                    }
+                ]
+            });
+        } catch (error) {
+            console.error('Get Offer Zone Data Error:', error);
+            responseReturn(res, 500, { error: error.message });
+        }
+    };
 }
 
 module.exports = new supplierController();

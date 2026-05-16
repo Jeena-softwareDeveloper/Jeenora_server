@@ -1,5 +1,5 @@
-const Supplier = require('../../models/wear/supplierModel');
-const { responseReturn } = require('../../utiles/response');
+const Supplier = require('../../models/wear/Supplier');
+const { responseReturn } = require('../../utils/response');
 const mongoose = require('mongoose');
 
 class SupportCommunicationController {
@@ -47,7 +47,7 @@ class SupportCommunicationController {
             // Create ticket
             const ticket = {
                 ticketId: `TKT-${Date.now()}-${supplier._id.toString().slice(-6)}`,
-                supplierId: supplier._id,
+                sellerId: supplier._id,
                 supplierName: supplier.businessDetails?.shopName || 'Unknown',
                 type,
                 subject,
@@ -194,7 +194,7 @@ class SupportCommunicationController {
             // Mock ticket details
             const ticket = {
                 ticketId,
-                supplierId: supplier._id,
+                sellerId: supplier._id,
                 supplierName: supplier.businessDetails?.shopName || 'Unknown',
                 type: 'order_issue',
                 subject: 'Order delivery delay',
@@ -581,7 +581,7 @@ class SupportCommunicationController {
     // ==================== HELPER METHODS ====================
     
     // Helper: Generate mock tickets
-    generateMockTickets = (supplierId) => {
+    generateMockTickets = (sellerId) => {
         const ticketTypes = ['order_issue', 'payment_issue', 'catalog_issue', 'technical_issue', 'account_issue', 'general_query'];
         const statuses = ['open', 'in_progress', 'resolved', 'closed'];
         const priorities = ['low', 'medium', 'high'];
@@ -598,8 +598,8 @@ class SupportCommunicationController {
             const updatedAt = new Date(createdAt.getTime() + Math.floor(Math.random() * 3) * 24 * 60 * 60 * 1000);
             
             tickets.push({
-                ticketId: `TKT-${Date.now() - i * 86400000}-${supplierId.toString().slice(-6)}`,
-                supplierId,
+                ticketId: `TKT-${Date.now() - i * 86400000}-${sellerId.toString().slice(-6)}`,
+                sellerId,
                 type,
                 subject: this.getMockSubject(type),
                 description: this.getMockDescription(type),
@@ -615,7 +615,7 @@ class SupportCommunicationController {
     };
     
     // Helper: Generate mock notifications
-    generateMockNotifications = (supplierId) => {
+    generateMockNotifications = (sellerId) => {
         const notificationTypes = ['order', 'payment', 'catalog', 'support', 'system', 'marketing'];
         const notifications = [];
         
@@ -626,8 +626,8 @@ class SupportCommunicationController {
             const read = Math.random() > 0.3; // 70% chance of being read
             
             notifications.push({
-                id: `NOTIF-${Date.now() - i * 3600000}-${supplierId.toString().slice(-6)}`,
-                supplierId,
+                id: `NOTIF-${Date.now() - i * 3600000}-${sellerId.toString().slice(-6)}`,
+                sellerId,
                 type,
                 title: this.getMockNotificationTitle(type),
                 message: this.getMockNotificationMessage(type),

@@ -1,6 +1,6 @@
 const adminSettingsModel = require("../../models/adminSettingsModel");
 const NavMenu = require("../../models/navMenuModel");
-const { responseReturn } = require("../../utiles/response");
+const { responseReturn } = require("../../utils/response");
 const fs = require('fs');
 const path = require('path');
 

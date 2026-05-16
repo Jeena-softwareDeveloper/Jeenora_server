@@ -1,13 +1,13 @@
-const { responseReturn } = require('../../utiles/response');
+const { responseReturn } = require('../../utils/response');
 const axios = require('axios');
 const customerOrder = require('../../models/wear/customerOrder');
 const wearReviewModel = require('../../models/wear/wearReviewModel');
-const wearProductModel = require('../../models/wear/wearProductModel');
+const wearProductModel = require('../../models/wear/WearProduct');
 const AILog = require('../../models/wear/aiLogModel');
 const userBehaviorModel = require('../../models/wear/userBehaviorModel');
-const whatsappClient = require('../../utiles/whatsappClient');
-const { sendEmail } = require('../../utiles/emailSender');
-const sellerModel = require('../../models/wear/sellerModel');
+const whatsappClient = require('../../utils/whatsappClient');
+const { sendEmail } = require('../../utils/emailSender');
+const sellerModel = require('../../models/wear/Seller');
 const moment = require('moment');
 
 // 🔒 THE ULTIMATE STRICT GUARDRAIL FOR AI
@@ -226,11 +226,14 @@ class AIMasterController {
     inventory_forecaster = async (req, res) => {
         try {
             // Fetch products running low on stock to evaluate
-            const lowStockProducts = await wearProductModel.find({ stock: { $lt: 20 } }).select('name stock category price brand').limit(20);
+            const lowStockProducts = await wearProductModel.find({ "variants.stock": { $lt: 20 } }).select('productName variants category').limit(20);
             if(lowStockProducts.length === 0) return responseReturn(res, 200, { forecast: "All products have sufficient stock. No immediate orders needed." });
 
             const inventoryData = lowStockProducts.map(p => ({
-                id: p._id.toString().substring(0,8), name: p.name, stock: p.stock, category: p.category
+                id: p._id.toString().substring(0,8), 
+                name: p.productName, 
+                stock: p.variants.reduce((acc, v) => acc + (v.stock || 0), 0), 
+                category: p.category
             }));
 
             const prompt = `TASK: You are an E-Commerce Supply Chain Officer. Analyze this low stock data: ${JSON.stringify(inventoryData)}. Suggest what needs to be restocked immediately based on upcoming Indian festivals/trends, and give a short action plan. RETURN ONLY JSON: {"forecast": "Actionable summary here...", "recommendedOrders": [{"name":"product name", "suggestedQuantityToOrder": 100}]}`;
@@ -275,6 +278,134 @@ class AIMasterController {
         } catch (error) {
             console.error("AI Recommendation Error:", error.message);
             responseReturn(res, 500, { error: 'Failed to generate tailored recommendation' });
+        }
+    }
+
+    // NEW: Gemini Vision → DeepSeek description pipeline
+    ai_write_from_image = async (req, res) => {
+        try {
+            const { images, productName, category, specs } = req.body;
+
+            if (!images || images.length === 0) {
+                return responseReturn(res, 400, { error: 'At least one image is required' });
+            }
+
+            // ─── STAGE 1: Gemini Vision — analyze the image ───────────────────
+            let geminiAnalysis = null;
+            try {
+                const geminiKey = process.env.GEMINI_API_KEY;
+
+                // Build the image parts array for Gemini (up to 3 images)
+                const imagesToUse = images.slice(0, 3);
+                const imageParts = imagesToUse.map(imgBase64 => {
+                    // Strip the data:image/...;base64, prefix if present
+                    const base64Data = imgBase64.includes(',') ? imgBase64.split(',')[1] : imgBase64;
+                    const mimeMatch = imgBase64.match(/data:([^;]+);/);
+                    const mimeType = mimeMatch ? mimeMatch[1] : 'image/jpeg';
+                    return { inline_data: { mime_type: mimeType, data: base64Data } };
+                });
+
+                const geminiPrompt = `You are a fashion product analyst. Carefully observe this product image.
+Category: ${category || 'Clothing'}
+
+Extract ALL visible details:
+1. Primary Color & secondary colors
+2. Fabric type (Cotton, Silk, Polyester, etc.)
+3. Pattern (Plain, Printed, Embroidered, Checkered, Striped, etc.)
+4. Fit or Style (Regular Fit, Slim Fit, Flared, A-line, etc.)
+5. Occasion suitability (Casual, Formal, Party, Festival, etc.)
+6. Any visible design elements (Zippers, Buttons, Embellishments, etc.)
+7. Sleeve type if visible (Full Sleeve, Half Sleeve, Sleeveless, etc.)
+
+Return ONLY this exact JSON:
+{
+  "color": "...",
+  "fabric": "...",
+  "pattern": "...",
+  "fit": "...",
+  "occasion": "...",
+  "designDetails": "...",
+  "sleeveType": "...",
+  "summary": "A brief 1-sentence visual summary of the product"
+}`;
+
+                const geminiResponse = await axios.post(
+                    `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiKey}`,
+                    {
+                        contents: [{
+                            parts: [
+                                { text: geminiPrompt },
+                                ...imageParts
+                            ]
+                        }],
+                        generationConfig: { temperature: 0.2, maxOutputTokens: 512 }
+                    },
+                    { headers: { 'Content-Type': 'application/json' } }
+                );
+
+                const rawText = geminiResponse.data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+                // Strip markdown code fences if present
+                const cleanJson = rawText.replace(/```json\n?/gi, '').replace(/```\n?/gi, '').trim();
+                geminiAnalysis = JSON.parse(cleanJson);
+                console.log('[AI] Gemini Vision analysis success:', geminiAnalysis);
+
+            } catch (geminiErr) {
+                console.error('[AI] Gemini Vision failed, will proceed with text-only:', geminiErr.message);
+                // geminiAnalysis stays null — DeepSeek will still run with just text inputs
+            }
+
+            // ─── STAGE 2: DeepSeek — write the product description ────────────
+            const specsText = specs ? Object.entries(specs).filter(([,v]) => v).map(([k,v]) => `${k}: ${v}`).join(', ') : '';
+
+            let imageInsights = '';
+            if (geminiAnalysis) {
+                imageInsights = `
+IMAGE ANALYSIS (from AI Vision):
+- Color: ${geminiAnalysis.color || 'N/A'}
+- Fabric: ${geminiAnalysis.fabric || 'N/A'}
+- Pattern: ${geminiAnalysis.pattern || 'N/A'}
+- Fit/Style: ${geminiAnalysis.fit || 'N/A'}
+- Occasion: ${geminiAnalysis.occasion || 'N/A'}
+- Design Details: ${geminiAnalysis.designDetails || 'N/A'}
+- Sleeve: ${geminiAnalysis.sleeveType || 'N/A'}
+- Visual Summary: ${geminiAnalysis.summary || 'N/A'}`;
+            }
+
+            const deepseekPrompt = `TASK: Write a high-converting, professional product listing description.
+
+PRODUCT INPUTS:
+- Product Name: "${productName || 'Fashion Product'}"
+- Category: "${category || 'Clothing'}"
+- Supplier Specs: "${specsText || 'Standard quality'}"
+${imageInsights}
+
+STRICT RULES:
+1. USE the Image Analysis as the primary source of truth for physical details (color, fabric, etc.).
+2. DO NOT invent facts not visible in the image or provided in specs.
+3. Blend the image insights naturally — don't just list them robotically.
+4. Tone: Premium, confident, lifestyle-oriented.
+5. Structure: 1 engaging intro paragraph + 4 to 5 bullet points covering quality, style, occasion, and care.
+6. Write as if this will appear on Meesho/Amazon — persuasive, clear, and scannable.
+
+RETURN ONLY JSON: {"description": "intro paragraph text...\\n\\n• Bullet 1\\n• Bullet 2\\n• Bullet 3\\n• Bullet 4\\n• Bullet 5"}`;
+
+            const aiResponse = await this.call_deepseek_with_guardrail(deepseekPrompt);
+
+            await this.log_ai_action(
+                req.id, req.role,
+                'Image-Grounded Description',
+                `Product: ${productName} | Gemini: ${geminiAnalysis ? 'success' : 'skipped'}`,
+                aiResponse
+            );
+
+            return responseReturn(res, 200, {
+                description: aiResponse.description,
+                geminiAnalysis  // Also send back the image analysis so the frontend can use it
+            });
+
+        } catch (error) {
+            console.error('[AI] ai_write_from_image Error:', error.message);
+            responseReturn(res, 500, { error: 'Failed to generate image-based description' });
         }
     }
 
@@ -471,7 +602,7 @@ class AIMasterController {
         if (orderIdMatch) {
             const potentialId = orderIdMatch[1];
             try {
-                const authOrder = require('../../models/wear/authOrder');
+                const authOrder = require('../../models/wear/AuthOrder');
                 orderData = await customerOrder.findById(potentialId).lean() || await authOrder.findById(potentialId).lean();
             } catch (dbErr) {
                 console.error('[AI Support] DB Lookup failed:', dbErr.message);
@@ -545,7 +676,7 @@ class AIMasterController {
 
             const viewedCategories = [...new Set(history.map(h => h.category))];
 
-            const { formatWearProductForClient } = require('../../utiles/productFormatter');
+            const { formatWearProductForClient } = require('../../utils/productFormatter');
 
             if (viewedCategories.length === 0) {
                 // Return top products if no history
@@ -680,15 +811,15 @@ RETURN ONLY JSON:
      * and saves notifications to supplier's WearNotification feed.
      */
     run_predictive_restock_cron = async () => {
-        const wearNotificationModel = require('../../models/wear/wearNotificationModel');
-        const supplierModel = require('../../models/wear/supplierModel');
+        const wearNotificationModel = require('../../models/wear/WearNotification');
+        const supplierModel = require('../../models/wear/Supplier');
 
         console.log('[CRON] 🤖 Running Predictive Restock AI...');
 
         try {
             // 1. Find LOW stock products (< 15 units) grouped by supplier
             const lowStockProducts = await wearProductModel.find({ stock: { $lt: 15 }, status: 'active' })
-                .select('productName stock category supplierId price brand')
+                .select('productName stock category sellerId price brand')
                 .lean();
 
             if (lowStockProducts.length === 0) {
@@ -696,10 +827,10 @@ RETURN ONLY JSON:
                 return;
             }
 
-            // 2. Group by supplierId
+            // 2. Group by sellerId
             const bySupplier = {};
             lowStockProducts.forEach(p => {
-                const sid = p.supplierId?.toString() || 'unknown';
+                const sid = p.sellerId?.toString() || 'unknown';
                 if (!bySupplier[sid]) bySupplier[sid] = [];
                 bySupplier[sid].push(p);
             });
@@ -735,8 +866,15 @@ RETURN ONLY JSON:
 
                 // 4. Save notification to supplier's notification feed
                 try {
+                    // Find the user account for this supplier to send notification
+                    const supplierDoc = await supplierModel.findById(supplierId);
+                    if (!supplierDoc || !supplierDoc.user) {
+                        console.error(`[CRON] No user account found for supplier ${supplierId}`);
+                        continue;
+                    }
+
                     await wearNotificationModel.create({
-                        userId: supplierId,
+                        userId: supplierDoc.user,
                         title: aiResponse.alertTitle || '⚠️ Low Stock Alert',
                         message: aiResponse.alertMessage || `You have ${products.length} products running low on stock.`,
                         type: 'system',

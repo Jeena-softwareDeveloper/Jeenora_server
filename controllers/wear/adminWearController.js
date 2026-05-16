@@ -1,16 +1,16 @@
-const customerModel = require("../../models/wear/customerModel");
+const customerModel = require("../../models/wear/Customer");
 const wearBuyerModel = require("../../models/wear/wearBuyerModel");      // actual Wear app user model
 const wearSessionModel = require("../../models/wear/wearSessionModel");    // JWT session tracking
-const wearProductModel = require("../../models/wear/wearProductModel");
+const wearProductModel = require("../../models/wear/WearProduct");
 const customerOrder = require("../../models/wear/customerOrder");
-const authOrder = require("../../models/wear/authOrder");
-const supplierModel = require("../../models/wear/supplierModel");
+const authOrder = require("../../models/wear/AuthOrder");
+const supplierModel = require("../../models/wear/Supplier");
 const wearBannerModel = require("../../models/wear/wearBannerModel");
-const wearLogModel = require("../../models/wear/wearLogModel");
+const wearLogModel = require("../../models/wear/WearLog");
 const wearAuditLogModel = require("../../models/wear/wearAuditLogModel");
 const wearSearchHistoryModel = require("../../models/wear/wearSearchHistoryModel");
 const adminSettingsModel = require("../../models/adminSettingsModel");
-const { responseReturn } = require("../../utiles/response");
+const { responseReturn } = require("../../utils/response");
 const { mongo: { ObjectId } } = require('mongoose');
 const moment = require('moment');
 

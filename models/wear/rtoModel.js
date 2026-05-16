@@ -8,7 +8,7 @@ const RTOSchema = new Schema({
     ref: 'authOrder',
     required: true 
   },
-  supplierId: { 
+  sellerId: { 
     type: Schema.Types.ObjectId, 
     ref: 'Supplier',
     required: true 
@@ -146,7 +146,7 @@ const RTOSchema = new Schema({
 });
 
 // Indexes for faster queries
-RTOSchema.index({ supplierId: 1, status: 1 });
+RTOSchema.index({ sellerId: 1, status: 1 });
 RTOSchema.index({ orderId: 1 });
 RTOSchema.index({ rtoId: 1 });
 RTOSchema.index({ trackingId: 1 });
@@ -168,9 +168,9 @@ RTOSchema.pre('save', function(next) {
 });
 
 // Static method to get RTO statistics for supplier
-RTOSchema.statics.getSupplierStats = async function(supplierId) {
+RTOSchema.statics.getSupplierStats = async function(sellerId) {
   const stats = await this.aggregate([
-    { $match: { supplierId: new mongoose.Types.ObjectId(supplierId) } },
+    { $match: { sellerId: new mongoose.Types.ObjectId(sellerId) } },
     {
       $group: {
         _id: '$status',
@@ -200,14 +200,14 @@ RTOSchema.statics.getSupplierStats = async function(supplierId) {
 };
 
 // Static method to get RTO trends (last 30 days)
-RTOSchema.statics.getSupplierTrends = async function(supplierId) {
+RTOSchema.statics.getSupplierTrends = async function(sellerId) {
   const thirtyDaysAgo = new Date();
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
   
   const trends = await this.aggregate([
     { 
       $match: { 
-        supplierId: new mongoose.Types.ObjectId(supplierId),
+        sellerId: new mongoose.Types.ObjectId(sellerId),
         createdAt: { $gte: thirtyDaysAgo }
       } 
     },

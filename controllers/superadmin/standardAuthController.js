@@ -22,12 +22,14 @@ class authControllers {
                 });
             }
 
+            let isInternal = true;
             let admin = await adminModel.findOne({ email }).select('+password');
             let isSuper = false;
 
             if (admin) {
                 isSuper = admin.role === 'superadmin';
             } else {
+                isInternal = false;
                 admin = await partnerModel.findOne({ email }).select('+password');
             }
 
@@ -39,14 +41,17 @@ class authControllers {
                 if (match) {
                     await clearFailedLogins(email);
                     const tokenRole = isSuper ? 'superadmin' : 'admin';
-                    const token = await createToken({ id: admin.id, role: tokenRole, permissions: admin.permissions || [] })
+                    const userType = isInternal ? (isSuper ? 'superadmin' : 'subadmin') : 'merchant';
+                    const token = await createToken({ id: admin.id, role: tokenRole, userType, permissions: admin.permissions || [] })
                     res.cookie('accessToken', token, {
                         expires: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
                         httpOnly: true,
                         secure: process.env.NODE_ENV === 'production',
                         sameSite: 'strict'
                     })
-                    responseReturn(res, 200, { token, message: `Welcome ${admin.name} (${isSuper ? 'Super Admin' : 'Admin'})` })
+                    const userInfoObj = { ...admin.toObject(), userType };
+                    delete userInfoObj.password;
+                    responseReturn(res, 200, { token, userType, userInfo: userInfoObj, message: `Welcome ${admin.name} (${isSuper ? 'Super Admin' : (isInternal ? 'Manager' : 'Merchant')})` })
                 } else {
                     await recordFailedLogin(email, ip);
                     responseReturn(res, 401, { error: "Invalid credentials" })
@@ -86,7 +91,7 @@ class authControllers {
 
     get_all_admins = async (req, res) => {
         try {
-            const admins = await adminModel.find({}).sort({ createdAt: -1 });
+            const admins = await adminModel.find({ role: { $ne: 'superadmin' } }).sort({ createdAt: -1 });
             responseReturn(res, 200, { admins, totalAdmin: admins.length });
         } catch (error) {
             responseReturn(res, 500, { error: 'Internal Server Error' });
@@ -108,6 +113,20 @@ class authControllers {
         try {
             await adminModel.findByIdAndUpdate(adminId, { permissions });
             responseReturn(res, 200, { message: 'Sub-Admin permissions updated successfully' });
+        } catch (error) {
+            responseReturn(res, 500, { error: error.message });
+        }
+    }
+
+    update_sub_admin_password = async (req, res) => {
+        const { adminId, password } = req.body;
+        try {
+            if (!password || password.length < 6) {
+                return responseReturn(res, 400, { error: 'Password must be at least 6 characters long' });
+            }
+            const hashedPassword = await bcrypt.hash(password, 10);
+            await adminModel.findByIdAndUpdate(adminId, { password: hashedPassword });
+            responseReturn(res, 200, { message: 'Sub-Admin password updated successfully' });
         } catch (error) {
             responseReturn(res, 500, { error: error.message });
         }
@@ -157,8 +176,10 @@ class authControllers {
         const { id } = req;
 
         try {
+            let isInternal = true;
             let user = await adminModel.findById(id);
             if (!user) {
+                isInternal = false;
                 user = await partnerModel.findById(id);
             }
 
@@ -166,7 +187,11 @@ class authControllers {
                 return responseReturn(res, 404, { error: 'User not found' });
             }
 
-            responseReturn(res, 200, { userInfo: user });
+            const userType = isInternal ? (user.role === 'superadmin' ? 'superadmin' : 'subadmin') : 'merchant';
+            const userInfoObj = { ...user.toObject(), userType };
+            delete userInfoObj.password;
+
+            responseReturn(res, 200, { userInfo: userInfoObj });
         } catch (error) {
             console.error('getUser Error:', error);
             responseReturn(res, 500, { error: 'Internal Server Error' });

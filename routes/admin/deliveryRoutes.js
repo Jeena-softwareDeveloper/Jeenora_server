@@ -15,5 +15,6 @@ router.get('/admin/shiprocket/ndr', authMiddleware, shiprocketAdminController.ge
 router.get('/admin/shiprocket/risk/:mobile', authMiddleware, shiprocketAdminController.get_rto_risk);
 router.post('/admin/shiprocket/label', authMiddleware, shiprocketAdminController.generate_label);
 router.get('/admin/shiprocket/track/:awb', authMiddleware, shiprocketAdminController.track_awb);
+router.post('/admin/shiprocket/ship', authMiddleware, shiprocketAdminController.ship_order);
 
 module.exports = router;

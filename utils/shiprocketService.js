@@ -108,12 +108,39 @@ class ShiprocketService {
     async getWalletBalance() {
         try {
             const token = await this.getToken();
-            const response = await axios.get('https://apiv2.shiprocket.in/v1/external/wallet/data', {
+            const response = await axios.get('https://apiv2.shiprocket.in/v1/external/account/details/statement', {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
-            return response.data;
+            
+            const dataList = response.data?.data || [];
+            const walletItem = dataList.find(item => item.description === 'Wallet Balance') || dataList[0];
+            const balanceVal = walletItem ? walletItem.balance_amount : '0.00';
+            
+            return {
+                data: {
+                    wallet_balance: parseFloat(balanceVal).toFixed(2)
+                },
+                history: dataList.map(item => ({
+                    id: item.transaction_id || 'N/A',
+                    desc: item.description || 'N/A',
+                    amount: item.credit_amount || item.debit_amount || '0.00',
+                    type: item.credit_amount ? 'credit' : 'debit',
+                    balance: item.balance_amount || '0.00',
+                    date: item.created_at || 'N/A'
+                }))
+            };
         } catch (error) {
             console.error('❌ Shiprocket Wallet Error:', error.response?.data || error.message);
+            const status = error.response?.status;
+            if (status === 403 || status === 404 || process.env.NODE_ENV === 'development') {
+                console.log('💡 [SHIPROCKET] Wallet statement endpoint restricted. Serving graceful default.');
+                return {
+                    data: {
+                        wallet_balance: "0.00"
+                    },
+                    history: []
+                };
+            }
             throw error;
         }
     }
@@ -128,6 +155,18 @@ class ShiprocketService {
             return response.data;
         } catch (error) {
             console.error('❌ Shiprocket Orders Fetch Error:', error.response?.data || error.message);
+            const status = error.response?.status;
+            if (status === 403 || status === 404 || process.env.NODE_ENV === 'development') {
+                console.log('💡 [SHIPROCKET] Orders endpoint restricted or missing. Serving graceful default orders list.');
+                return {
+                    data: [],
+                    meta: {
+                        pagination: {
+                            total: 0
+                        }
+                    }
+                };
+            }
             throw error;
         }
     }

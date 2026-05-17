@@ -72,6 +72,42 @@ class shiprocketAdminController {
             return responseReturn(res, 500, { error: 'Failed to track AWB' });
         }
     }
+
+    ship_order = async (req, res) => {
+        const { shipmentId } = req.body;
+        if (!shipmentId) {
+            return responseReturn(res, 400, { error: 'Shipment ID is required' });
+        }
+        try {
+            // 1. Fetch available couriers
+            const couriers = await shiprocketService.getCouriers(shipmentId);
+            if (!couriers || couriers.length === 0) {
+                return responseReturn(res, 400, { error: 'No serviceability or available couriers found for this shipment' });
+            }
+            
+            // 2. Select the first available courier
+            const recommendedCourier = couriers[0];
+            const courierId = recommendedCourier.courier_company_id;
+            
+            // 3. Assign courier to generate AWB
+            const result = await shiprocketService.assignCourier(shipmentId, courierId);
+            
+            if (result && result.awb_assign_status === 1) {
+                return responseReturn(res, 200, { 
+                    success: true, 
+                    message: 'Courier assigned and AWB generated successfully!',
+                    data: result.response.data
+                });
+            } else {
+                return responseReturn(res, 400, { 
+                    error: result?.response?.data?.awb_assign_error || 'Failed to assign courier' 
+                });
+            }
+        } catch (error) {
+            console.error('❌ Shiprocket Ship Order Error:', error.message);
+            return responseReturn(res, 500, { error: 'Internal server error while shipping order' });
+        }
+    }
 }
 
 module.exports = new shiprocketAdminController();

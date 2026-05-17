@@ -466,3 +466,5 @@ dbConnect()
     console.error("❌ Failed to connect to DB:", err.message);
     process.exit(1);
   });
+// Nodemon reload trigger: 6
+

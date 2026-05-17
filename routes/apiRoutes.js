@@ -23,6 +23,11 @@ router.use('/admin/security', require('./admin/adminRiskRoutes'));
 // Advanced Analytics
 const adminWearController = require('../controllers/admin/adminWearController');
 router.get('/admin/analytics/advanced', authMiddleware, adminWearController.get_advanced_analytics);
+router.get('/admin/stats/financial', authMiddleware, adminWearController.get_financial_stats);
+router.get('/admin/orders/wear', authMiddleware, adminWearController.get_all_orders_admin);
+router.get('/admin/order/details/:orderId', authMiddleware, adminWearController.get_order_details_admin);
+router.post('/admin/order/force-cancel/:orderId', authMiddleware, adminWearController.force_cancel_order);
+router.post('/admin/order/trigger-refund/:orderId', authMiddleware, adminWearController.trigger_manual_refund);
 
 
 // Admin Settings (Direct match to fix 404s)
@@ -76,16 +81,21 @@ router.use('/user/addresses', require('./customer/addressRoutes'));
 router.use('/wear/user', require('./partner/userProfileRoutes'));
 router.use('/wear/address', require('./customer/addressRoutes'));
 
+const addressController = require('../controllers/customer/addressController');
+router.get('/admin/wear/locations', authMiddleware, addressController.get_all_addresses_admin);
+
 // 6. TRANSACTIONS & SUPPLIER
 router.use('/wear/payment', require('./customer/paymentRoutes')); // Stripe & withdrawal
 router.use('/wear/orders', require('./customer/orderRoutes'));
 router.use('/wear/delivery', require('./admin/deliveryRoutes'));
+router.use('/', require('./admin/deliveryRoutes'));
 
 // 7. DASHBOARD, LOGS & ANALYTICS
 const wearLogController = require('../controllers/admin/wearLogController');
 router.get('/wear/logs', authMiddleware, wearLogController.getLogs); // Dashboard Alias
 router.get('/wear/stats', authMiddleware, wearLogController.getStats); // Dashboard Alias
 router.use('/wear/logs', require('./admin/wearLogRoutes'));
+router.use('/wear/log', require('./admin/wearLogRoutes'));
 router.use('/wear/dashboard', require('./superadmin/dashboardRoutes'));
 
 router.use('/wear/whatsapp', require('./admin/wearWhatsAppRoutes'));

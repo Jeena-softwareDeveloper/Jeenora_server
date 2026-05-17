@@ -33,6 +33,7 @@ router.post('/admin/create-sub-admin', authMiddleware, authControllers.create_su
 router.get('/admin/get-all-admins', authMiddleware, authControllers.get_all_admins)
 router.post('/admin/update-sub-admin-status', authMiddleware, authControllers.update_sub_admin_status)
 router.post('/admin/update-sub-admin-permissions', authMiddleware, authControllers.update_sub_admin_permissions)
+router.post('/admin/update-sub-admin-password', authMiddleware, authControllers.update_sub_admin_password)
 router.post('/admin/update-permissions', authMiddleware, authControllers.update_partner_permissions)
 router.post('/admin/update-partner-permissions', authMiddleware, authControllers.update_partner_permissions)
 router.post('/admin/update-password', authMiddleware, authControllers.update_partner_password)

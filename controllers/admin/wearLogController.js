@@ -69,18 +69,56 @@ class wearLogController {
         const skip = (parseInt(page) - 1) * parseInt(limit);
 
         try {
+            const Customer = require('../../models/customer/Customer');
+            if (type === 'online') {
+                const activeCutoff = new Date(Date.now() - 15 * 60 * 1000); // 15 minutes ago
+
+                const pipeline = [
+                    { $match: { createdAt: { $gte: activeCutoff } } },
+                    { $sort: { createdAt: -1 } },
+                    {
+                        $group: {
+                            _id: { $ifNull: ["$user", "$device.deviceId"] },
+                            latestLog: { $first: "$$ROOT" }
+                        }
+                    },
+                    { $replaceRoot: { newRoot: "$latestLog" } },
+                    { $sort: { createdAt: -1 } }
+                ];
+
+                const rawActiveLogs = await WearLog.aggregate(pipeline);
+                const paginatedActiveLogs = rawActiveLogs.slice(skip, skip + parseInt(limit));
+
+                const populatedLogs = [];
+                for (const log of paginatedActiveLogs) {
+                    let userObj = null;
+                    if (log.user) {
+                        userObj = await WearBuyer.findById(log.user, 'name phone email').lean() || await Customer.findById(log.user, 'name phone email').lean();
+                    }
+                    populatedLogs.push({
+                        ...log,
+                        user: userObj || { _id: log.user || 'guest', name: 'Guest / Unknown', phone: log.phone || 'N/A' }
+                    });
+                }
+
+                return responseReturn(res, 200, { logs: populatedLogs, total: rawActiveLogs.length });
+            }
+
             if (type === 'all') {
-                // 1. Fetch all registered buyers
+                // 1. Fetch all registered buyers and customers
                 let buyerQuery = {};
                 if (search) {
                     buyerQuery = {
                         $or: [
                             { name: { $regex: search, $options: 'i' } },
-                            { phone: { $regex: search, $options: 'i' } }
+                            { phone: { $regex: search, $options: 'i' } },
+                            { email: { $regex: search, $options: 'i' } }
                         ]
                     };
                 }
-                const buyers = await WearBuyer.find(buyerQuery).sort({ updatedAt: -1 });
+                const wearBuyers = await WearBuyer.find(buyerQuery).sort({ updatedAt: -1 });
+                const custs = await Customer.find(buyerQuery).sort({ updatedAt: -1 });
+                const buyers = [...wearBuyers, ...custs];
 
                 const allEntries = [];
 
@@ -91,7 +129,7 @@ class wearLogController {
 
                     allEntries.push({
                         _id: latestLog?._id || `temp-id-${buyer._id}`,
-                        user: { _id: buyer._id, name: buyer.name, phone: buyer.phone },
+                        user: { _id: buyer._id, name: buyer.name, phone: buyer.phone || buyer.email || 'N/A' },
                         action: latestLog?.action || 'REGISTERED',
                         details: latestLog?.details || { page: 'Dashboard' },
                         duration: latestLog?.duration || 0,
@@ -99,7 +137,7 @@ class wearLogController {
                             deviceId: lastDevice?.deviceId || 'Unknown',
                             ip: lastDevice?.ip || 'N/A',
                             userAgent: lastDevice?.userAgent || 'N/A',
-                            platform: 'Mobile'
+                            platform: 'Web'
                         },
                         createdAt: latestLog?.createdAt || buyer.updatedAt || buyer.createdAt,
                         isPlaceholder: !latestLog
@@ -142,17 +180,28 @@ class wearLogController {
                 };
             }
 
-            const logs = await WearLog.find(query)
+            const rawLogs = await WearLog.find(query)
                 .sort({ createdAt: -1 })
                 .skip(skip)
-                .limit(parseInt(limit))
-                .populate('user', 'name phone');
+                .limit(parseInt(limit));
+
+            const logs = [];
+            for (const log of rawLogs) {
+                let userObj = null;
+                if (log.user) {
+                    userObj = await WearBuyer.findById(log.user, 'name phone email').lean() || await Customer.findById(log.user, 'name phone email').lean();
+                }
+                logs.push({
+                    ...log.toObject(),
+                    user: userObj || { _id: log.user || 'guest', name: 'Guest / Unknown', phone: log.phone || 'N/A' }
+                });
+            }
 
             const total = await WearLog.countDocuments(query);
-            responseReturn(res, 200, { logs, total });
+            return responseReturn(res, 200, { logs, total });
         } catch (error) {
             console.error('getLogs error:', error);
-            responseReturn(res, 500, { error: error.message });
+            return responseReturn(res, 500, { error: error.message });
         }
     }
 
@@ -213,17 +262,27 @@ class wearLogController {
     // Get stats for dashboard
     getStats = async (req, res) => {
         try {
-            const totalUsers = await WearBuyer.countDocuments();
+            const Customer = require('../../models/customer/Customer');
+            const totalWearBuyers = await WearBuyer.countDocuments();
+            const totalCusts = await Customer.countDocuments();
+            const totalUsers = totalWearBuyers + totalCusts;
+
             const totalLogs = await WearLog.countDocuments();
             debugLog(`Stats Requested: Users=${totalUsers}, Logs=${totalLogs}`);
+            
             const uniqueVisitorsToday = await WearLog.distinct('device.deviceId', {
                 createdAt: { $gte: new Date(new Date().setHours(0, 0, 0, 0)) }
+            });
+
+            const uniqueActiveNow = await WearLog.distinct('device.deviceId', {
+                createdAt: { $gte: new Date(Date.now() - 15 * 60 * 1000) }
             });
 
             responseReturn(res, 200, {
                 totalUsers,
                 totalLogs,
-                activeToday: uniqueVisitorsToday.length
+                activeToday: uniqueVisitorsToday.length,
+                activeNow: uniqueActiveNow.length
             });
         } catch (error) {
             responseReturn(res, 500, { error: error.message });

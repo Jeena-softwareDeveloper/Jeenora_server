@@ -92,9 +92,9 @@ class addressController {
             }, {});
 
             const results = Object.values(grouped);
-            responseReturn(res, 200, { users: results });
+            return responseReturn(res, 200, { users: results });
         } catch (error) {
-            responseReturn(res, 500, { error: error.message });
+            return responseReturn(res, 500, { error: error.message });
         }
     }
 }

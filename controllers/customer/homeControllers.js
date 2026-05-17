@@ -395,25 +395,25 @@ class homeControllers {
             if (!product) {
                 product = await wearProductModel.findOne({ slug })
                     .populate({ path: 'offers', match: { status: 'active' } })
-                    .populate('partnerId', partnerSelection);
+                    .populate({ path: 'partnerId', select: partnerSelection, model: 'Supplier' });
 
                 if (!product && ObjectId.isValid(slug)) {
                     // 1. Try finding by direct Product ID
                     product = await wearProductModel.findById(slug)
                         .populate({ path: 'offers', match: { status: 'active' } })
-                        .populate('partnerId', partnerSelection);
+                        .populate({ path: 'partnerId', select: partnerSelection, model: 'Supplier' });
                     
                     // 2. NEW FALLBACK: Try finding as a Catalog ID (Return primary product of catalog)
                     if (!product) {
                         product = await wearProductModel.findOne({ catalogId: slug, isPrimary: true })
                             .populate({ path: 'offers', match: { status: 'active' } })
-                            .populate('partnerId', partnerSelection);
+                            .populate({ path: 'partnerId', select: partnerSelection, model: 'Supplier' });
                         
                         // 3. Last resort: Any product from that catalog
                         if (!product) {
                             product = await wearProductModel.findOne({ catalogId: slug })
                                 .populate({ path: 'offers', match: { status: 'active' } })
-                                .populate('partnerId', partnerSelection);
+                                .populate({ path: 'partnerId', select: partnerSelection, model: 'Supplier' });
                         }
                     }
                 }
@@ -449,6 +449,7 @@ class homeControllers {
                 brand: product.brand,
                 shopName: product.partnerId?.businessDetails?.shopName || product.partnerId?.shopInfo?.shopName || product.shopName,
                 partnerId: product.partnerId,
+                Id: product.partnerId, // Added for frontend compatibility where product.Id is used!
                 variants: (product.variants || []).map(v => ({
                     ...v,
                     listingPrice: Math.ceil(v.listingPrice),

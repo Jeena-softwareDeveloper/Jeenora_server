@@ -52,10 +52,10 @@ class adminRiskController {
 
     disable_cod = async (req, res) => {
         const { userId } = req.params;
+        const { codDisabled } = req.body;
         try {
-            // Placeholder: update a flag in the user model
-            await wearBuyerModel.findByIdAndUpdate(userId, { codDisabled: true });
-            responseReturn(res, 200, { message: 'COD privileges revoked' });
+            await wearBuyerModel.findByIdAndUpdate(userId, { codDisabled: codDisabled !== false });
+            responseReturn(res, 200, { message: codDisabled === false ? 'COD privileges restored successfully' : 'COD privileges revoked successfully' });
         } catch (error) {
             responseReturn(res, 500, { error: error.message });
         }

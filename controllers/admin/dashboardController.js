@@ -7,6 +7,7 @@ const adminPartnerMessage = require('../../models/chat/adminPartnerMessage')
 const partnerWallet = require('../../models/partner/partnerWallet')
 const authOrder = require('../../models/partner/AuthOrder')
 const bannerModel = require('../../models/admin/bannerModel')
+const adminModel = require('../../models/superadmin/adminModel')
 const cloudinary = require('cloudinary').v2
 const formidable = require("formidable")
 const partnerCustomerMessage = require('../../models/chat/partnerCustomerMessage')
@@ -38,9 +39,63 @@ class dashboardController {
 
             const totalProduct = await productModel.find({}).countDocuments();
             const totalOrder = await customerOrder.find({}).countDocuments();
-            const totalAdmin = await partnerModel.find({}).countDocuments();
+            const totalAdmin = await adminModel.find({ role: { $ne: 'superadmin' } }).countDocuments();
             const messages = await adminPartnerMessage.find({}).limit(3);
             const recentOrders = await customerOrder.find({}).limit(5);
+
+            // Calculate monthly aggregates for the current year
+            const currentYear = new Date().getFullYear();
+            const startOfYear = new Date(currentYear, 0, 1);
+            const endOfYear = new Date(currentYear, 11, 31, 23, 59, 59);
+
+            const monthlyOrderStats = await customerOrder.aggregate([
+                {
+                    $match: {
+                        createdAt: { $gte: startOfYear, $lte: endOfYear }
+                    }
+                },
+                {
+                    $group: {
+                        _id: { $month: '$createdAt' },
+                        ordersCount: { $sum: 1 },
+                        revenue: { $sum: '$price' }
+                    }
+                }
+            ]);
+
+            const monthlyAdminStats = await adminModel.aggregate([
+                {
+                    $match: {
+                        role: { $ne: 'superadmin' },
+                        createdAt: { $gte: startOfYear, $lte: endOfYear }
+                    }
+                },
+                {
+                    $group: {
+                        _id: { $month: '$createdAt' },
+                        adminsCount: { $sum: 1 }
+                    }
+                }
+            ]);
+
+            const ordersData = Array(12).fill(0);
+            const revenueData = Array(12).fill(0);
+            const adminsData = Array(12).fill(0);
+
+            monthlyOrderStats.forEach(stat => {
+                const monthIndex = stat._id - 1;
+                if (monthIndex >= 0 && monthIndex < 12) {
+                    ordersData[monthIndex] = stat.ordersCount;
+                    revenueData[monthIndex] = Math.round(stat.revenue);
+                }
+            });
+
+            monthlyAdminStats.forEach(stat => {
+                const monthIndex = stat._id - 1;
+                if (monthIndex >= 0 && monthIndex < 12) {
+                    adminsData[monthIndex] = stat.adminsCount;
+                }
+            });
 
             responseReturn(res, 200, {
                 totalProduct,
@@ -53,9 +108,13 @@ class dashboardController {
                 totalCommission: stats.length > 0 ? stats[0].totalCommission : 0,
                 totalVendorPayable: subOrderStats.length > 0 ? subOrderStats[0].totalVendorPayable : 0,
                 totalSale: stats.length > 0 ? stats[0].totalRevenue : 0, // Using revenue as total sale equivalent
+                ordersData,
+                revenueData,
+                adminsData
             });
         } catch (error) {
-            console.log(error.message)
+            console.log(error.message);
+            responseReturn(res, 500, { error: error.message });
         }
     }
     //end Method 

@@ -1,6 +1,6 @@
-const adminModel = require('../../models/adminModel');
-const wearBuyerModel = require('../../models/wear/wearBuyerModel');
-const wearLogModel = require('../../models/wear/WearLog');
+const adminModel = require('../../models/superadmin/adminModel');
+const wearBuyerModel = require('../../models/customer/wearBuyerModel');
+const wearLogModel = require('../../models/superadmin/WearLog');
 const { responseReturn } = require('../../utils/response');
 
 class adminRiskController {

@@ -1,4 +1,4 @@
-const wearSessionModel = require('../../models/wear/wearSessionModel');
+const wearSessionModel = require('../../models/customer/wearSessionModel');
 const { responseReturn } = require('../../utils/response');
 
 class adminSecurityController {

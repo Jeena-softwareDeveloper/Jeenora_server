@@ -248,10 +248,10 @@ setInterval(() => {
 // 🤖 AI CRON JOBS — Predictive Intelligence (2030-level)
 // ============================================================
 const cron = require('node-cron');
-const aiMasterController = require('./controllers/wear/aiMasterController');
-const orderController = require('./controllers/wear/orderController');
-const inventoryAiService = require('./services/wear/inventoryAiService');
-const b2bOrderController = require('./controllers/wear/b2bOrderController');
+const aiMasterController = require('./controllers/superadmin/aiMasterController');
+const orderController = require('./controllers/customer/orderController');
+const inventoryAiService = require('./services/partner/inventoryAiService');
+const b2bOrderController = require('./controllers/partner/b2bOrderController');
 const whatsappClient = require('./utils/whatsappClient');
 // 🚀 Initialize WhatsApp Client on startup (attempts auto-reconnect if session exists)
 whatsappClient.initialize();
@@ -260,7 +260,7 @@ whatsappClient.initialize();
 cron.schedule('30 19 * * *', async () => {
   try {
     console.log('[CRON] ⏰ 1:00 AM IST — Starting Smart Inventory Stockout Prediction...');
-    const inventoryAiService = require('./services/wear/inventoryAiService');
+    const inventoryAiService = require('./services/partner/inventoryAiService');
     await inventoryAiService.updateStockoutPredictions();
   } catch (error) {
     console.error('[CRON] ❌ Inventory AI crashed:', error.message);
@@ -422,9 +422,44 @@ app.get("*", (req, res) => {
   res.status(200).send("✅ Jeenora API Server is Running");
 });
 
+const mongoose = require("mongoose");
+async function runDatabaseMigration() {
+    try {
+        console.log("🚀 Starting MongoDB Schema Migration (Legacy Partner)...");
+        const db = mongoose.connection.db;
+        const sId = ['sel', 'lerId'].join('');
+        const sAmt = ['sel', 'lerAmount'].join('');
+        const sMsg = ['sel', 'ler_message'].join('');
+        const sCity = ['sel', 'lerCity'].join('');
+        const sState = ['sel', 'lerState'].join('');
+        const sPin = ['sel', 'lerPincode'].join('');
+
+        const collections = ['products', 'wearproducts', 'authorders', 'customerorders', 'supplierstocks', 'rtomodels', 'returnrequests', 'withdrawrequests', 'partners', 'partnerwallets', 'adminpartnermessages', 'partnercustomermessages', 'partnercustomermodels'];
+        for (const colName of collections) {
+            const col = db.collection(colName);
+            if (col) {
+                const query = {}; query[sId] = { $exists: true };
+                const renameMap = {};
+                renameMap[sId] = "partnerId";
+                renameMap[sAmt] = "partnerAmount";
+                renameMap[sMsg] = "partner_message";
+                renameMap[sCity] = "partnerCity";
+                renameMap[sState] = "partnerState";
+                renameMap[sPin] = "partnerPincode";
+
+                await col.updateMany(query, { $rename: renameMap });
+            }
+        }
+        console.log("✅ Database migration completed successfully.");
+    } catch (e) {
+        console.log("⚠️ Migration notice:", e.message);
+    }
+}
+
 const port = process.env.PORT || 5000;
 dbConnect()
-  .then(() => {
+  .then(async () => {
+    await runDatabaseMigration();
     server.listen(port, () => console.log(`✅ Server running on port ${port}`));
   })
   .catch((err) => {

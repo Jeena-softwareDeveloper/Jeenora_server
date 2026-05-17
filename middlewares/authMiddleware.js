@@ -25,17 +25,15 @@ module.exports.authMiddleware = async (req, res, next) => {
         req.user = deCodeToken;
         req.token = token;
 
-        // --- ARCHITECTURE TUNE: Resolve Business ID (Supplier/Seller) ---
-        // Many controllers expect an ID that identifies the "Business" entity (Seller or Supplier)
-        // rather than the raw User/Buyer account.
-        const Supplier = require('../models/wear/Supplier');
+        // --- ARCHITECTURE TUNE: Resolve Business ID (Supplier/Partner) ---
+        const Supplier = require('../models/partner/Supplier');
         const supplier = await Supplier.findOne({ user: req.id });
         
         if (supplier) {
             req.businessId = supplier._id.toString();
             req.businessInfo = supplier;
         } else {
-            req.businessId = req.id; // Fallback to raw ID (Legacy Seller or Buyer)
+            req.businessId = req.id; // Fallback to raw ID (Legacy Partner or Buyer)
         }
 
         next();
@@ -52,12 +50,12 @@ module.exports.authMiddleware = async (req, res, next) => {
 };
 
 // -----------------------------------------------
-// Admin Role Guard
+// Super Admin Only Guard
 // -----------------------------------------------
-module.exports.adminMiddleware = async (req, res, next) => {
+module.exports.superAdminMiddleware = async (req, res, next) => {
     try {
-        if (req.role !== 'admin') {
-            return res.status(403).json({ error: 'Access denied. Admin only.' });
+        if (req.role !== 'superadmin') {
+            return res.status(403).json({ error: 'Access denied. Super Administrator privileges required.' });
         }
         next();
     } catch (error) {
@@ -65,9 +63,23 @@ module.exports.adminMiddleware = async (req, res, next) => {
     }
 };
 
-module.exports.sellerAdminMiddleware = async (req, res, next) => {
+// -----------------------------------------------
+// Admin Role Guard (Allows both superadmin and admin)
+// -----------------------------------------------
+module.exports.adminMiddleware = async (req, res, next) => {
     try {
-        if (req.role !== 'admin' && req.role !== 'seller') {
+        if (req.role !== 'admin' && req.role !== 'superadmin') {
+            return res.status(403).json({ error: 'Access denied. Administrator privileges required.' });
+        }
+        next();
+    } catch (error) {
+        return res.status(500).json({ error: error.message });
+    }
+};
+
+module.exports.partnerAdminMiddleware = async (req, res, next) => {
+    try {
+        if (req.role !== 'admin' && req.role !== 'superadmin' && req.role !== 'partner') {
             return res.status(403).json({ error: 'Access denied. Unauthorized role.' });
         }
         next();

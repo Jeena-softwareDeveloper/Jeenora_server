@@ -90,7 +90,7 @@ class WhatsAppClient {
 
                 // --- FORWARD TO AI ---
                 try {
-                    const aiMaster = require('../controllers/wear/aiMasterController');
+                    const aiMaster = require('../controllers/superadmin/aiMasterController');
                     await aiMaster.handleIncomingMessage(msg);
                 } catch (aiErr) {
                     console.error('[WhatsApp AI Forward] Error:', aiErr.message);

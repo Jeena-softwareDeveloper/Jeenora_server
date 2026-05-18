@@ -236,6 +236,7 @@ class wearCatalogController {
                 // ALWAYS PRIORITIZE VARIANT NAME for Inventory Header
                 const variantName = g.mainProduct.variants?.[0]?.variantName || g.mainProduct.variants?.[0]?.name;
                 const finalName = variantName || g.mainProduct.productName;
+                const price = g.mainProduct.variants?.[0]?.listingPrice || g.mainProduct.price || 0;
 
                 return {
                     _id: g._id, 
@@ -246,7 +247,9 @@ class wearCatalogController {
                     status: g.mainProduct.status,
                     hsnCode: g.mainProduct.hsnCode,
                     similarProductsCount: g.count,
-                    createdAt: g.mainProduct.createdAt
+                    createdAt: g.mainProduct.createdAt,
+                    price: price,
+                    variants: g.mainProduct.variants || []
                 };
             });
 

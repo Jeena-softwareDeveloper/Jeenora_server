@@ -54,7 +54,7 @@ module.exports.authMiddleware = async (req, res, next) => {
 // -----------------------------------------------
 module.exports.superAdminMiddleware = async (req, res, next) => {
     try {
-        if (req.role !== 'superadmin') {
+        if (req.role !== 'admin') {
             return res.status(403).json({ error: 'Access denied. Super Administrator privileges required.' });
         }
         next();
@@ -68,7 +68,7 @@ module.exports.superAdminMiddleware = async (req, res, next) => {
 // -----------------------------------------------
 module.exports.adminMiddleware = async (req, res, next) => {
     try {
-        if (req.role !== 'admin' && req.role !== 'superadmin') {
+        if (req.role !== 'admin' && req.role !== 'manager') {
             return res.status(403).json({ error: 'Access denied. Administrator privileges required.' });
         }
         next();
@@ -79,7 +79,7 @@ module.exports.adminMiddleware = async (req, res, next) => {
 
 module.exports.partnerAdminMiddleware = async (req, res, next) => {
     try {
-        if (req.role !== 'admin' && req.role !== 'superadmin' && req.role !== 'partner') {
+        if (req.role !== 'admin' && req.role !== 'manager' && req.role !== 'partner') {
             return res.status(403).json({ error: 'Access denied. Unauthorized role.' });
         }
         next();

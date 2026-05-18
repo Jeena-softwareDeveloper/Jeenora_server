@@ -27,7 +27,7 @@ class authControllers {
             let isSuper = false;
 
             if (admin) {
-                isSuper = admin.role === 'superadmin';
+                isSuper = admin.role === 'admin'; // 'admin' = Super Admin, 'manager' = Manager
             } else {
                 isInternal = false;
                 admin = await partnerModel.findOne({ email }).select('+password');
@@ -40,18 +40,18 @@ class authControllers {
                 const match = await bcrypt.compare(password, admin.password)
                 if (match) {
                     await clearFailedLogins(email);
-                    const tokenRole = isSuper ? 'superadmin' : 'admin';
-                    const userType = isInternal ? (isSuper ? 'superadmin' : 'subadmin') : 'merchant';
-                    const token = await createToken({ id: admin.id, role: tokenRole, userType, permissions: admin.permissions || [] })
+                    // Role is taken directly from DB: 'admin' (Super Admin) or 'manager'
+                    const tokenRole = isInternal ? admin.role : 'partner';
+                    const token = await createToken({ id: admin.id, role: tokenRole, permissions: admin.permissions || [] })
                     res.cookie('accessToken', token, {
                         expires: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
                         httpOnly: true,
                         secure: process.env.NODE_ENV === 'production',
                         sameSite: 'strict'
                     })
-                    const userInfoObj = { ...admin.toObject(), userType };
+                    const userInfoObj = { ...admin.toObject() };
                     delete userInfoObj.password;
-                    responseReturn(res, 200, { token, userType, userInfo: userInfoObj, message: `Welcome ${admin.name} (${isSuper ? 'Super Admin' : (isInternal ? 'Manager' : 'Merchant')})` })
+                    responseReturn(res, 200, { token, userInfo: userInfoObj, message: `Welcome ${admin.name} (${isSuper ? 'Super Admin' : (isInternal ? 'Manager' : 'Merchant')})` })
                 } else {
                     await recordFailedLogin(email, ip);
                     responseReturn(res, 401, { error: "Invalid credentials" })
@@ -91,7 +91,7 @@ class authControllers {
 
     get_all_admins = async (req, res) => {
         try {
-            const admins = await adminModel.find({ role: { $ne: 'superadmin' } }).sort({ createdAt: -1 });
+            const admins = await adminModel.find({ role: { $ne: 'admin' } }).sort({ createdAt: -1 });
             responseReturn(res, 200, { admins, totalAdmin: admins.length });
         } catch (error) {
             responseReturn(res, 500, { error: 'Internal Server Error' });
@@ -217,12 +217,8 @@ class authControllers {
                 return responseReturn(res, 404, { error: 'User not found' });
             }
 
-            const isSuper = user.role === 'superadmin';
-            const userType = isInternal ? (isSuper ? 'superadmin' : 'subadmin') : 'merchant';
-            const userInfoObj = { ...user.toObject(), userType };
-            if (isSuper) {
-                userInfoObj.role = 'superadmin';
-            }
+            const isSuper = user.role === 'admin';
+            const userInfoObj = { ...user.toObject() };
             delete userInfoObj.password;
 
             responseReturn(res, 200, { userInfo: userInfoObj });

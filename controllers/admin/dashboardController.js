@@ -39,7 +39,7 @@ class dashboardController {
 
             const totalProduct = await productModel.find({}).countDocuments();
             const totalOrder = await customerOrder.find({}).countDocuments();
-            const totalAdmin = await adminModel.find({ role: { $ne: 'superadmin' } }).countDocuments();
+            const totalAdmin = await adminModel.find({ role: { $ne: 'admin' } }).countDocuments();
             const messages = await adminPartnerMessage.find({}).limit(3);
             const recentOrders = await customerOrder.find({}).limit(5);
 
@@ -66,7 +66,7 @@ class dashboardController {
             const monthlyAdminStats = await adminModel.aggregate([
                 {
                     $match: {
-                        role: { $ne: 'superadmin' },
+                        role: { $ne: 'admin' },
                         createdAt: { $gte: startOfYear, $lte: endOfYear }
                     }
                 },

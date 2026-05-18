@@ -1,4 +1,4 @@
-const adminModel = require('../../models/superadmin/adminModel')
+const adminModel = require('../../models/admin/adminModel')
 const partnerModel = require('../../models/partner/Partner')
 const partnerCustomerModel = require('../../models/chat/partnerCustomerModel')
 const OTP = require('../../models/admin/WearOtp')
@@ -64,7 +64,7 @@ class authControllers {
         }
     }
 
-    create_sub_admin = async (req, res) => {
+    create_manager = async (req, res) => {
         const { email, name, password, image, permissions } = req.body
         try {
             if (!email || !name || !password) {
@@ -72,17 +72,17 @@ class authControllers {
             }
             const existingAdmin = await adminModel.findOne({ email })
             if (existingAdmin) {
-                return responseReturn(res, 404, { error: 'Admin Email Already Exists' })
+                return responseReturn(res, 404, { error: 'Manager Email Already Exists' })
             }
             const newAdmin = await adminModel.create({
                 name,
                 email,
                 password: await bcrypt.hash(password, 10),
                 image: image || 'https://res.cloudinary.com/dpvjtswbe/image/upload/v1711516223/profile/admin_avatar.png',
-                role: 'admin',
+                role: 'manager',
                 permissions: permissions || []
             });
-            responseReturn(res, 201, { message: 'Sub-Administrator Created Successfully', admin: newAdmin })
+            responseReturn(res, 201, { message: 'Manager Created Successfully', manager: newAdmin })
         } catch (error) {
             console.error(error);
             responseReturn(res, 500, { error: 'Internal Server Error' })
@@ -92,33 +92,33 @@ class authControllers {
     get_all_admins = async (req, res) => {
         try {
             const admins = await adminModel.find({ role: { $ne: 'admin' } }).sort({ createdAt: -1 });
-            responseReturn(res, 200, { admins, totalAdmin: admins.length });
+            responseReturn(res, 200, { managers: admins, totalManagers: admins.length });
         } catch (error) {
             responseReturn(res, 500, { error: 'Internal Server Error' });
         }
     }
 
-    update_sub_admin_status = async (req, res) => {
+    update_manager_status = async (req, res) => {
         const { adminId, status } = req.body;
         try {
             await adminModel.findByIdAndUpdate(adminId, { status });
-            responseReturn(res, 200, { message: `Sub-Admin status updated to ${status}` });
+            responseReturn(res, 200, { message: `Manager status updated to ${status}` });
         } catch (error) {
             responseReturn(res, 500, { error: error.message });
         }
     }
 
-    update_sub_admin_permissions = async (req, res) => {
+    update_manager_permissions = async (req, res) => {
         const { adminId, permissions } = req.body;
         try {
             await adminModel.findByIdAndUpdate(adminId, { permissions });
-            responseReturn(res, 200, { message: 'Sub-Admin permissions updated successfully' });
+            responseReturn(res, 200, { message: 'Manager permissions updated successfully' });
         } catch (error) {
             responseReturn(res, 500, { error: error.message });
         }
     }
 
-    update_sub_admin_password = async (req, res) => {
+    update_manager_password = async (req, res) => {
         const { adminId, password } = req.body;
         try {
             if (!password || password.length < 6) {
@@ -126,13 +126,13 @@ class authControllers {
             }
             const hashedPassword = await bcrypt.hash(password, 10);
             await adminModel.findByIdAndUpdate(adminId, { password: hashedPassword });
-            responseReturn(res, 200, { message: 'Sub-Admin password updated successfully' });
+            responseReturn(res, 200, { message: 'Manager password updated successfully' });
         } catch (error) {
             responseReturn(res, 500, { error: error.message });
         }
     }
 
-    update_sub_admin_details = async (req, res) => {
+    update_manager_details = async (req, res) => {
         const { adminId, name, email } = req.body;
         try {
             if (!name || !email) {
@@ -140,23 +140,23 @@ class authControllers {
             }
             const existingAdmin = await adminModel.findOne({ email, _id: { $ne: adminId } });
             if (existingAdmin) {
-                return responseReturn(res, 400, { error: 'Email already in use by another admin' });
+                return responseReturn(res, 400, { error: 'Email already in use by another manager' });
             }
             await adminModel.findByIdAndUpdate(adminId, { name, email });
-            responseReturn(res, 200, { message: 'Sub-Admin details updated successfully' });
+            responseReturn(res, 200, { message: 'Manager details updated successfully' });
         } catch (error) {
             responseReturn(res, 500, { error: error.message });
         }
     }
 
-    delete_sub_admin = async (req, res) => {
+    delete_manager = async (req, res) => {
         const { adminId } = req.body;
         try {
             if (!adminId) {
-                return responseReturn(res, 400, { error: 'Admin ID is required' });
+                return responseReturn(res, 400, { error: 'Manager ID is required' });
             }
             await adminModel.findByIdAndDelete(adminId);
-            responseReturn(res, 200, { message: 'Sub-Admin deleted successfully' });
+            responseReturn(res, 200, { message: 'Manager deleted successfully' });
         } catch (error) {
             responseReturn(res, 500, { error: error.message });
         }
@@ -493,3 +493,4 @@ class authControllers {
 }
 
 module.exports = new authControllers()
+

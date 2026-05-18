@@ -1,4 +1,4 @@
-const WearLog = require('../../models/superadmin/WearLog');
+const WearLog = require('../../models/admin/WearLog');
 const WearBuyer = require('../../models/customer/wearBuyerModel');
 const { responseReturn } = require('../../utils/response');
 const fs = require('fs');
@@ -291,3 +291,4 @@ class wearLogController {
 }
 
 module.exports = new wearLogController();
+

@@ -3,7 +3,7 @@ const axios = require('axios');
 const customerOrder = require('../../models/customer/customerOrder');
 const wearReviewModel = require('../../models/customer/wearReviewModel');
 const wearProductModel = require('../../models/partner/WearProduct');
-const AILog = require('../../models/superadmin/aiLogModel');
+const AILog = require('../../models/admin/aiLogModel');
 const userBehaviorModel = require('../../models/customer/userBehaviorModel');
 const whatsappClient = require('../../utils/whatsappClient');
 const { sendEmail } = require('../../utils/emailSender');
@@ -1351,4 +1351,5 @@ Return ONLY this JSON (no explanation):
 }
 
 module.exports = new AIMasterController();
+
 

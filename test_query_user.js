@@ -2,7 +2,7 @@ const mongoose = require('mongoose');
 require('dotenv').config();
 
 const dbUrl = process.env.DB_URL || 'mongodb+srv://nutrio:nutrio@cluster0.zvpz4lh.mongodb.net/test';
-const adminModel = require("./models/superadmin/adminModel");
+const adminModel = require("./models/admin/adminModel");
 
 async function run() {
     await mongoose.connect(dbUrl);
@@ -23,3 +23,4 @@ async function run() {
 }
 
 run();
+

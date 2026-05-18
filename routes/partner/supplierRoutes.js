@@ -130,7 +130,7 @@ const wearCatalogController = require('../../controllers/partner/wearCatalogCont
 router.get('/stock/admin/ai-summary', authMiddleware, supplierStockController.admin_get_ai_summary);
 router.get('/stock/admin/b2b-summary', authMiddleware, b2bOrderController.get_admin_b2b_summary);
 
-const aiMasterController = require('../../controllers/superadmin/aiMasterController');
+const aiMasterController = require('../../controllers/admin/aiMasterController');
 router.get('/catalog/list', wearCatalogController.get_public_catalogs); // Public
 router.post('/catalog/add', authMiddleware, wearCatalogController.add_catalog);
 router.post('/ai-recommend', authMiddleware, aiMasterController.generate_ai_recommendation);
@@ -177,3 +177,4 @@ router.get('/quality-dashboard/data', authMiddleware, supplierController.get_qua
 
 // ── Final Cleanup ──
 module.exports = router;
+

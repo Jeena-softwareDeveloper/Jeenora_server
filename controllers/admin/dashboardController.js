@@ -1,5 +1,5 @@
 const { responseReturn } = require("../../utils/response")
-const myShopWallet = require('../../models/superadmin/myShopWallet')
+const myShopWallet = require('../../models/admin/myShopWallet')
 const productModel = require('../../models/partner/Product')
 const customerOrder = require('../../models/customer/customerOrder')
 const partnerModel = require('../../models/partner/Partner')
@@ -7,7 +7,7 @@ const adminPartnerMessage = require('../../models/chat/adminPartnerMessage')
 const partnerWallet = require('../../models/partner/partnerWallet')
 const authOrder = require('../../models/partner/AuthOrder')
 const bannerModel = require('../../models/admin/bannerModel')
-const adminModel = require('../../models/superadmin/adminModel')
+const adminModel = require('../../models/admin/adminModel')
 const cloudinary = require('cloudinary').v2
 const formidable = require("formidable")
 const partnerCustomerMessage = require('../../models/chat/partnerCustomerMessage')
@@ -295,3 +295,4 @@ class dashboardController {
     //end Method 
 }
 module.exports = new dashboardController()
+

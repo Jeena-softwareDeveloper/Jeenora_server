@@ -1,7 +1,7 @@
 const bannerModel = require("../../models/admin/bannerModel");
 const categoryModel = require("../../models/customer/Category");
 const productModel = require("../../models/partner/Product");
-const adminSettingsModel = require("../../models/superadmin/adminSettingsModel");
+const adminSettingsModel = require("../../models/admin/adminSettingsModel");
 const { responseReturn } = require("../../utils/response");
 
 class homeLayoutController {
@@ -238,3 +238,4 @@ class homeLayoutController {
 }
 
 module.exports = new homeLayoutController();
+

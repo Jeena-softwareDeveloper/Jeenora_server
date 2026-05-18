@@ -1,6 +1,6 @@
 const router = require('express').Router();
 const deliveryController = require('../../controllers/admin/deliveryController');
-const shiprocketAdminController = require('../../controllers/superadmin/shiprocketAdminController');
+const shiprocketAdminController = require('../../controllers/admin/shiprocketAdminController');
 const { authMiddleware } = require('../../middlewares/authMiddleware');
 
 router.get('/edd', deliveryController.get_delivery_edd);
@@ -18,3 +18,4 @@ router.get('/admin/shiprocket/track/:awb', authMiddleware, shiprocketAdminContro
 router.post('/admin/shiprocket/ship', authMiddleware, shiprocketAdminController.ship_order);
 
 module.exports = router;
+

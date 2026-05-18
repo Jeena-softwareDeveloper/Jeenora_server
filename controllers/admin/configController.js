@@ -1,5 +1,5 @@
-const adminSettingsModel = require("../../models/superadmin/adminSettingsModel");
-const NavMenu = require("../../models/superadmin/navMenuModel");
+const adminSettingsModel = require("../../models/admin/adminSettingsModel");
+const NavMenu = require("../../models/admin/navMenuModel");
 const { responseReturn } = require("../../utils/response");
 const fs = require('fs');
 const path = require('path');
@@ -136,3 +136,4 @@ class configController {
 }
 
 module.exports = new configController();
+

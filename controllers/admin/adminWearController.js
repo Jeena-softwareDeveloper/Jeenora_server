@@ -6,10 +6,10 @@ const customerOrder = require("../../models/customer/customerOrder");
 const authOrder = require("../../models/partner/AuthOrder");
 const supplierModel = require("../../models/partner/Supplier");
 const wearBannerModel = require("../../models/admin/wearBannerModel");
-const wearLogModel = require("../../models/superadmin/WearLog");
+const wearLogModel = require("../../models/admin/WearLog");
 const wearAuditLogModel = require("../../models/admin/wearAuditLogModel");
 const wearSearchHistoryModel = require("../../models/customer/wearSearchHistoryModel");
-const adminSettingsModel = require("../../models/superadmin/adminSettingsModel");
+const adminSettingsModel = require("../../models/admin/adminSettingsModel");
 const wearCartModel = require("../../models/customer/wearCartModel");
 const { responseReturn } = require("../../utils/response");
 const { mongo: { ObjectId } } = require('mongoose');
@@ -779,3 +779,4 @@ class adminWearController {
 }
 
 module.exports = new adminWearController();
+

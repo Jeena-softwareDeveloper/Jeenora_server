@@ -10,7 +10,7 @@ router.post('/banner/add',authMiddleware, dashboardController.add_banner)
 router.put('/banner/update/:bannerId',authMiddleware, dashboardController.update_banner)
 router.get('/banners', dashboardController.get_banners)
 
-const aiMasterController = require('../../controllers/superadmin/aiMasterController')
+const aiMasterController = require('../../controllers/admin/aiMasterController')
 
 // AI Admin Endpoints
 router.post('/admin/ai/reviews', authMiddleware, aiMasterController.smart_review_summarize)

@@ -90,7 +90,7 @@ class WhatsAppClient {
 
                 // --- FORWARD TO AI ---
                 try {
-                    const aiMaster = require('../controllers/superadmin/aiMasterController');
+                    const aiMaster = require('../controllers/admin/aiMasterController');
                     await aiMaster.handleIncomingMessage(msg);
                 } catch (aiErr) {
                     console.error('[WhatsApp AI Forward] Error:', aiErr.message);
@@ -187,3 +187,4 @@ class WhatsAppClient {
 
 // Export a singleton instance
 module.exports = new WhatsAppClient();
+

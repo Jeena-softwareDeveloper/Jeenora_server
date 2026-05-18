@@ -1,7 +1,7 @@
 const authOrderModel = require('../../models/partner/AuthOrder')
 const customerOrder = require('../../models/customer/customerOrder')
 
-const myShopWallet = require('../../models/superadmin/myShopWallet')
+const myShopWallet = require('../../models/admin/myShopWallet')
 const partnerWallet = require('../../models/partner/partnerWallet')
 
 const cardModel = require('../../models/customer/cardModel')
@@ -1545,3 +1545,4 @@ class orderController {
 }
 
 module.exports = new orderController()
+

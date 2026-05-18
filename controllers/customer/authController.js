@@ -1,5 +1,5 @@
 const WearBuyer = require('../../models/customer/wearBuyerModel');
-const WearLog = require('../../models/superadmin/WearLog');
+const WearLog = require('../../models/admin/WearLog');
 const WearOtp = require('../../models/admin/WearOtp');
 const WearSession = require('../../models/customer/wearSessionModel');
 const Customer = require('../../models/customer/Customer');
@@ -644,3 +644,4 @@ exports.delete_account = async (req, res) => {
         responseReturn(res, 500, { error: error.message });
     }
 };
+

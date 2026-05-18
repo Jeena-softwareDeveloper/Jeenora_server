@@ -1,5 +1,5 @@
 const router = require('express').Router();
-const aiMasterController = require('../controllers/superadmin/aiMasterController');
+const aiMasterController = require('../controllers/admin/aiMasterController');
 
 
 
@@ -31,7 +31,7 @@ router.post('/admin/order/trigger-refund/:orderId', authMiddleware, adminWearCon
 
 
 // Admin Settings (Direct match to fix 404s)
-const adminSettingsController = require('../controllers/superadmin/adminSettingsController');
+const adminSettingsController = require('../controllers/admin/adminSettingsController');
 router.get('/admin/settings/menuDisplayMode', authMiddleware, (req,res,next)=>{req.params.key='menuDisplayMode';next();}, adminSettingsController.getSetting);
 router.get('/admin/settings/wear_config', authMiddleware, (req,res,next)=>{req.params.key='wear_config';next();}, adminSettingsController.getSetting);
 router.get('/admin/settings', authMiddleware, adminSettingsController.getAllSettings);
@@ -96,7 +96,7 @@ router.get('/wear/logs', authMiddleware, wearLogController.getLogs); // Dashboar
 router.get('/wear/stats', authMiddleware, wearLogController.getStats); // Dashboard Alias
 router.use('/wear/logs', require('./admin/wearLogRoutes'));
 router.use('/wear/log', require('./admin/wearLogRoutes'));
-router.use('/wear/dashboard', require('./superadmin/dashboardRoutes'));
+router.use('/wear/dashboard', require('./admin/dashboardRoutes'));
 
 router.use('/wear/whatsapp', require('./admin/wearWhatsAppRoutes'));
 
@@ -104,7 +104,7 @@ router.use('/', require('./partner/productOfferRoutes'));
 router.get('/wear/buyers', authMiddleware, adminWearController.get_wear_buyers);
 
 const homeControllers = require('../controllers/customer/homeControllers');
-const configController = require('../controllers/superadmin/configController');
+const configController = require('../controllers/admin/configController');
 router.get('/config/initial-data', configController.get_initial_data);
 router.get('/config/nav-menu/:platform', configController.get_nav_menu);
 router.post('/config/nav-menu/update', configController.update_nav_menu);
@@ -112,6 +112,7 @@ router.get('/products/:slug', homeControllers.product_details); // Old Detail Pa
 router.get('/get-products', homeControllers.get_products); // Old Home Path
 router.use('/', require('./partner/partnerRoutes'));
 
-router.use('/', require('./superadmin/legacyAuthRoutes')); 
+router.use('/', require('./admin/legacyAuthRoutes')); 
 
 module.exports = router;
+

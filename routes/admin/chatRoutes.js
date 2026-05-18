@@ -11,7 +11,7 @@ router.get('/chat/admin-user/get-customer-message/:customerId', authMiddleware, 
 router.post('/chat/admin-user/send-message-to-customer', authMiddleware, ChatController.partner_message_add)
 
 // Superadmin <-> Admin User (Partner)
-router.get('/chat/superadmin/get-admins', authMiddleware, ChatController.get_partners)
+router.get('/chat/admin/get-admins', authMiddleware, ChatController.get_partners)
 router.post('/chat/message-send-admin-support', authMiddleware, ChatController.partner_admin_message_insert)
 router.get('/chat/get-superadmin-messages/:receverId', authMiddleware, ChatController.get_admin_messages)
 router.get('/chat/get-admin-user-messages', authMiddleware, ChatController.get_partner_messages)

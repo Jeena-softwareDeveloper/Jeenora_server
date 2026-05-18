@@ -9,7 +9,7 @@ const customerModel = require('../../models/customer/Customer')
 const wearProductModel = require('../../models/partner/WearProduct')
 const productOfferModel = require('../../models/partner/productOfferModel')
 const customerOrderModel = require('../../models/customer/customerOrder')
-const adminSettingsModel = require('../../models/superadmin/adminSettingsModel')
+const adminSettingsModel = require('../../models/admin/adminSettingsModel')
 const wearBuyerModel = require('../../models/customer/wearBuyerModel')
 const userBehaviorModel = require('../../models/customer/userBehaviorModel')
 
@@ -915,3 +915,4 @@ class homeControllers {
 }
 
 module.exports = new homeControllers()
+

@@ -248,7 +248,7 @@ setInterval(() => {
 // 🤖 AI CRON JOBS — Predictive Intelligence (2030-level)
 // ============================================================
 const cron = require('node-cron');
-const aiMasterController = require('./controllers/superadmin/aiMasterController');
+const aiMasterController = require('./controllers/admin/aiMasterController');
 const orderController = require('./controllers/customer/orderController');
 const inventoryAiService = require('./services/partner/inventoryAiService');
 const b2bOrderController = require('./controllers/partner/b2bOrderController');
@@ -467,4 +467,5 @@ dbConnect()
     process.exit(1);
   });
 // Nodemon reload trigger: 6
+
 

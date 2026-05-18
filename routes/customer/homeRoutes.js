@@ -19,7 +19,7 @@ router.post('/customer/submit-review', apiLimiter, homeControllers.submit_review
 router.get('/customer/get-reviews/:productId', homeControllers.get_reviews)
 
 // Customer AI Features
-const aiMasterController = require('../../controllers/superadmin/aiMasterController');
+const aiMasterController = require('../../controllers/admin/aiMasterController');
 router.post('/customer/ai/semantic-search', aiMasterController.conversational_search);
 router.post('/customer/ai/stylist', aiMasterController.virtual_stylist);
 router.post('/customer/ai/size-predictor', aiMasterController.size_predictor);

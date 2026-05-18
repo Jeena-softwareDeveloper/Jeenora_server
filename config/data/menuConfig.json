@@ -54,13 +54,13 @@
     "admin": [
         {
             "id": 5,
-            "title": "Sub-Admins & Managers",
+            "title": "Managers",
             "icon": "FaUserShield",
-            "path": "/admin/dashboard/sub-admins",
+            "path": "/admin/dashboard/managers",
             "role": "admin",
             "isAdminMenu": true,
             "isSuperAdminOnly": true,
-            "permission": "subadmins.manage"
+            "permission": "managers.manage"
         },
         {
             "id": 20,
@@ -74,13 +74,13 @@
         },
         {
             "id": 228,
-            "title": "Admins & Managers",
+            "title": "All Managers",
             "icon": "FaUsersCog",
             "path": "/admin/dashboard/admins",
             "role": "admin",
             "isAdminMenu": true,
             "isSuperAdminOnly": true,
-            "permission": "subadmins.manage"
+            "permission": "managers.manage"
         },
         {
             "id": 243,
@@ -90,7 +90,7 @@
             "role": "admin",
             "isAdminMenu": true,
             "isSuperAdminOnly": true,
-            "permission": "subadmins.manage"
+            "permission": "managers.manage"
         },
         {
             "id": 104,

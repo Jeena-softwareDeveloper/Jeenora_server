@@ -1,4 +1,4 @@
-const adminSettingsModel = require('../../models/superadmin/adminSettingsModel');
+const adminSettingsModel = require('../../models/admin/adminSettingsModel');
 const { responseReturn } = require('../../utils/response');
 
 class adminSettingsController {
@@ -75,3 +75,4 @@ class adminSettingsController {
 }
 
 module.exports = new adminSettingsController();
+

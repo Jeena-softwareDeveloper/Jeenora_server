@@ -168,7 +168,8 @@ class homeControllers {
                         category: p.category,
                         variants: p.variants?.map(v => ({
                             size: v.size,
-                            variantName: v.variantName || v.color || v.name
+                            variantName: v.variantName || v.color || v.name,
+                            stock: v.stock
                         })) || [],
                         type: 'wear',
                         allColors: []
@@ -242,7 +243,8 @@ class homeControllers {
                     category: p.category,
                     variants: p.variants?.map(v => ({
                         size: v.size,
-                        variantName: v.variantName || v.color || v.name
+                        variantName: v.variantName || v.color || v.name,
+                        stock: v.stock
                     })) || [],
                     type: 'wear'
                 };
@@ -360,7 +362,8 @@ class homeControllers {
                     category: p.category,
                     variants: p.variants?.map(v => ({
                         size: v.size,
-                        variantName: v.variantName || v.color || v.name
+                        variantName: v.variantName || v.color || v.name,
+                        stock: v.stock
                     })) || [],
                     type: 'wear'
                 };
@@ -434,6 +437,48 @@ class homeControllers {
             const variantName = product.variants?.[0]?.variantName || product.variants?.[0]?.name;
             const finalName = variantName || (product.name || product.productName);
 
+            // Robust Multi-Collection Seller/Partner identity fallback
+            let resolvedPartner = product.partnerId;
+            console.log(`[DEBUG Details] Resolving partner identity. Product: "${finalName}" (${product._id}), Raw partnerId:`, product.partnerId);
+
+            if (!resolvedPartner || !resolvedPartner.businessDetails) {
+                const rawPartnerId = product.partnerId?._id || product.partnerId;
+                if (rawPartnerId) {
+                    const mongoose = require('mongoose');
+                    try {
+                        console.log(`[DEBUG Details] Attempting database fallback checks for ID: ${rawPartnerId}`);
+                        let supplierObj = await mongoose.model('Supplier').findById(rawPartnerId).lean();
+                        if (supplierObj) {
+                            console.log(`[DEBUG Details] Found supplier record in Supplier collection:`, supplierObj);
+                            resolvedPartner = supplierObj;
+                        } else {
+                            let partnerObj = await mongoose.model('Partner').findById(rawPartnerId).lean();
+                            if (partnerObj) {
+                                console.log(`[DEBUG Details] Found partner record in Partner collection:`, partnerObj);
+                                resolvedPartner = {
+                                    ...partnerObj,
+                                    businessDetails: {
+                                        shopName: partnerObj.shopInfo?.shopName || partnerObj.name || "Jeenora Official Seller",
+                                        businessType: partnerObj.shopInfo?.category || "Standard"
+                                    }
+                                };
+                            } else {
+                                console.warn(`[DEBUG Details] Could not find seller with ID ${rawPartnerId} in either Supplier or Partner collections!`);
+                            }
+                        }
+                    } catch (err) {
+                        console.error(`[DEBUG Details] Database query fallback error:`, err.message);
+                    }
+                }
+            }
+
+            if (resolvedPartner && !resolvedPartner.businessDetails) {
+                resolvedPartner.businessDetails = {
+                    shopName: resolvedPartner.shopInfo?.shopName || resolvedPartner.name || "Jeenora Official Seller",
+                    businessType: resolvedPartner.shopInfo?.category || "Standard"
+                };
+            }
+
             const scrubbedProduct = {
                 _id: product._id,
                 name: finalName,
@@ -447,9 +492,9 @@ class homeControllers {
                 rating: product.rating || 5,
                 description: product.description,
                 brand: product.brand,
-                shopName: product.partnerId?.businessDetails?.shopName || product.partnerId?.shopInfo?.shopName || product.shopName,
-                partnerId: product.partnerId,
-                Id: product.partnerId, // Added for frontend compatibility where product.Id is used!
+                shopName: resolvedPartner?.businessDetails?.shopName || resolvedPartner?.shopInfo?.shopName || product.shopName || "Jeenora Official Seller",
+                partnerId: resolvedPartner,
+                Id: resolvedPartner, // Added for frontend compatibility where product.Id is used!
                 variants: (product.variants || []).map(v => ({
                     ...v,
                     listingPrice: Math.ceil(v.listingPrice),

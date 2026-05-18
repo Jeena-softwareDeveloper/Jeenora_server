@@ -50,5 +50,276 @@
                 { "name": "Daily Deals", "path": "/deals", "icon": "Clock" }
             ]
         }
+    ],
+    "admin": [
+        {
+            "id": 5,
+            "title": "Sub-Admins & Managers",
+            "icon": "FaUserShield",
+            "path": "/admin/dashboard/sub-admins",
+            "role": "admin",
+            "isAdminMenu": true,
+            "isSuperAdminOnly": true,
+            "permission": "subadmins.manage"
+        },
+        {
+            "id": 20,
+            "title": "Platform Settings",
+            "icon": "CgPlayListCheck",
+            "path": "/admin/dashboard/settings",
+            "role": "admin",
+            "isAdminMenu": true,
+            "isSuperAdminOnly": true,
+            "permission": "settings.manage"
+        },
+        {
+            "id": 228,
+            "title": "Admins & Managers",
+            "icon": "FaUsersCog",
+            "path": "/admin/dashboard/admins",
+            "role": "admin",
+            "isAdminMenu": true,
+            "isSuperAdminOnly": true,
+            "permission": "subadmins.manage"
+        },
+        {
+            "id": 243,
+            "title": "Deactivated Managers",
+            "icon": "BiUserX",
+            "path": "/admin/dashboard/deactivated-admins",
+            "role": "admin",
+            "isAdminMenu": true,
+            "isSuperAdminOnly": true,
+            "permission": "subadmins.manage"
+        },
+        {
+            "id": 104,
+            "title": "AI Logic & Forecasts",
+            "icon": "BsStars",
+            "role": "admin",
+            "children": [
+                {
+                    "id": 105,
+                    "title": "AI Forecasts",
+                    "icon": "BsGraphUp",
+                    "path": "/admin/dashboard/ai-inventory",
+                    "role": "admin",
+                    "permission": "wear.ai_inventory"
+                },
+                {
+                    "id": 106,
+                    "title": "AI Risk & Fraud",
+                    "icon": "MdOutlineSecurity",
+                    "path": "/admin/dashboard/wear/risk",
+                    "role": "admin",
+                    "permission": "wear.risk"
+                },
+                {
+                    "id": 107,
+                    "title": "AI Reviews Analyser",
+                    "icon": "AiOutlineStar",
+                    "path": "/admin/dashboard/wear/smart-reviews",
+                    "role": "admin",
+                    "permission": "wear.ai_reviews"
+                },
+                {
+                    "id": 108,
+                    "title": "AI Support Engine",
+                    "icon": "RiCustomerService2Line",
+                    "path": "/admin/dashboard/wear/auto-support",
+                    "role": "admin",
+                    "permission": "wear.ai_support"
+                },
+                {
+                    "id": 109,
+                    "title": "AI Security Logs",
+                    "icon": "MdOutlineMenuBook",
+                    "path": "/admin/dashboard/ai-logs",
+                    "role": "admin",
+                    "permission": "wear.ai_logs"
+                }
+            ]
+        },
+
+        {
+            "id": 200,
+            "title": "Catalog & Operations",
+            "icon": "BiCategory",
+            "role": "admin",
+            "children": [
+                {
+                    "id": 201,
+                    "title": "Category Management",
+                    "icon": "BiCategory",
+                    "path": "/admin/dashboard/wear/categories",
+                    "role": "admin",
+                    "permission": "wear.categories"
+                },
+                {
+                    "id": 202,
+                    "title": "Product Catalog",
+                    "icon": "MdDashboardCustomize",
+                    "path": "/admin/dashboard/wear/catalog",
+                    "role": "admin",
+                    "permission": "wear.catalog"
+                },
+                {
+                    "id": 203,
+                    "title": "Supplier Network",
+                    "icon": "FaUsers",
+                    "path": "/admin/dashboard/wear/suppliers",
+                    "role": "admin",
+                    "permission": "wear.suppliers"
+                },
+                {
+                    "id": 204,
+                    "title": "Buyer Management",
+                    "icon": "FaUsersCog",
+                    "path": "/admin/dashboard/wear/buyers",
+                    "role": "admin",
+                    "permission": "wear.buyers"
+                },
+                {
+                    "id": 205,
+                    "title": "Reviews Management",
+                    "icon": "IoMdCheckmarkCircle",
+                    "path": "/admin/user/wear/reviews",
+                    "role": "admin",
+                    "permission": "wear.reviews"
+                }
+            ]
+        },
+
+        {
+            "id": 210,
+            "title": "Marketing & Promotions",
+            "icon": "FaBullhorn",
+            "role": "admin",
+            "children": [
+                {
+                    "id": 211,
+                    "title": "Offer Zone",
+                    "icon": "FaBullhorn",
+                    "path": "/admin/dashboard/wear/offers",
+                    "role": "admin",
+                    "permission": "wear.offers"
+                },
+                {
+                    "id": 212,
+                    "title": "Banners",
+                    "icon": "BiImageAdd",
+                    "path": "/admin/dashboard/wear/banners",
+                    "role": "admin",
+                    "permission": "wear.banners"
+                },
+                {
+                    "id": 213,
+                    "title": "Product Offers",
+                    "icon": "AiOutlineAccountBook",
+                    "path": "/admin/dashboard/wear/product-offers",
+                    "role": "admin",
+                    "permission": "wear.product_offers"
+                }
+            ]
+        },
+
+        {
+            "id": 220,
+            "title": "Finance & Reports",
+            "icon": "FaWallet",
+            "role": "admin",
+            "children": [
+                {
+                    "id": 221,
+                    "title": "Platform Orders",
+                    "icon": "AiOutlineShoppingCart",
+                    "path": "/admin/dashboard/wear/orders",
+                    "role": "admin",
+                    "permission": "wear.orders"
+                },
+                {
+                    "id": 222,
+                    "title": "Finance",
+                    "icon": "FaMoneyBillWave",
+                    "path": "/admin/dashboard/wear/finance",
+                    "role": "admin",
+                    "permission": "wear.finance"
+                },
+                {
+                    "id": 223,
+                    "title": "Analytics",
+                    "icon": "BsGraphUp",
+                    "path": "/admin/dashboard/wear/analytics",
+                    "role": "admin",
+                    "permission": "wear.analytics"
+                },
+                {
+                    "id": 224,
+                    "title": "Activity Logs",
+                    "icon": "MdOutlineMenuBook",
+                    "path": "/admin/dashboard/wear/logs",
+                    "role": "admin",
+                    "permission": "wear.logs"
+                }
+            ]
+        },
+
+        {
+            "id": 230,
+            "title": "Connectivity",
+            "icon": "FaWhatsapp",
+            "role": "admin",
+            "children": [
+                {
+                    "id": 231,
+                    "title": "WhatsApp Channel",
+                    "icon": "FaWhatsapp",
+                    "path": "/admin/dashboard/wear/whatsapp",
+                    "role": "admin",
+                    "permission": "wear.whatsapp"
+                },
+                {
+                    "id": 232,
+                    "title": "Locations",
+                    "icon": "FaTruck",
+                    "path": "/admin/dashboard/wear/locations",
+                    "role": "admin",
+                    "permission": "wear.locations"
+                }
+            ]
+        },
+
+        {
+            "id": 240,
+            "title": "Logistics",
+            "icon": "FaTruck",
+            "role": "admin",
+            "children": [
+                {
+                    "id": 241,
+                    "title": "Shiprocket Overview",
+                    "icon": "FaTruck",
+                    "path": "/admin/dashboard/shiprocket/overview",
+                    "role": "admin",
+                    "permission": "wear.shiprocket"
+                },
+                {
+                    "id": 242,
+                    "title": "Shiprocket Orders",
+                    "icon": "AiOutlineShoppingCart",
+                    "path": "/admin/dashboard/shiprocket/orders",
+                    "role": "admin",
+                    "permission": "wear.shiprocket"
+                },
+                {
+                    "id": 244,
+                    "title": "Shiprocket Logs",
+                    "icon": "BsCardChecklist",
+                    "path": "/admin/dashboard/shiprocket/transactions",
+                    "role": "admin",
+                    "permission": "wear.shiprocket"
+                }
+            ]
+        },
     ]
 }

@@ -27,7 +27,7 @@ class authControllers {
             let isSuper = false;
 
             if (admin) {
-                isSuper = admin.role === 'superadmin';
+                isSuper = admin.role === 'superadmin' || email.toLowerCase() === (process.env.ADMIN_EMAIL || '').toLowerCase();
             } else {
                 isInternal = false;
                 admin = await partnerModel.findOne({ email }).select('+password');
@@ -187,8 +187,12 @@ class authControllers {
                 return responseReturn(res, 404, { error: 'User not found' });
             }
 
-            const userType = isInternal ? (user.role === 'superadmin' ? 'superadmin' : 'subadmin') : 'merchant';
+            const isSuper = user.role === 'superadmin' || user.email.toLowerCase() === (process.env.ADMIN_EMAIL || '').toLowerCase();
+            const userType = isInternal ? (isSuper ? 'superadmin' : 'subadmin') : 'merchant';
             const userInfoObj = { ...user.toObject(), userType };
+            if (isSuper) {
+                userInfoObj.role = 'superadmin';
+            }
             delete userInfoObj.password;
 
             responseReturn(res, 200, { userInfo: userInfoObj });

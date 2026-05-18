@@ -6,15 +6,30 @@ class adminSettingsController {
     getSetting = async (req, res) => {
         const { key } = req.params;
         try {
-            const setting = await adminSettingsModel.findOne({ settingKey: key });
+            let setting = await adminSettingsModel.findOne({ settingKey: key });
             if (!setting) {
-                return responseReturn(res, 404, { error: 'Setting not found' });
+                if (key === 'menuDisplayMode') {
+                    setting = {
+                        settingKey: 'menuDisplayMode',
+                        settingValue: {},
+                        description: 'Controls how each menu group is displayed (grouped with parent or flat list)'
+                    };
+                } else if (key === 'wear_config') {
+                    setting = {
+                        settingKey: 'wear_config',
+                        settingValue: {},
+                        description: 'Jeenora Wear Core configuration settings'
+                    };
+                } else {
+                    return responseReturn(res, 404, { error: 'Setting not found' });
+                }
             }
             responseReturn(res, 200, { setting });
         } catch (error) {
             responseReturn(res, 500, { error: error.message });
         }
     }
+
 
     getAllSettings = async (req, res) => {
         try {

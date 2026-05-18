@@ -36,13 +36,26 @@ async function migrate() {
         await mongoose.connect(dbUrl);
         console.log("✅ Connected successfully!");
 
-        // 1. Migrate roles from 'subadmin' to 'manager'
-        console.log("\n🔄 Step 1: Migrating roles from 'subadmin' to 'manager'...");
-        const roleResult = await Admin.updateMany(
+        // 1. Migrate roles to 'manager'
+        console.log("\n🔄 Step 1: Migrating roles to 'manager'...");
+        
+        // Update subadmins to managers
+        const roleResult1 = await Admin.updateMany(
             { role: 'subadmin' },
             { $set: { role: 'manager' } }
         );
-        console.log(`👉 Status: Updated ${roleResult.modifiedCount} accounts to 'manager' role.`);
+
+        // Update admin accounts that are not primary admins to managers
+        const primaryEmails = ['jeenoraofficial@gmail.com', 'admin@example.com'];
+        const roleResult2 = await Admin.updateMany(
+            { 
+                role: 'admin',
+                email: { $nin: primaryEmails }
+            },
+            { $set: { role: 'manager' } }
+        );
+        
+        console.log(`👉 Status: Updated ${roleResult1.modifiedCount} 'subadmin' accounts and ${roleResult2.modifiedCount} non-primary 'admin' accounts to 'manager' role.`);
 
         // 2. Migrate permissions from 'subadmins.manage' to 'managers.manage'
         console.log("\n🔄 Step 2: Migrating permissions from 'subadmins.manage' to 'managers.manage'...");

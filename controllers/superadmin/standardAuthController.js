@@ -132,6 +132,36 @@ class authControllers {
         }
     }
 
+    update_sub_admin_details = async (req, res) => {
+        const { adminId, name, email } = req.body;
+        try {
+            if (!name || !email) {
+                return responseReturn(res, 400, { error: 'Name and Email are required' });
+            }
+            const existingAdmin = await adminModel.findOne({ email, _id: { $ne: adminId } });
+            if (existingAdmin) {
+                return responseReturn(res, 400, { error: 'Email already in use by another admin' });
+            }
+            await adminModel.findByIdAndUpdate(adminId, { name, email });
+            responseReturn(res, 200, { message: 'Sub-Admin details updated successfully' });
+        } catch (error) {
+            responseReturn(res, 500, { error: error.message });
+        }
+    }
+
+    delete_sub_admin = async (req, res) => {
+        const { adminId } = req.body;
+        try {
+            if (!adminId) {
+                return responseReturn(res, 400, { error: 'Admin ID is required' });
+            }
+            await adminModel.findByIdAndDelete(adminId);
+            responseReturn(res, 200, { message: 'Sub-Admin deleted successfully' });
+        } catch (error) {
+            responseReturn(res, 500, { error: error.message });
+        }
+    }
+
     partner_login = async (req, res) => {
         return this.admin_login(req, res);
     }

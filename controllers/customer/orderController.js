@@ -431,9 +431,42 @@ class orderController {
             for (let i = 0; i < products.length; i++) {
                 const pro = products[i].products;
                 const pri = products[i].price; // This is the subtotal for this partner
-                let partnerId = products[i].partnerId;
+                let partnerId = products[i].partnerId || products[i].Id;
+
+                // Fallback 1: Extract partnerId from productInfo inside products list
+                if (!partnerId && pro && pro[0] && pro[0].productInfo) {
+                    const info = pro[0].productInfo;
+                    partnerId = info.partnerId || info.Id || info.partner;
+                }
+
+                // Fallback 2: Query database for product's seller/partner ID
+                if (!partnerId && pro && pro[0] && pro[0].productInfo && pro[0].productInfo._id) {
+                    const mongoose = require('mongoose');
+                    const productId = pro[0].productInfo._id;
+                    try {
+                        const wearProductModel = mongoose.model('WearProduct');
+                        const productModel = mongoose.model('Product');
+                        let dbProduct = await wearProductModel.findById(productId).select('partnerId').lean();
+                        if (!dbProduct) {
+                            dbProduct = await productModel.findById(productId).select('partnerId partner').lean();
+                        }
+                        if (dbProduct) {
+                            partnerId = dbProduct.partnerId || dbProduct.partner;
+                        }
+                    } catch (dbErr) {
+                        console.error('[PLACE_ORDER] Fallback DB partner query failed:', dbErr.message);
+                    }
+                }
+
                 if (partnerId && typeof partnerId === 'object' && partnerId._id) {
                     partnerId = partnerId._id;
+                }
+
+                if (partnerId) {
+                    const mongoose = require('mongoose');
+                    if (mongoose.Types.ObjectId.isValid(partnerId)) {
+                        partnerId = new mongoose.Types.ObjectId(partnerId);
+                    }
                 }
 
                 const commAmount = Math.round(pri * (COMMISSION_RATE / 100));

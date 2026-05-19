@@ -784,9 +784,9 @@ class wearCatalogController {
 
             if (!productToUpdate) return responseReturn(res, 404, { error: 'Product not found' });
 
-            // Dashboard Support: Admin and Partner can update any catalog. 
+            // Dashboard Support: Admin and Partner/Manager can update any catalog. 
             // Suppliers can only update their OWN catalogs.
-            const isAdminOrPartner = role === 'admin' || role === 'superadmin' || role === 'partner';
+            const isAdminOrPartner = role === 'admin' || role === 'superadmin' || role === 'partner' || role === 'manager';
             
             console.log('[Catalog Status] Debug Request:', {
                 productId,

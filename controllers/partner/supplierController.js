@@ -234,6 +234,7 @@ class supplierController {
 
             responseReturn(res, 200, {
                 success: true,
+                _id: supplier._id,
                 status: supplier.status || 'pending',
                 shopName: supplier.businessDetails?.shopName || '',
                 stats: {

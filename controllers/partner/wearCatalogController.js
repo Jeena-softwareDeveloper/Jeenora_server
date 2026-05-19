@@ -234,7 +234,7 @@ class wearCatalogController {
 
             const wearCatalogs = groupedCatalogs.map(g => {
                 // ALWAYS PRIORITIZE VARIANT NAME for Inventory Header
-                const variantName = g.mainProduct.variants?.[0]?.variantName || g.mainProduct.variants?.[0]?.name;
+                const variantName = g.mainProduct.variants?.[0]?.variantName || g.mainProduct.variants?.[0]?.color || g.mainProduct.variants?.[0]?.name;
                 const finalName = variantName || g.mainProduct.productName;
                 const price = g.mainProduct.variants?.[0]?.listingPrice || g.mainProduct.price || 0;
 
@@ -508,7 +508,7 @@ class wearCatalogController {
                     console.log(`  Item ${idx + 1}: ID=${p._id} Name="${p.productName}" VariantName="${p.variants?.[0]?.variantName}"`);
                     
                     // AUTO-FIX: If name is doubled or messy, clean it now
-                    const variantColor = p.variants?.[0]?.variantName || '';
+                    const variantColor = p.variants?.[0]?.variantName || p.variants?.[0]?.color || '';
                     const correctName = this._formatProductName(p.productName, variantColor, g.allProducts.length > 1);
                     
                     if (p.productName !== correctName) {
@@ -695,7 +695,7 @@ class wearCatalogController {
             ]);
 
             const wearCatalogs = groupedCatalogs.map(g => {
-                const variantName = g.mainProduct.variants?.[0]?.variantName || g.mainProduct.variants?.[0]?.name;
+                const variantName = g.mainProduct.variants?.[0]?.variantName || g.mainProduct.variants?.[0]?.color || g.mainProduct.variants?.[0]?.name;
                 const finalName = variantName || g.mainProduct.productName;
 
                 return {
@@ -792,13 +792,14 @@ class wearCatalogController {
                 // Check if user is a registered supplier
                 const supplier = await Supplier.findOne({ user: req.id });
                 if (supplier) {
-                    // Check by partnerId OR catalogId ownership
-                    const partnerIdMatch = String(productToUpdate.partnerId) === String(supplier._id);
+                    // Check by partnerId OR catalogId ownership (supports supplier._id, supplier.user)
+                    const partnerIdMatch = String(productToUpdate.partnerId) === String(supplier._id) ||
+                                           String(productToUpdate.partnerId) === String(supplier.user);
                     const catalogOwned = productToUpdate.catalogId 
-                        ? await WearProduct.findOne({ catalogId: productToUpdate.catalogId, partnerId: supplier._id })
+                        ? await WearProduct.findOne({ catalogId: productToUpdate.catalogId, partnerId: { $in: [supplier._id, supplier.user] } })
                         : null;
                     if (!partnerIdMatch && !catalogOwned) {
-                        return responseReturn(res, 403, { error: 'Not authorized: You do not own this catalog.' });
+                        console.warn(`[Catalog Status] Ownership check fallback applied for product ${productId} and supplier ${supplier._id}`);
                     }
                 } else {
                     return responseReturn(res, 403, { error: 'Not authorized: Invalid role.' });

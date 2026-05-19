@@ -399,12 +399,11 @@ class SettlementController {
         }
     };
     
-    // 6. Get financial dashboard
     get_financial_dashboard = async (req, res) => {
         const { id } = req;
         
         try {
-            const supplier = await Supplier.findOne({ user: id });
+            const supplier = await Supplier.findOne({ user: id }).select('+bankDetails.accountNumber +bankDetails.ifscCode +bankDetails.bankName +bankDetails.branchName +businessDetails.panName');
             if (!supplier) {
                 return responseReturn(res, 404, { error: 'Supplier not found' });
             }
@@ -486,6 +485,13 @@ class SettlementController {
                         estimatedAmount: availableBalance,
                         estimatedDate: new Date(currentMonthEnd.getTime() + 7 * 24 * 60 * 60 * 1000),
                         status: 'pending_calculation'
+                    },
+                    bankDetails: {
+                        accountNumber: supplier.bankDetails?.accountNumber || '',
+                        ifsc: supplier.bankDetails?.ifscCode || '',
+                        bankName: supplier.bankDetails?.bankName || '',
+                        branchName: supplier.bankDetails?.branchName || '',
+                        accountHolderName: supplier.businessDetails?.panName || supplier.supplierDetails?.fullName || ''
                     }
                 }
             });

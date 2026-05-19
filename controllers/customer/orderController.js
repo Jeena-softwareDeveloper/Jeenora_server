@@ -433,10 +433,13 @@ class orderController {
                 const pri = products[i].price; // This is the subtotal for this partner
                 let partnerId = products[i].partnerId || products[i].Id;
 
+                console.log(`[PLACE_ORDER] Product group ${i + 1}: raw partnerId=${products[i].partnerId}, raw Id=${products[i].Id}, price=₹${pri}`);
+
                 // Fallback 1: Extract partnerId from productInfo inside products list
                 if (!partnerId && pro && pro[0] && pro[0].productInfo) {
                     const info = pro[0].productInfo;
                     partnerId = info.partnerId || info.Id || info.partner;
+                    if (partnerId) console.log(`[PLACE_ORDER] Fallback 1 found partnerId from productInfo: ${partnerId}`);
                 }
 
                 // Fallback 2: Query database for product's seller/partner ID
@@ -452,6 +455,9 @@ class orderController {
                         }
                         if (dbProduct) {
                             partnerId = dbProduct.partnerId || dbProduct.partner;
+                            if (partnerId) console.log(`[PLACE_ORDER] Fallback 2 DB lookup found partnerId: ${partnerId} for productId: ${productId}`);
+                        } else {
+                            console.warn(`[PLACE_ORDER] Fallback 2: Product NOT found in DB for id: ${productId}`);
                         }
                     } catch (dbErr) {
                         console.error('[PLACE_ORDER] Fallback DB partner query failed:', dbErr.message);
@@ -467,6 +473,12 @@ class orderController {
                     if (mongoose.Types.ObjectId.isValid(partnerId)) {
                         partnerId = new mongoose.Types.ObjectId(partnerId);
                     }
+                }
+
+                if (!partnerId) {
+                    console.error(`[PLACE_ORDER] ⚠️ ALL FALLBACKS FAILED for product group ${i + 1} — partnerId is NULL! Wallet will NOT be credited for this sub-order.`);
+                } else {
+                    console.log(`[PLACE_ORDER] ✅ Final partnerId resolved: ${partnerId}`);
                 }
 
                 const commAmount = Math.round(pri * (COMMISSION_RATE / 100));
@@ -598,11 +610,13 @@ class orderController {
 
             if (allDelivered) {
                 await customerOrder.findByIdAndUpdate(mainOrderId, { delivery_status: 'delivered' });
+                console.log(`[ORDER_SYNC] ✅ Main order ${mainOrderId} marked as DELIVERED`);
             } else if (allCancelled) {
                 await customerOrder.findByIdAndUpdate(mainOrderId, { delivery_status: 'cancelled' });
+                console.log(`[ORDER_SYNC] ❌ Main order ${mainOrderId} marked as CANCELLED`);
             }
         } catch (err) {
-
+            console.error(`[ORDER_SYNC] Error syncing main order ${mainOrderId}:`, err.message);
         }
     }
 
@@ -1091,28 +1105,43 @@ class orderController {
             const splitTime = time.split('/')
 
             // Settlement based on stored Snapshots (No recalculation)
+            console.log(`[WALLET] order_confirm called for orderId: ${orderId}`);
+            console.log(`[WALLET] myShop commission: ₹${cuOrder.totalCommission || 0}`);
+
             await myShopWallet.create({
                 amount: cuOrder.totalCommission || 0, // Store only platform commission
                 month: splitTime[0],
                 year: splitTime[2]
             })
 
+            console.log(`[WALLET] Processing ${auOrder.length} auth sub-orders for wallet credit...`);
             for (let i = 0; i < auOrder.length; i++) {
+                const walletAmount = auOrder[i].partnerAmount || auOrder[i].price;
+                const partnerId = auOrder[i].partnerId ? auOrder[i].partnerId.toString() : null;
+                console.log(`[WALLET] Sub-order ${i + 1}: partnerId=${partnerId}, amount=₹${walletAmount}, month=${splitTime[0]}/${splitTime[2]}`);
+
+                if (!partnerId) {
+                    console.error(`[WALLET] ⚠️ SKIPPING sub-order ${auOrder[i]._id} — partnerId is NULL/undefined!`);
+                    continue;
+                }
+
                 await partnerWallet.create({
-                    partnerId: auOrder[i].partnerId.toString(),
-                    amount: auOrder[i].partnerAmount || auOrder[i].price, // Use stored Net or fallback to Full
+                    partnerId,
+                    amount: walletAmount,
                     month: splitTime[0],
                     year: splitTime[2]
-                })
+                });
+                console.log(`[WALLET] ✅ Created wallet entry for partnerId: ${partnerId}, amount: ₹${walletAmount}`);
             }
+
             responseReturn(res, 200, { message: 'success' })
 
             // Post-payment sync
             this.push_to_shiprocket(orderId);
 
-
         } catch (error) {
-
+            console.error(`[WALLET] ❌ order_confirm FAILED for orderId: ${orderId} — Error: ${error.message}`, error);
+            responseReturn(res, 500, { message: 'Internal server error during order confirm', error: error.message });
         }
 
     }

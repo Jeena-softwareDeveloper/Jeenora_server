@@ -596,22 +596,33 @@ class SettlementController {
     // Helper: Calculate available balance
     calculateAvailableBalance = async (supplierId) => {
         try {
-            // Get current month delivered orders
             const currentMonthStart = new Date();
             currentMonthStart.setDate(1);
             currentMonthStart.setHours(0, 0, 0, 0);
             
             const currentMonthEnd = new Date();
             currentMonthEnd.setHours(23, 59, 59, 999);
-            
-            const settlement = await this.calculateSettlementForPeriod(
-                supplierId,
-                currentMonthStart,
-                currentMonthEnd
-            );
-            
-            // Assume 70% of current month is available for payout
-            return Math.max(0, settlement.summary.netSettlement * 0.7);
+
+            // Count ALL non-cancelled paid orders for balance (not just delivered)
+            const paidOrders = await AuthOrder.find({
+                partnerId: supplierId,
+                payment_status: 'paid',
+                delivery_status: { $in: ['confirmed', 'processing', 'shipped', 'delivered'] }
+            });
+
+            let available = 0;
+            for (const order of paidOrders) {
+                const supplierRevenue = (order.partnerAmount || order.price) * (1 - 0.05);
+                if (order.delivery_status === 'delivered') {
+                    available += supplierRevenue; // 100% released on delivery
+                } else if (order.delivery_status === 'shipped') {
+                    available += supplierRevenue * 0.85; // 85% released when shipped
+                } else {
+                    available += supplierRevenue * 0.50; // 50% released when confirmed/processing
+                }
+            }
+
+            return Math.max(0, Math.round(available));
         } catch (error) {
             console.error('Calculate Available Balance Error:', error);
             return 0;

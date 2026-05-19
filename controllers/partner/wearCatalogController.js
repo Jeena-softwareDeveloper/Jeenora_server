@@ -788,9 +788,23 @@ class wearCatalogController {
             // Suppliers can only update their OWN catalogs.
             const isAdminOrPartner = role === 'admin' || role === 'superadmin' || role === 'partner';
             
+            console.log('[Catalog Status] Debug Request:', {
+                productId,
+                status,
+                reqId: req.id,
+                reqRole: req.role,
+                isAdminOrPartner
+            });
+
             if (!isAdminOrPartner) {
                 // Check if user is a registered supplier
                 const supplier = await Supplier.findOne({ user: req.id });
+                console.log('[Catalog Status] Supplier Lookup Result:', supplier ? {
+                    _id: supplier._id,
+                    user: supplier.user,
+                    email: supplier.supplierDetails?.email
+                } : 'NULL');
+
                 if (supplier) {
                     // Check by partnerId OR catalogId ownership (supports supplier._id, supplier.user)
                     const partnerIdMatch = String(productToUpdate.partnerId) === String(supplier._id) ||
@@ -798,6 +812,14 @@ class wearCatalogController {
                     const catalogOwned = productToUpdate.catalogId 
                         ? await WearProduct.findOne({ catalogId: productToUpdate.catalogId, partnerId: { $in: [supplier._id, supplier.user] } })
                         : null;
+                    console.log('[Catalog Status] Ownership Check:', {
+                        partnerIdMatch,
+                        productPartnerId: productToUpdate.partnerId,
+                        supplierId: supplier._id,
+                        supplierUserId: supplier.user,
+                        catalogOwned: !!catalogOwned
+                    });
+
                     if (!partnerIdMatch && !catalogOwned) {
                         console.warn(`[Catalog Status] Ownership check fallback applied for product ${productId} and supplier ${supplier._id}`);
                     }

@@ -37,7 +37,7 @@ const initHandlers = (io) => {
 
     const broadcastActiveAdmins = () => {
         io.emit("activeAdmin", allAdminUsers);
-        io.emit("activePartner", allAdminUsers); // Updated compatibility
+        io.emit("activePartner", allAdminUsers);
     };
 
     io.on("connection", (soc) => {
@@ -48,13 +48,11 @@ const initHandlers = (io) => {
             broadcastActiveAdmins();
         });
 
-        // Admin User (Dashboard) connecting
         soc.on("add_admin_support", (adminUserId, userInfo) => {
             addAdminUser(adminUserId, soc.id, userInfo);
             broadcastActiveAdmins();
         });
 
-        // Updated connection names
         soc.on("add_partner", (adminUserId, userInfo) => {
             addAdminUser(adminUserId, soc.id, userInfo);
             broadcastActiveAdmins();
@@ -65,17 +63,39 @@ const initHandlers = (io) => {
             broadcastActiveAdmins();
         });
 
-        // Superadmin connecting
         soc.on("add_admin", (adminInfo) => {
             delete adminInfo.email;
             delete adminInfo.password;
             superadmin = { ...adminInfo, socketId: soc.id };
+            soc.join('admin_room');
             broadcastActiveAdmins();
         });
 
+        // ─── REAL-TIME ORDER ROOMS ────────────────────────────────────────────
+        // Supplier joins private room on login — receives new_order, order_status_changed, etc.
+        soc.on("join_supplier_room", (supplierId) => {
+            if (supplierId) {
+                soc.join(`supplier_${supplierId}`);
+                console.log(`[SOCKET] Supplier ${supplierId} joined room supplier_${supplierId}`);
+            }
+        });
+
+        // Customer joins private room — receives order_shipped, order_delivered, tracking updates
+        soc.on("join_customer_room", (customerId) => {
+            if (customerId) {
+                soc.join(`customer_${customerId}`);
+                console.log(`[SOCKET] Customer ${customerId} joined room customer_${customerId}`);
+            }
+        });
+
+        // Admin dashboard joins admin room
+        soc.on("join_admin_room", () => {
+            soc.join('admin_room');
+        });
+        // ─────────────────────────────────────────────────────────────────────
+
         // --- CHAT MESSAGING EVENTS ---
 
-        // 1. Admin User -> Customer
         soc.on("send_admin_user_message", (msg) => {
             const customer = findCustomer(msg.receverId);
             if (customer) {
@@ -92,7 +112,6 @@ const initHandlers = (io) => {
             }
         });
 
-        // 2. Customer -> Admin User
         soc.on("send_customer_message", (msg) => {
             const adminUser = findAdminUser(msg.receverId);
             if (adminUser) {
@@ -100,7 +119,6 @@ const initHandlers = (io) => {
             }
         });
 
-        // 3. Superadmin -> Admin User
         soc.on("send_message_superadmin_to_admin", (msg) => {
             const adminUser = findAdminUser(msg.receverId);
             if (adminUser) {
@@ -125,7 +143,6 @@ const initHandlers = (io) => {
             }
         });
 
-        // 4. Admin User -> Superadmin
         soc.on("send_message_admin_user_to_superadmin", (msg) => {
             if (superadmin.socketId) {
                 soc.to(superadmin.socketId).emit("receved_admin_user_message", msg);
@@ -147,7 +164,6 @@ const initHandlers = (io) => {
             }
         });
 
-        // 5. Customer <-> Superadmin direct
         soc.on("send_message_admin_to_user", (msg) => {
             const user = findCustomer(msg.receiverId);
             if (user) {
@@ -168,7 +184,6 @@ const initHandlers = (io) => {
             }
         });
 
-        // Application Chat Rooms
         soc.on('join_application_chat', ({ applicationId, userId, role }) => {
             soc.join(applicationId);
             soc.to(applicationId).emit('chat_partner_status', { applicationId, status: 'online', userId, role });
@@ -191,4 +206,31 @@ const initHandlers = (io) => {
     });
 };
 
-module.exports = { initHandlers };
+// ─── Emit helpers for use in controllers ──────────────────────────────────────
+/**
+ * Emit a real-time event to a specific supplier's private room
+ * @param {string} supplierId - The Supplier._id (not user._id)
+ */
+const emitToSupplier = (supplierId, event, data) => {
+    try {
+        const { getIo } = require('./socket');
+        getIo().to(`supplier_${supplierId}`).emit(event, data);
+    } catch (err) {
+        console.warn(`[SOCKET] emitToSupplier(${supplierId}, ${event}) failed:`, err.message);
+    }
+};
+
+/**
+ * Emit a real-time event to a specific customer's private room
+ * @param {string} customerId
+ */
+const emitToCustomer = (customerId, event, data) => {
+    try {
+        const { getIo } = require('./socket');
+        getIo().to(`customer_${customerId}`).emit(event, data);
+    } catch (err) {
+        console.warn(`[SOCKET] emitToCustomer(${customerId}, ${event}) failed:`, err.message);
+    }
+};
+
+module.exports = { initHandlers, emitToSupplier, emitToCustomer };

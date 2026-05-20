@@ -10,6 +10,7 @@ router.post('/home/order/place-order', orderController.place_order)
 router.get('/home/customer/get-dashboard-data/:userId', orderController.get_customer_dashboard_data)
 router.get('/home/customer/get-orders/:customerId/:status', orderController.get_orders)
 router.get('/home/customer/get-order-details/:orderId', orderController.get_order_details)
+router.get('/home/customer/track/:orderId', authMiddleware, orderController.get_customer_tracking)  // 📍 Live tracking
 router.put('/home/customer/order-cancel/:orderId', orderController.customer_order_cancel)
 router.put('/home/customer/order-fail/:orderId', orderController.customer_order_fail)
 router.get('/admin/order/:orderId', orderController.get_admin_order)

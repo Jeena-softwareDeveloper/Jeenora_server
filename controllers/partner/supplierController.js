@@ -10,6 +10,22 @@ const { isValidTransition } = require('../../utils/orderValidators');
 const { mongo: { ObjectId } } = require('mongoose');
 const { writeDataToFile, readDataFromFile } = require('../../utils/dataService');
 
+// Human-readable labels for order statuses (used in Socket.IO events and tracking)
+const STATUS_LABELS = {
+    pending_payment: 'Pending Payment',
+    pending:         'Order Placed',
+    confirmed:       'Order Confirmed',
+    processing:      'Processing',
+    packed:          'Packed',
+    shipped:         'Shipped',
+    in_transit:      'In Transit',
+    out_for_delivery:'Out for Delivery',
+    delivered:       'Delivered',
+    cancelled:       'Cancelled',
+    returned:        'Returned'
+};
+
+
 class supplierController {
 
     // 1. Mobile App - Apply for Supplier Account
@@ -259,32 +275,54 @@ class supplierController {
             const supplier = await Supplier.findOne({ user: id }).select('+addressDetails');
             if (!supplier) return responseReturn(res, 404, { error: 'Supplier account not found' });
 
-            let orders = await authOrderModel.find({ 
+            let orders = await authOrderModel.find({
                 partnerId: supplier._id
             }).sort({ createdAt: -1 }).lean();
 
-            // Populate legacy string shipping info with real customer address
+            // Build supplier pickup address once
+            const pickupAddress = supplier.addressDetails
+                ? [
+                    supplier.addressDetails.addressLine,
+                    supplier.addressDetails.street,
+                    supplier.addressDetails.city,
+                    supplier.addressDetails.district,
+                    supplier.addressDetails.state,
+                    supplier.addressDetails.pincode
+                  ].filter(Boolean).join(', ')
+                : 'Not set';
+
             const customerOrderModel = require('../../models/customer/customerOrder');
             orders = await Promise.all(orders.map(async (order) => {
-                if (typeof order.shippingInfo === 'string') {
-                    const parentOrder = await customerOrderModel.findById(order.orderId);
+                // Populate legacy string shipping info with real customer address
+                if (typeof order.shippingInfo === 'string' || !order.shippingInfo?.name) {
+                    const parentOrder = await customerOrderModel.findById(order.orderId).lean();
                     if (parentOrder && parentOrder.shippingInfo) {
                         order.shippingInfo = parentOrder.shippingInfo;
                     } else {
                         order.shippingInfo = {};
                     }
                 }
-                
-                // Format Products to be extremely clean
+
+                // Determine payment method — check sub-order field first, fallback to parent
+                let paymentMethod = order.payment_method;
+                if (!paymentMethod) {
+                    const parentOrder = await customerOrderModel.findById(order.orderId).select('payment_method').lean();
+                    paymentMethod = parentOrder?.payment_method === 'COD' ? 'COD' : 'ONLINE';
+                }
+
+                // Format Products with full variant details
                 const cleanedProducts = order.products.map(p => {
-                    const variantName = p.variants?.[0]?.variantName || p.variants?.[0]?.color || p.variants?.[0]?.name;
+                    const variant = p.variants?.[0];
                     return {
                         _id: p._id,
-                        name: variantName || p.productName || p.name,
+                        name: variant?.variantName || variant?.color || variant?.name || p.productName || p.name,
                         images: p.images || [],
                         price: p.price,
                         quantity: p.quantity,
-                        skuId: p.variants?.[0]?.skuId || ''
+                        size: p.size || variant?.size || '',
+                        color: variant?.variantName || variant?.color || '',
+                        skuId: variant?.skuId || '',
+                        category: p.category || ''
                     };
                 });
 
@@ -295,14 +333,38 @@ class supplierController {
                     price: order.price,
                     partnerAmount: order.partnerAmount,
                     payment_status: order.payment_status,
+                    // Payment type label for supplier display
+                    payment_method: paymentMethod,
+                    paymentLabel: paymentMethod === 'COD'
+                        ? 'Collect Cash During Delivery'
+                        : 'Payment Completed',
                     delivery_status: order.delivery_status,
                     date: order.date,
                     createdAt: order.createdAt,
-                    shippingInfo: order.shippingInfo
+                    packed_at: order.packed_at || null,
+                    // Customer info
+                    customerName: order.shippingInfo?.name || 'Customer',
+                    customerPhone: order.shippingInfo?.phone || '',
+                    deliveryAddress: [
+                        order.shippingInfo?.address || order.shippingInfo?.houseNo,
+                        order.shippingInfo?.area,
+                        order.shippingInfo?.city,
+                        order.shippingInfo?.state,
+                        order.shippingInfo?.pincode
+                    ].filter(Boolean).join(', '),
+                    shippingInfo: order.shippingInfo,
+                    // Supplier pickup address
+                    pickupAddress,
+                    // Shiprocket / tracking info
+                    awb_number: order.awb_number || null,
+                    trackingUrl: order.awb_number
+                        ? `https://shiprocket.co/tracking/${order.awb_number}`
+                        : null,
+                    shiprocket_order_id: order.shiprocket_order_id || null,
+                    shiprocket_shipment_id: order.shiprocket_shipment_id || null
                 };
             }));
 
-            // Do not send the full supplier object since app already has it via token
             responseReturn(res, 200, { success: true, orders });
         } catch (error) {
             responseReturn(res, 500, { error: error.message });
@@ -313,7 +375,7 @@ class supplierController {
     update_order_status = async (req, res) => {
         const { orderId } = req.params;
         const { status, reason } = req.body;
-        const { id } = req; // user id from midleware
+        const { id } = req;
 
         try {
             const supplier = await Supplier.findOne({ user: id });
@@ -324,99 +386,24 @@ class supplierController {
                 return responseReturn(res, 404, { error: 'Order not found or not authorized' });
             }
 
-            // 1. Validate Transition
-            // Allow "retry" transitions if status is the same but shiprocket ID is missing
-            const isRetry = order.delivery_status === status && !order.shiprocket_order_id && (status === 'confirmed' || status === 'processing');
-            
-            if (!isRetry && !isValidTransition(order.delivery_status, status)) {
+            // Validate Transition
+            if (!isValidTransition(order.delivery_status, status)) {
                 return responseReturn(res, 400, {
                     error: `Illegal Status Transition: Cannot move from ${order.delivery_status.toUpperCase()} to ${status.toUpperCase()}`
-                })
+                });
             }
 
             order.delivery_status = status;
             if (status === 'cancelled' && reason) {
                 order.cancel_reason = reason;
             }
+            if (status === 'packed') {
+                order.packed_at = new Date();
+            }
             await order.save();
 
-            // === SHIPROCKET AUTOMATION ===
-            // Trigger if moving to confirmed OR processing, and no shiprocket ID exists yet
-            if (['confirmed', 'processing'].includes(status) && !order.shiprocket_order_id) {
-                try {
-                    const shiprocketService = require('../../utils/shiprocketService');
-                    const customerOrderModel = require('../../models/customer/customerOrder');
-                    
-                    const parentOrder = await customerOrderModel.findById(order.orderId);
-                    
-                    if (parentOrder) {
-                        const shippingInfo = parentOrder.shippingInfo;
-                        
-                        const orderItems = order.products.map(p => ({
-                            name: p.name || p.productName || 'Jeenora Product',
-                            sku: p.sku || 'SKU-001',
-                            units: p.quantity || 1,
-                            selling_price: Math.max(1, p.price || Math.round(order.price / order.products.length)),
-                            discount: 0,
-                            tax: 0,
-                            hsn: ''
-                        }));
-
-                        // Fetch pickup locations to ensure we use a valid one
-                        let pickupLocation = "Primary";
-                        try {
-                            const locations = await shiprocketService.getPickupLocations();
-                            if (locations && locations.data && locations.data.shipping_address && locations.data.shipping_address.length > 0) {
-                                // Check if "Primary" exists, else use the first one
-                                const hasPrimary = locations.data.shipping_address.find(l => l.pickup_location === 'Primary');
-                                if (!hasPrimary) {
-                                    pickupLocation = locations.data.shipping_address[0].pickup_location;
-                                }
-                            }
-                        } catch (locErr) {
-                            console.warn('Could not fetch Shiprocket pickup locations, defaulting to Primary');
-                        }
-
-                        const shiprocketPayload = {
-                            order_id: `JN-${order._id.toString().slice(-8).toUpperCase()}`,
-                            order_date: new Date().toISOString().slice(0, 16).replace('T', ' '),
-                            pickup_location: pickupLocation, 
-                            billing_customer_name: shippingInfo?.name || 'Customer',
-                            billing_last_name: '',
-                            billing_address: shippingInfo?.address || 'Address',
-                            billing_city: shippingInfo?.city || 'City',
-                            billing_pincode: shippingInfo?.pincode || '000000',
-                            billing_state: shippingInfo?.state || 'State',
-                            billing_country: "India",
-                            billing_email: shippingInfo?.email || 'customer@jeenora.com',
-                            billing_phone: shippingInfo?.phone || '9999999999',
-                            shipping_is_billing: true,
-                            order_items: orderItems,
-                            payment_method: parentOrder.payment_method === 'ONLINE' ? 'Prepaid' : 'COD',
-                            sub_total: order.price,
-                            length: 10,
-                            breadth: 10,
-                            height: 10,
-                            weight: 0.5
-                        };
-
-                        const shiprocketResponse = await shiprocketService.createOrder(shiprocketPayload);
-                        
-                        if (shiprocketResponse && shiprocketResponse.order_id) {
-                            order.shiprocket_order_id = shiprocketResponse.order_id.toString();
-                            order.shiprocket_shipment_id = shiprocketResponse.shipment_id?.toString();
-                            await order.save();
-                        } else {
-                            console.warn('Shiprocket response missing order_id:', shiprocketResponse);
-                        }
-                    }
-                } catch (srError) {
-                    console.error('Shiprocket Automation Error:', srError.response?.data || srError.message);
-                    // We don't block the response, but we could add a flag to the response
-                    order.shiprocket_error = srError.response?.data?.message || srError.message;
-                }
-            }
-            // ============================
+            // NOTE: Shiprocket is NO LONGER auto-triggered here.
+            // Supplier must click "Ship Now" (POST /orders/:orderId/ship-now) after packing.
 
             // SYNC UPWARDS TO MAIN ORDER
             try {
@@ -429,18 +416,444 @@ class supplierController {
                 } else if (allCancelled) {
                     await customerOrder.findByIdAndUpdate(order.orderId, { delivery_status: 'cancelled' });
                 }
-            } catch (err) {
+            } catch (err) {}
+
+            // REAL-TIME: Notify supplier and customer of status change
+            try {
+                const { emitToSupplier, emitToCustomer } = require('../../utils/socketHandlers');
+                const parentOrder = await customerOrder.findById(order.orderId).select('customerId').lean();
+                const supplierId = supplier._id.toString();
+
+                emitToSupplier(supplierId, 'order_status_changed', {
+                    orderId: order._id,
+                    status,
+                    updatedAt: new Date()
+                });
+                if (parentOrder?.customerId) {
+                    emitToCustomer(parentOrder.customerId.toString(), 'order_status_changed', {
+                        orderId: order.orderId,
+                        status,
+                        label: STATUS_LABELS[status] || status,
+                        updatedAt: new Date()
+                    });
+                }
+            } catch (socketErr) {
+                console.warn('[SOCKET] order_status_changed emit failed:', socketErr.message);
             }
 
-            responseReturn(res, 200, { 
-                success: true, 
-                message: order.shiprocket_error ? `Order updated, but Shiprocket sync failed: ${order.shiprocket_error}` : `Order status updated to ${status}`, 
-                order 
+            responseReturn(res, 200, {
+                success: true,
+                message: `Order status updated to ${status}`,
+                order
             });
         } catch (error) {
             console.error('Update Order Status Error:', error);
             responseReturn(res, 500, { error: error.message });
         }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // 2.4.1  CONFIRM ORDER — Supplier verifies & accepts order
+    //        → Creates Shiprocket order + assigns courier + generates AWB
+    //        → Status: pending → confirmed
+    //        POST /wear/supplier/orders/:orderId/confirm
+    // ─────────────────────────────────────────────────────────────────────────
+    confirm_order = async (req, res) => {
+        const { orderId } = req.params;
+        const { id } = req;
+
+        // Supplier-provided dimensions (or we auto-read from product)
+        let { weight, length, width, height } = req.body;
+
+        try {
+            const supplier = await Supplier.findOne({ user: id }).select('+addressDetails');
+            if (!supplier) return responseReturn(res, 404, { error: 'Supplier account not found' });
+
+            const order = await authOrderModel.findOne({ _id: orderId, partnerId: supplier._id });
+            if (!order) return responseReturn(res, 404, { error: 'Order not found or not authorized' });
+
+            // Guard: must be in pending / pending_payment state
+            if (!['pending', 'pending_payment'].includes(order.delivery_status)) {
+                return responseReturn(res, 400, {
+                    error: `Order is already ${order.delivery_status}. Can only confirm pending orders.`
+                });
+            }
+
+            // Guard: Shiprocket order already created?
+            if (order.shiprocket_order_id) {
+                return responseReturn(res, 400, {
+                    error: 'Shiprocket order already created for this order.',
+                    awb_number: order.awb_number,
+                    shiprocket_order_id: order.shiprocket_order_id
+                });
+            }
+
+            const shiprocketService = require('../../utils/shiprocketService');
+            const WearProductModel = require('../../models/partner/WearProduct');
+            const customerOrderModel = require('../../models/customer/customerOrder');
+
+            const parentOrder = await customerOrderModel.findById(order.orderId).lean();
+            if (!parentOrder) return responseReturn(res, 404, { error: 'Parent order not found' });
+
+            // ── Auto-fill dimensions from product if not provided ─────────────
+            if (!weight || !length || !width || !height) {
+                // Collect dimensions from the first product in this sub-order
+                const firstProductId = order.products[0]?._id;
+                if (firstProductId) {
+                    try {
+                        const dbProduct = await WearProductModel.findById(firstProductId)
+                            .select('weight dimensions').lean();
+                        if (dbProduct) {
+                            // WearProduct stores weight in grams → convert to kg for Shiprocket
+                            weight  = weight  || (dbProduct.weight ? dbProduct.weight / 1000 : 0.5);
+                            length  = length  || dbProduct.dimensions?.length || 10;
+                            width   = width   || dbProduct.dimensions?.width  || 10;
+                            height  = height  || dbProduct.dimensions?.height || 10;
+                        }
+                    } catch (dimErr) {
+                        console.warn('[CONFIRM_ORDER] Auto-dimension lookup failed:', dimErr.message);
+                    }
+                }
+                // Final fallback defaults
+                weight = weight || 0.5;
+                length = length || 10;
+                width  = width  || 10;
+                height = height || 10;
+            }
+
+            const shippingInfo = parentOrder.shippingInfo || {};
+
+            // ── Build Shiprocket order items — size/color MUST be in the name ─
+            // Shiprocket does not have a dedicated size field.
+            // Industry standard: encode size in item name → appears on label & invoice.
+            const orderItems = order.products.map(p => {
+                const variant  = p.variants?.[0];
+                const size     = p.size  || variant?.size  || '';
+                const color    = variant?.variantName || variant?.color || '';
+                const baseName = p.productName || p.name || 'Jeenora Product';
+
+                // e.g. "Blue Floral Kurti [Size: M | Color: Blue]"
+                const variantSuffix = [
+                    size  ? `Size: ${size}`  : '',
+                    color ? `Color: ${color}` : ''
+                ].filter(Boolean).join(' | ');
+
+                const itemName = variantSuffix ? `${baseName} [${variantSuffix}]` : baseName;
+
+                return {
+                    name: itemName,
+                    sku: variant?.skuId || p._id?.toString() || 'SKU-001',
+                    units: p.quantity || 1,
+                    selling_price: Math.max(1, p.price || Math.round(order.price / order.products.length)),
+                    discount: 0,
+                    tax: 0,
+                    hsn: p.hsnCode || ''
+                };
+            });
+
+            // ── Resolve pickup location ────────────────────────────────────────
+            let pickupLocation = supplier.shiprocketPickupName || 'Primary';
+            try {
+                const locations = await shiprocketService.getPickupLocations();
+                const addressList = locations?.data?.shipping_address || [];
+                if (addressList.length > 0) {
+                    const exists = addressList.find(l => l.pickup_location === pickupLocation);
+                    if (!exists) pickupLocation = addressList[0].pickup_location;
+                }
+            } catch (locErr) {
+                console.warn('[CONFIRM_ORDER] Pickup location fallback to Primary');
+            }
+
+            // ── Build final Shiprocket payload ─────────────────────────────────
+            const shiprocketPayload = {
+                order_id: `JN-${order._id.toString().slice(-8).toUpperCase()}`,
+                order_date: new Date().toISOString().slice(0, 16).replace('T', ' '),
+                pickup_location: pickupLocation,
+                billing_customer_name: shippingInfo.name || 'Customer',
+                billing_last_name: '',
+                billing_address:   shippingInfo.address || shippingInfo.houseNo || 'Address',
+                billing_address_2: shippingInfo.area   || '',
+                billing_city:      shippingInfo.city   || 'City',
+                billing_pincode:   shippingInfo.pincode || '000000',
+                billing_state:     shippingInfo.state  || 'Tamil Nadu',
+                billing_country:   'India',
+                billing_email:     shippingInfo.email  || 'customer@jeenora.com',
+                billing_phone:     shippingInfo.phone  || '9999999999',
+                shipping_is_billing: true,
+                order_items: orderItems,
+                payment_method: (order.payment_method === 'COD' || parentOrder.payment_method === 'COD')
+                    ? 'COD' : 'Prepaid',
+                sub_total: order.price,
+                // ✅ Supplier-provided (or auto-filled) dimensions
+                weight: parseFloat(weight),
+                length: parseFloat(length),
+                breadth: parseFloat(width),
+                height: parseFloat(height)
+            };
+
+            console.log('[CONFIRM_ORDER] Pushing to Shiprocket with dimensions:', {
+                weight, length, breadth: width, height, itemCount: orderItems.length
+            });
+
+            const srResponse = await shiprocketService.createOrder(shiprocketPayload);
+
+            if (!srResponse || !srResponse.order_id) {
+                return responseReturn(res, 502, {
+                    error: 'Shiprocket order creation failed. Check package details and try again.',
+                    detail: srResponse
+                });
+            }
+
+            // ── Auto-assign best courier → get AWB ────────────────────────────
+            let finalAwb = srResponse.awb_number;
+            let courierName = '';
+            try {
+                const couriers = await shiprocketService.getCouriers(srResponse.shipment_id);
+                if (couriers && couriers.length > 0) {
+                    // Sort by cheapest rate
+                    const best = couriers.sort((a, b) => (a.rate || 0) - (b.rate || 0))[0];
+                    const assignRes = await shiprocketService.assignCourier(
+                        srResponse.shipment_id,
+                        best.courier_company_id
+                    );
+                    if (assignRes?.response?.data?.awb_code) {
+                        finalAwb = assignRes.response.data.awb_code;
+                        courierName = best.courier_name || '';
+                    }
+                }
+            } catch (courierErr) {
+                console.warn('[CONFIRM_ORDER] Courier auto-assign failed:', courierErr.message);
+            }
+
+            // ── Save everything + update status → confirmed ───────────────────
+            order.delivery_status        = 'confirmed';
+            order.shiprocket_order_id    = srResponse.order_id.toString();
+            order.shiprocket_shipment_id = srResponse.shipment_id?.toString();
+            order.awb_number             = finalAwb || srResponse.awb_number;
+            order.label_url              = srResponse.label_url || null;
+            order.packed_at              = new Date();
+            order.packageDimensions      = { weight, length, width, height };
+            await order.save();
+
+            // Sync main order
+            await customerOrderModel.findByIdAndUpdate(order.orderId, {
+                delivery_status: 'confirmed'
+            });
+
+            // ── Real-time: notify customer + supplier ──────────────────────────
+            try {
+                const { emitToSupplier, emitToCustomer } = require('../../utils/socketHandlers');
+                emitToSupplier(supplier._id.toString(), 'order_status_changed', {
+                    orderId: order._id,
+                    status: 'confirmed',
+                    awb_number: order.awb_number,
+                    updatedAt: new Date()
+                });
+                emitToCustomer(parentOrder.customerId.toString(), 'order_status_changed', {
+                    orderId: parentOrder._id,
+                    status: 'confirmed',
+                    label: 'Supplier Confirmed — Ready to Ship',
+                    awb_number: order.awb_number,
+                    trackingUrl: order.awb_number
+                        ? `https://shiprocket.co/tracking/${order.awb_number}`
+                        : null,
+                    updatedAt: new Date()
+                });
+            } catch (socketErr) {
+                console.warn('[SOCKET] confirm_order emit failed:', socketErr.message);
+            }
+
+            return responseReturn(res, 200, {
+                success: true,
+                message: 'Order confirmed! Shipment created and AWB assigned.',
+                status: 'confirmed',
+                awb_number: order.awb_number,
+                courier: courierName,
+                trackingUrl: order.awb_number
+                    ? `https://shiprocket.co/tracking/${order.awb_number}`
+                    : null,
+                shiprocket_order_id: order.shiprocket_order_id,
+                label_url: order.label_url,
+                dimensions: { weight, length, width, height }
+            });
+
+        } catch (error) {
+            console.error('[CONFIRM_ORDER] Error:', error.response?.data || error.message);
+            responseReturn(res, 500, { error: error.message });
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // 2.4.2  SHIP NOW — Supplier physically packs + hands to courier
+    //        → Schedules Shiprocket pickup request
+    //        → Status: confirmed → shipped
+    //        POST /wear/supplier/orders/:orderId/ship-now
+    // ─────────────────────────────────────────────────────────────────────────
+    ship_now = async (req, res) => {
+        const { orderId } = req.params;
+        const { id } = req;
+
+        try {
+            const supplier = await Supplier.findOne({ user: id });
+            if (!supplier) return responseReturn(res, 404, { error: 'Supplier account not found' });
+
+            const order = await authOrderModel.findOne({ _id: orderId, partnerId: supplier._id });
+            if (!order) return responseReturn(res, 404, { error: 'Order not found or not authorized' });
+
+            // Guard: must be confirmed (Shiprocket order already created + AWB ready)
+            if (order.delivery_status !== 'confirmed') {
+                return responseReturn(res, 400, {
+                    error: order.awb_number
+                        ? `Order is ${order.delivery_status}. Only confirmed orders can be handed to courier.`
+                        : 'You must first confirm the order (creates Shiprocket order + AWB) before shipping.'
+                });
+            }
+
+            if (!order.shiprocket_shipment_id) {
+                return responseReturn(res, 400, {
+                    error: 'No Shiprocket shipment ID found. Please confirm the order first.'
+                });
+            }
+
+            const shiprocketService = require('../../utils/shiprocketService');
+            const customerOrderModel = require('../../models/customer/customerOrder');
+
+            // ── Trigger Shiprocket pickup ─────────────────────────────────────
+            let pickupResult = null;
+            try {
+                pickupResult = await shiprocketService.schedulePickup(order.shiprocket_shipment_id);
+                console.log('[SHIP_NOW] Pickup scheduled:', pickupResult);
+            } catch (pickupErr) {
+                console.warn('[SHIP_NOW] Pickup scheduling failed (non-fatal):', pickupErr.message);
+                // Don't block — courier may already be scheduled in Shiprocket dashboard
+            }
+
+            // ── Update status → shipped ───────────────────────────────────────
+            order.delivery_status = 'shipped';
+            await order.save();
+
+            // Sync main order
+            const subOrders = await authOrderModel.find({ orderId: order.orderId });
+            const allShipped = subOrders.every(o => ['shipped', 'delivered'].includes(o.delivery_status));
+            if (allShipped) {
+                await customerOrderModel.findByIdAndUpdate(order.orderId, { delivery_status: 'shipped' });
+            }
+
+            // ── Real-time: notify customer ────────────────────────────────────
+            try {
+                const { emitToSupplier, emitToCustomer } = require('../../utils/socketHandlers');
+                const parentOrder = await customerOrderModel.findById(order.orderId).select('customerId').lean();
+
+                emitToCustomer(parentOrder.customerId.toString(), 'order_shipped', {
+                    orderId: order.orderId,
+                    awb_number: order.awb_number,
+                    trackingUrl: order.awb_number
+                        ? `https://shiprocket.co/tracking/${order.awb_number}`
+                        : null,
+                    message: 'Your order has been handed to the courier! 🚚'
+                });
+                emitToSupplier(supplier._id.toString(), 'order_status_changed', {
+                    orderId: order._id,
+                    status: 'shipped',
+                    updatedAt: new Date()
+                });
+            } catch (socketErr) {
+                console.warn('[SOCKET] ship_now emit failed:', socketErr.message);
+            }
+
+            return responseReturn(res, 200, {
+                success: true,
+                message: 'Pickup scheduled! Order is now shipped.',
+                status: 'shipped',
+                awb_number: order.awb_number,
+                trackingUrl: order.awb_number
+                    ? `https://shiprocket.co/tracking/${order.awb_number}`
+                    : null
+            });
+
+        } catch (error) {
+            console.error('[SHIP_NOW] Error:', error.message);
+            responseReturn(res, 500, { error: error.message });
+        }
+    }
+
+
+    // 2.4.2 - Live Tracking for Supplier (and reused for customer)
+    get_order_tracking = async (req, res) => {
+        const { orderId } = req.params;
+        const { id } = req;
+
+        try {
+            const supplier = await Supplier.findOne({ user: id });
+            if (!supplier) return responseReturn(res, 404, { error: 'Supplier not found' });
+
+            const order = await authOrderModel.findOne({ _id: orderId, partnerId: supplier._id }).lean();
+            if (!order) return responseReturn(res, 404, { error: 'Order not found' });
+
+            const tracking = await this._buildTracking(order);
+            return responseReturn(res, 200, { success: true, ...tracking });
+
+        } catch (error) {
+            console.error('[TRACKING] Error:', error.message);
+            responseReturn(res, 500, { error: 'Tracking failed' });
+        }
+    }
+
+    // Shared tracking builder (used by both supplier and customer tracking endpoints)
+    _buildTracking = async (order) => {
+        const shiprocketService = require('../../utils/shiprocketService');
+
+        const normalizedStatus = STATUS_LABELS[order.delivery_status] || order.delivery_status;
+        const allStatuses = [
+            { key: 'confirmed',         label: 'Order Confirmed',    icon: '✅' },
+            { key: 'processing',        label: 'Processing',         icon: '⚙️' },
+            { key: 'packed',            label: 'Packed',             icon: '📦' },
+            { key: 'shipped',           label: 'Shipped',            icon: '🚚' },
+            { key: 'in_transit',        label: 'In Transit',         icon: '🛣️' },
+            { key: 'out_for_delivery',  label: 'Out for Delivery',   icon: '🏃' },
+            { key: 'delivered',         label: 'Delivered',          icon: '🎉' },
+        ];
+
+        // Mark which steps are completed based on current status
+        const completedStatuses = {
+            confirmed: 1, processing: 2, packed: 3, shipped: 4,
+            in_transit: 5, out_for_delivery: 6, delivered: 7
+        };
+        const currentLevel = completedStatuses[order.delivery_status] || 0;
+        const timeline = allStatuses.map((s, idx) => ({
+            ...s,
+            completed: (idx + 1) <= currentLevel,
+            current: (idx + 1) === currentLevel
+        }));
+
+        // Live Shiprocket tracking events if AWB available
+        let shiprocketEvents = [];
+        if (order.awb_number) {
+            try {
+                const trackData = await shiprocketService.trackAWB(order.awb_number);
+                const activities = trackData?.tracking_data?.shipment_track_activities || [];
+                shiprocketEvents = activities.map(a => ({
+                    timestamp: a.date,
+                    activity: a.activity,
+                    location: a.location,
+                    status: a['sr-status-label'] || ''
+                }));
+            } catch (trackErr) {
+                console.warn('[TRACKING] Shiprocket AWB lookup failed:', trackErr.message);
+            }
+        }
+
+        return {
+            orderId: order._id,
+            currentStatus: order.delivery_status,
+            currentStatusLabel: normalizedStatus,
+            awb_number: order.awb_number || null,
+            trackingUrl: order.awb_number
+                ? `https://shiprocket.co/tracking/${order.awb_number}`
+                : null,
+            timeline,
+            liveEvents: shiprocketEvents
+        };
     }
 
     // 2.5 Mobile App - Get Supplier Payouts / Payments

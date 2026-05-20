@@ -493,11 +493,12 @@ class orderController {
                 }
 
                 authorOrderData.push({
-                    orderId: null, // Will be set after order.id is available, or use order._id if created first
+                    orderId: null,
                     partnerId,
                     products: storePor,
                     price: pri,
                     payment_status: 'unpaid',
+                    payment_method: payment_method === 'COD' ? 'COD' : 'ONLINE',  // ✅ Supplier needs to know COD vs Prepaid
                     shippingInfo: shippingInfo,
                     delivery_status: 'pending',
                     date: tempDate,
@@ -529,6 +530,35 @@ class orderController {
                 stock_decreased: true // Stock already deducted atomically
             }));
             await authOrderModel.insertMany(authorOrderData);
+
+            // ─── 🔴 REAL-TIME: Notify each supplier of the new order via Socket.IO ───
+            try {
+                const { getIo } = require('../../utils/socket');
+                const io = getIo();
+                for (const subOrder of authorOrderData) {
+                    if (subOrder.partnerId) {
+                        const supplierId = subOrder.partnerId.toString();
+                        // Emit to the supplier's private room (joined via 'join_supplier_room' on login)
+                        io.to(`supplier_${supplierId}`).emit('new_order', {
+                            orderId: order._id,
+                            price: subOrder.price,
+                            itemCount: subOrder.products.length,
+                            paymentMethod: subOrder.payment_method,
+                            customerName: shippingInfo?.name || 'Customer',
+                            createdAt: new Date()
+                        });
+                    }
+                }
+                // Also notify admin room
+                io.to('admin_room').emit('new_order_admin', {
+                    orderId: order._id,
+                    price: order.price,
+                    subOrderCount: authorOrderData.length
+                });
+            } catch (socketErr) {
+                // Non-fatal — socket failure should never block an order
+                console.warn('[SOCKET] new_order emit failed:', socketErr.message);
+            }
             
             if (payment_method === 'COD') {
                 // --- RTO RISK CHECK FOR COD ---
@@ -1574,17 +1604,102 @@ class orderController {
 
         try {
             const { awb, current_status, shipment_id } = payload;
-            
-            const order = await customerOrder.findOne({ 
-                $or: [{ awb_number: awb }, { shiprocket_shipment_id: shipment_id }] 
+
+            const order = await customerOrder.findOne({
+                $or: [{ awb_number: awb }, { shiprocket_shipment_id: shipment_id }]
             });
 
             if (!order) {
-                return res.status(200).send('Order not found');
+                return res.status(200).send('Order not found — ignoring');
             }
 
             const status = current_status?.toLowerCase() || '';
 
+            // ─── ✅ DELIVERED: Credit supplier wallets + update order status ───
+            if (status.includes('delivered') && !status.includes('undelivered')) {
+                console.log(`[SHIPROCKET WEBHOOK] ✅ Delivered — processing wallet credit for order: ${order._id}`);
+
+                // 1. Update main order to delivered (idempotent)
+                if (order.delivery_status !== 'delivered') {
+                    await customerOrder.findByIdAndUpdate(order._id, { delivery_status: 'delivered' });
+                }
+
+                // 2. Get all sub-orders for this main order
+                const subOrders = await authOrderModel.find({ orderId: order._id });
+
+                const time = moment(Date.now()).format('l');
+                const splitTime = time.split('/');
+
+                for (const sub of subOrders) {
+                    // Update sub-order status
+                    if (sub.delivery_status !== 'delivered') {
+                        await authOrderModel.findByIdAndUpdate(sub._id, { delivery_status: 'delivered' });
+                    }
+
+                    // 3. Credit partner wallet — skip if already credited for this sub-order
+                    if (sub.walletCredited) {
+                        console.log(`[SHIPROCKET WEBHOOK] ⚠️  Sub-order ${sub._id} already credited — skipping`);
+                        continue;
+                    }
+
+                    const walletAmount = sub.partnerAmount || sub.price;
+                    const partnerId = sub.partnerId?.toString();
+
+                    if (!partnerId) {
+                        console.error(`[SHIPROCKET WEBHOOK] ❌ No partnerId on sub-order ${sub._id} — skipping wallet credit`);
+                        continue;
+                    }
+
+                    await partnerWallet.create({
+                        partnerId,
+                        amount: walletAmount,
+                        month: splitTime[0],
+                        year: splitTime[2]
+                    });
+
+                    // Mark sub-order as wallet credited (prevents double-credit on webhook retry)
+                    await authOrderModel.findByIdAndUpdate(sub._id, { walletCredited: true });
+
+                    console.log(`[SHIPROCKET WEBHOOK] ✅ Wallet credited: partnerId=${partnerId}, amount=₹${walletAmount}`);
+
+                    // 4. Decrement stock (delivered = physically gone)
+                    for (const item of sub.products) {
+                        const isWear = !!item.size || (item.variants && item.variants.length > 0);
+                        try {
+                            if (isWear) {
+                                await wearProductModel.findOneAndUpdate(
+                                    { _id: item._id, 'variants.size': item.size },
+                                    { $inc: { 'variants.$.stock': -item.quantity, 'variants.$.reservedStock': -item.quantity } }
+                                );
+                            } else {
+                                await productModel.findByIdAndUpdate(
+                                    item._id,
+                                    { $inc: { stock: -item.quantity, reservedStock: -item.quantity } }
+                                );
+                            }
+                        } catch (stockErr) {
+                            console.error(`[SHIPROCKET WEBHOOK] Stock update failed for item ${item._id}:`, stockErr.message);
+                        }
+                    }
+                }
+
+                // 5. Send delivery confirmation to customer
+                try {
+                    const customer = await customerModel.findById(order.customerId);
+                    if (customer && customer.phone) {
+                        await whatsappClient.sendMessage(
+                            customer.phone,
+                            `✅ *Your order has been delivered!*\n\nHi ${customer.name || 'Customer'}, your Jeenora order *#${order._id.toString().slice(-8).toUpperCase()}* has been successfully delivered.\n\nEnjoy your purchase! 🛍️\n— Team Jeenora`
+                        );
+                    }
+                } catch (notifyErr) {
+                    console.error('[SHIPROCKET WEBHOOK] Customer notification failed:', notifyErr.message);
+                }
+
+                return res.status(200).send('Delivered — wallet credited');
+            }
+
+            // ─── ❌ NDR / FAILED / RTO: Alert customer via WhatsApp ─────────
             if (status.includes('undelivered') || status.includes('failed') || status.includes('return') || status.includes('rto')) {
                 const customer = await customerModel.findById(order.customerId);
                 if (customer && customer.phone) {
@@ -1602,6 +1717,118 @@ class orderController {
         } catch (error) {
             console.error('[SHIPROCKET WEBHOOK] Error:', error);
             res.status(500).send('Error processing webhook');
+        }
+    }
+
+    // ─── Customer: Live Order Tracking ────────────────────────────────────────
+    // GET /wear/orders/home/customer/track/:orderId
+    get_customer_tracking = async (req, res) => {
+        const { orderId } = req.params;
+        const { id: userId } = req; // from authMiddleware
+
+        try {
+            // Validate the customer owns this order
+            const mainOrder = await customerOrder.findOne({
+                _id: new ObjectId(orderId),
+                customerId: new ObjectId(userId)
+            }).lean();
+
+            if (!mainOrder) {
+                return responseReturn(res, 404, { error: 'Order not found' });
+            }
+
+            // Find sub-orders to get AWB numbers (each supplier sub-order has its own AWB)
+            const subOrders = await authOrderModel.find({ orderId: new ObjectId(orderId) }).lean();
+
+            // Status timeline definition
+            const STATUS_TIMELINE = [
+                { key: 'confirmed',        label: 'Order Confirmed',   icon: '✅', description: 'Your order has been confirmed' },
+                { key: 'processing',       label: 'Processing',        icon: '⚙️', description: 'Supplier is preparing your order' },
+                { key: 'packed',           label: 'Packed',            icon: '📦', description: 'Your order has been packed' },
+                { key: 'shipped',          label: 'Shipped',           icon: '🚚', description: 'Order handed to courier' },
+                { key: 'in_transit',       label: 'In Transit',        icon: '🛣️', description: 'Package is on its way' },
+                { key: 'out_for_delivery', label: 'Out for Delivery',  icon: '🏃', description: 'Out for delivery today' },
+                { key: 'delivered',        label: 'Delivered',         icon: '🎉', description: 'Order delivered successfully' },
+            ];
+
+            const STATUS_LEVEL = {
+                pending: 0, confirmed: 1, processing: 2, packed: 3,
+                shipped: 4, in_transit: 5, out_for_delivery: 6, delivered: 7
+            };
+
+            const currentLevel = STATUS_LEVEL[mainOrder.delivery_status] || 0;
+            const timeline = STATUS_TIMELINE.map((s, idx) => ({
+                ...s,
+                completed: (idx + 1) <= currentLevel,
+                current:   (idx + 1) === currentLevel
+            }));
+
+            // Collect live Shiprocket events per sub-order (per supplier AWB)
+            const shipments = [];
+            for (const sub of subOrders) {
+                const shipmentInfo = {
+                    subOrderId: sub._id,
+                    delivery_status: sub.delivery_status,
+                    awb_number: sub.awb_number || null,
+                    trackingUrl: sub.awb_number
+                        ? `https://shiprocket.co/tracking/${sub.awb_number}`
+                        : null,
+                    liveEvents: []
+                };
+
+                if (sub.awb_number) {
+                    try {
+                        const trackData = await shiprocketService.trackAWB(sub.awb_number);
+                        const activities = trackData?.tracking_data?.shipment_track_activities || [];
+                        shipmentInfo.liveEvents = activities.map(a => ({
+                            timestamp: a.date,
+                            activity: a.activity,
+                            location: a.location,
+                            status: a['sr-status-label'] || ''
+                        }));
+                    } catch (trackErr) {
+                        console.warn(`[CUSTOMER_TRACKING] AWB lookup failed for ${sub.awb_number}:`, trackErr.message);
+                    }
+                }
+
+                shipments.push(shipmentInfo);
+            }
+
+            return responseReturn(res, 200, {
+                success: true,
+                orderId: mainOrder._id,
+                currentStatus: mainOrder.delivery_status,
+                currentStatusLabel: (() => {
+                    const labels = {
+                        pending: 'Order Placed', confirmed: 'Order Confirmed',
+                        processing: 'Processing', packed: 'Packed',
+                        shipped: 'Shipped', delivered: 'Delivered',
+                        cancelled: 'Cancelled', returned: 'Returned'
+                    };
+                    return labels[mainOrder.delivery_status] || mainOrder.delivery_status;
+                })(),
+                paymentMethod: mainOrder.payment_method,
+                paymentLabel: mainOrder.payment_method === 'COD'
+                    ? 'Cash on Delivery — Pay when delivered'
+                    : 'Paid Online',
+                timeline,
+                shipments,  // One per supplier, each with its own AWB and live events
+                orderDate: mainOrder.date,
+                shippingInfo: {
+                    name: mainOrder.shippingInfo?.name,
+                    address: [
+                        mainOrder.shippingInfo?.address || mainOrder.shippingInfo?.houseNo,
+                        mainOrder.shippingInfo?.area,
+                        mainOrder.shippingInfo?.city,
+                        mainOrder.shippingInfo?.state,
+                        mainOrder.shippingInfo?.pincode
+                    ].filter(Boolean).join(', ')
+                }
+            });
+
+        } catch (error) {
+            console.error('[CUSTOMER_TRACKING] Error:', error.message);
+            return responseReturn(res, 500, { error: 'Tracking failed' });
         }
     }
 }

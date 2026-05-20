@@ -30,7 +30,7 @@ const authSchema = new Schema({
     delivery_status: {
         type: String,
         required: true,
-        enum: ['pending_payment', 'pending', 'confirmed', 'processing', 'shipped', 'delivered', 'cancelled', 'returned'],
+        enum: ['pending_payment', 'pending', 'confirmed', 'processing', 'packed', 'shipped', 'delivered', 'cancelled', 'returned'],
     },
     return_status: {
         type: String,
@@ -70,6 +70,17 @@ const authSchema = new Schema({
     is_high_risk: { type: Boolean, default: false },
     risk_score: { type: Number, default: 0 },
     stock_decreased: { type: Boolean, default: false },
+    walletCredited: { type: Boolean, default: false },  // Set true after delivery wallet credit (idempotency guard)
+    payment_method: { type: String, enum: ['COD', 'ONLINE'], default: 'ONLINE' },  // Copied from parent order at creation
+    packed_at: { type: Date, default: null },           // Timestamp when supplier marks as packed
+    // Package dimensions saved at confirm-time (what was sent to Shiprocket)
+    packageDimensions: {
+        weight: { type: Number, default: 0.5 },   // kg
+        length: { type: Number, default: 10 },    // cm
+        width:  { type: Number, default: 10 },    // cm
+        height: { type: Number, default: 10 }     // cm
+    },
+
 
     // 🔹 B2B ORDER FIELDS
     order_type: {

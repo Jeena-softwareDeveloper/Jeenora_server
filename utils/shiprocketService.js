@@ -294,6 +294,24 @@ class ShiprocketService {
             return null;
         }
     }
+
+    // Schedules a pickup request for a confirmed shipment (called at "Ship Now")
+    async schedulePickup(shipmentIds) {
+        try {
+            const token = await this.getToken();
+            const ids = Array.isArray(shipmentIds) ? shipmentIds : [shipmentIds];
+            const response = await axios.post(
+                'https://apiv2.shiprocket.in/v1/external/courier/generate/pickup',
+                { shipment_id: ids },
+                { headers: { 'Authorization': `Bearer ${token}` } }
+            );
+            return response.data;
+        } catch (error) {
+            console.error('[SHIPROCKET] Schedule pickup error:', error.response?.data || error.message);
+            throw error;
+        }
+    }
 }
+
 
 module.exports = new ShiprocketService();

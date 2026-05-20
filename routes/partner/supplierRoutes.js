@@ -45,7 +45,11 @@ router.post('/mark-congrats', authMiddleware, supplierController.mark_congrats_s
 router.get('/dashboard-stats', authMiddleware, supplierController.get_supplier_dashboard_data);
 router.get('/orders', authMiddleware, supplierController.get_supplier_orders);
 router.put('/order-status/:orderId', authMiddleware, supplierController.update_order_status);
+router.post('/orders/:orderId/confirm', authMiddleware, supplierController.confirm_order);        // ✅ Step 1: Confirm → Shiprocket order + AWB
+router.post('/orders/:orderId/ship-now', authMiddleware, supplierController.ship_now);           // 🚚 Step 2: Ship Now → Schedule pickup
+router.get('/orders/:orderId/tracking', authMiddleware, supplierController.get_order_tracking);  // 📍 Live tracking for supplier
 router.get('/order/:orderId', authMiddleware, supplierController.get_order_details);
+
 router.get('/payouts', authMiddleware, supplierController.get_supplier_payouts);
 router.get('/returns', authMiddleware, supplierController.get_supplier_returns);
 

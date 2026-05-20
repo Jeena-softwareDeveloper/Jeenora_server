@@ -10,6 +10,7 @@ const { sendEmail } = require('../../utils/emailSender');
 const partnerModel = require('../../models/partner/Partner');
 const supplierModel = require('../../models/partner/Supplier');
 const moment = require('moment');
+const { formatWearProductForClient } = require('../../utils/productFormatter');
 
 // 🔒 THE ULTIMATE STRICT GUARDRAIL FOR AI
 const STRICT_GUARDRAIL = `CRITICAL SYSTEM RESTRICTION: 
@@ -817,41 +818,53 @@ RETURN ONLY JSON: {"description": "intro paragraph text...\\n\\n• Bullet 1\\n�
     }
 
     get_personalized_recommendations = async (req, res) => {
-        const userId = req.id || 'Guest';
+        const userId = req.id || req.query.userId || 'Guest';
 
         try {
             // 1. Get user's last 5 viewed categories
             const history = await userBehaviorModel.find({ userId })
                 .sort({ timestamp: -1 })
-                .limit(5);
+                .limit(5)
+                .lean();
 
-            const viewedCategories = [...new Set(history.map(h => h.category))];
+            const viewedCategories = [...new Set(history.map(h => h.category).filter(Boolean))];
 
-            const { formatWearProductForClient } = require('../../utils/productFormatter');
-
+            // 2. No history — return top active products as fallback
             if (viewedCategories.length === 0) {
-                // Return top products if no history
-                const productsRaw = await wearProductModel.find({ status: 'active' }).limit(8).lean();
+                const productsRaw = await wearProductModel.find({ status: 'active' }).sort({ createdAt: -1 }).limit(8).lean();
                 const products = productsRaw.map(formatWearProductForClient).filter(Boolean);
-                return responseReturn(res, 200, { products });
+                return responseReturn(res, 200, { products, reason: 'Top picks for you' });
             }
 
-            // 2. AI Prediction for Cross-Category
-            const prompt = `User has recently viewed these categories: [${viewedCategories.join(", ")}]. 
+            // 3. AI Cross-Category Prediction — wrapped so a DeepSeek failure is non-fatal
+            let aiSuggestedCategories = [];
+            try {
+                const prompt = `User has recently viewed these categories: [${viewedCategories.join(", ")}]. 
             Task: Suggest 2 complementary categories they might like. 
             Example: If they view Jeans, suggest T-Shirt.
             Return ONLY JSON: { "suggestedCategories": ["cat1", "cat2"] }`;
 
-            let aiResponse = await this.call_deepseek_conversational(prompt);
-            const allInterests = [...viewedCategories, ...(aiResponse.suggestedCategories || [])];
+                const aiResponse = await this.call_deepseek_conversational(prompt);
+                aiSuggestedCategories = Array.isArray(aiResponse.suggestedCategories) ? aiResponse.suggestedCategories : [];
+            } catch (aiErr) {
+                // AI failure is non-fatal — we still serve products from viewed categories
+                console.warn('[Personalization] AI suggestion failed, using viewed categories only:', aiErr.message);
+            }
 
-            // 3. Fetch products from these categories
+            const allInterests = [...viewedCategories, ...aiSuggestedCategories];
+
+            // 4. Fetch products from combined interest categories
             const productsRaw = await wearProductModel.find({
                 category: { $in: allInterests },
                 status: 'active'
-            }).limit(12).lean();
+            }).sort({ createdAt: -1 }).limit(12).lean();
 
-            const products = productsRaw.map(formatWearProductForClient).filter(Boolean);
+            // Fallback: if category match returns nothing, serve top active products
+            const finalRaw = productsRaw.length > 0
+                ? productsRaw
+                : await wearProductModel.find({ status: 'active' }).sort({ createdAt: -1 }).limit(8).lean();
+
+            const products = finalRaw.map(formatWearProductForClient).filter(Boolean);
 
             return responseReturn(res, 200, { 
                 products,
@@ -859,7 +872,15 @@ RETURN ONLY JSON: {"description": "intro paragraph text...\\n\\n• Bullet 1\\n�
             });
 
         } catch (error) {
-            console.error(error);
+            console.error('[Personalization] Unhandled error:', error.message);
+            // Last resort: try to return any active products rather than a 500
+            try {
+                const fallback = await wearProductModel.find({ status: 'active' }).sort({ createdAt: -1 }).limit(8).lean();
+                const products = fallback.map(formatWearProductForClient).filter(Boolean);
+                if (products.length > 0) {
+                    return responseReturn(res, 200, { products, reason: 'Top picks for you' });
+                }
+            } catch (_) {}
             return responseReturn(res, 500, { error: 'Recommendation failed' });
         }
     }
